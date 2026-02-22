@@ -1,0 +1,12 @@
+{
+  "Version": 1,
+  "Hash": "fxolCNXWFWyX/04u8sVy+3JuytV6TRtuB3D+MbZBelc=",
+  "Source": "Dumble.BundleManagementService.API",
+  "BasePath": "_content/Dumble.BundleManagementService.API",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": [],
+  "Endpoints": []
+}
