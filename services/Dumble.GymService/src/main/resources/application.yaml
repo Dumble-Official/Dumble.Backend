@@ -1,0 +1,5 @@
+spring:
+  application:
+    name: gym-service
+  profiles:
+    active: dev
