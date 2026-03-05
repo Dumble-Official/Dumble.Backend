@@ -1,0 +1,63 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dumble_project
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  authentication:
+    build:
+      context: ../services/Dumble.Authentication
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      DATABASEPASS: root
+      GOOGLE_CLIENT_ID: 489462519676-ke7eteiom3rv52jufga8b2tgvfjj8850.apps.googleusercontent.com
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/dumble_project
+    depends_on:
+      db:
+        condition: service_healthy
+
+  gym-db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: gym_service_db
+      MYSQL_ROOT_PASSWORD: root123!
+    ports:
+      - "3307:3306"
+    volumes:
+      - gymdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  gym-service:
+    build:
+      context: ../services/Dumble.GymService
+      dockerfile: Dockerfile
+    ports:
+      - "8181:8181"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://gym-db:3306/gym_service_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root123!
+    depends_on:
+      gym-db:
+        condition: service_healthy  
+
+volumes:
+  pgdata:
+  gymdata:
