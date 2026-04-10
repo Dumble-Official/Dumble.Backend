@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="Dumble.SocialService.API/Dumble.SocialService.API.csproj" />
+  <Project Path="Dumble.SocialService.Application/Dumble.SocialService.Application.csproj" />
+  <Project Path="Dumble.SocialService.Contracts/Dumble.SocialService.Contracts.csproj" />
+  <Project Path="Dumble.SocialService.Domain/Dumble.SocialService.Domain.csproj" />
+  <Project Path="Dumble.SocialService.Infrastructure/Dumble.SocialService.Infrastructure.csproj" />
+</Solution>
