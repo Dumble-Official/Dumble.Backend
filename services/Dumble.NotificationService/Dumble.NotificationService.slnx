@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="Dumble.NotificationService.API/Dumble.NotificationService.API.csproj" />
+  <Project Path="Dumble.NotificationService.Application/Dumble.NotificationService.Application.csproj" />
+  <Project Path="Dumble.NotificationService.Contracts/Dumble.NotificationService.Contracts.csproj" />
+  <Project Path="Dumble.NotificationService.Domain/Dumble.NotificationService.Domain.csproj" />
+  <Project Path="Dumble.NotificationService.Infrastructure/Dumble.NotificationService.Infrastructure.csproj" />
+</Solution>
