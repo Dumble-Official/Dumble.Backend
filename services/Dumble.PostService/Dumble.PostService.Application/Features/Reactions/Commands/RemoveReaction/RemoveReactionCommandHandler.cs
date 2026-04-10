@@ -1,0 +1,48 @@
+using MediatR;
+using MassTransit;
+using Dumble.PostService.Application.Contracts;
+using Dumble.SharedKernel.Contracts;
+using Dumble.SharedKernel.Events.Posts;
+
+namespace Dumble.PostService.Application.Features.Reactions.Commands.RemoveReaction;
+
+public class RemoveReactionCommandHandler : IRequestHandler<RemoveReactionCommand>
+{
+    private readonly IReactionRepository _reactionRepository;
+    private readonly IPostRepository _postRepository;
+    private readonly ILoggedInUserService _userService;
+    private readonly IPublishEndpoint _publishEndpoint;
+
+    public RemoveReactionCommandHandler(
+        IReactionRepository reactionRepository,
+        IPostRepository postRepository,
+        ILoggedInUserService userService,
+        IPublishEndpoint publishEndpoint)
+    {
+        _reactionRepository = reactionRepository;
+        _postRepository = postRepository;
+        _userService = userService;
+        _publishEndpoint = publishEndpoint;
+    }
+
+    public async Task Handle(RemoveReactionCommand request, CancellationToken ct)
+    {
+        var currentUser = await _userService.GetCurrentUserAsync(ct);
+        var reaction = await _reactionRepository.GetByPostAndUserAsync(request.PostId, currentUser.Id, ct)
+            ?? throw new KeyNotFoundException("Reaction not found");
+
+        await _reactionRepository.DeleteAsync(reaction, ct);
+
+        var post = await _postRepository.GetByIdAsync(request.PostId, ct);
+        if (post is not null && post.ReactionsCount > 0)
+        {
+            post.ReactionsCount--;
+            await _postRepository.UpdateAsync(post, ct);
+        }
+
+        await _publishEndpoint.Publish(new ReactionRemovedEvent(
+            request.PostId.ToString(),
+            currentUser.Id
+        ), ct);
+    }
+}
