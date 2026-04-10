@@ -1,0 +1,24 @@
+using MassTransit;
+using MediatR;
+using Dumble.SharedKernel.Events.Social;
+using Dumble.SocialService.Application.Contracts;
+
+namespace Dumble.SocialService.Application.Features.Follows.Commands.UnfollowUser;
+
+public class UnfollowUserCommandHandler : IRequestHandler<UnfollowUserCommand>
+{
+    private readonly IFollowRepository _followRepository;
+    private readonly IPublishEndpoint _publishEndpoint;
+
+    public UnfollowUserCommandHandler(IFollowRepository followRepository, IPublishEndpoint publishEndpoint)
+    {
+        _followRepository = followRepository;
+        _publishEndpoint = publishEndpoint;
+    }
+
+    public async Task Handle(UnfollowUserCommand request, CancellationToken ct)
+    {
+        await _followRepository.DeleteAsync(request.FollowerId, request.FolloweeId, ct);
+        await _publishEndpoint.Publish(new UserUnfollowedEvent(request.FollowerId, request.FolloweeId), ct);
+    }
+}
