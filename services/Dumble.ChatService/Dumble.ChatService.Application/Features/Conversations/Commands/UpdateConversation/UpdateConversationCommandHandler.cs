@@ -1,0 +1,52 @@
+using Dumble.ChatService.Application.Contracts;
+using Dumble.ChatService.Contracts.Conversations;
+using Dumble.ChatService.Domain.Models;
+using MediatR;
+
+namespace Dumble.ChatService.Application.Features.Conversations.Commands.UpdateConversation;
+
+public class UpdateConversationCommandHandler(
+    IConversationRepository conversationRepository
+) : IRequestHandler<UpdateConversationCommand, ConversationResponse>
+{
+    public async Task<ConversationResponse> Handle(UpdateConversationCommand request, CancellationToken cancellationToken)
+    {
+        var conversation = await conversationRepository.GetByIdAsync(request.ConversationId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Conversation '{request.ConversationId}' not found.");
+
+        if (request.Name is not null)
+            conversation.Name = request.Name;
+
+        if (request.ImageUrl is not null)
+            conversation.ImageUrl = request.ImageUrl;
+
+        conversation.UpdatedAt = DateTime.UtcNow;
+
+        await conversationRepository.UpdateAsync(conversation, cancellationToken);
+
+        return MapToResponse(conversation);
+    }
+
+    private static ConversationResponse MapToResponse(Conversation conversation)
+    {
+        return new ConversationResponse(
+            conversation.Id,
+            conversation.Type,
+            conversation.Name,
+            conversation.ImageUrl,
+            conversation.Participants.Select(p => new ParticipantResponse(
+                p.UserId, p.DisplayName, p.ProfileImage, p.Role, p.JoinedAt
+            )).ToList(),
+            conversation.LastMessage is not null
+                ? new LastMessageResponse(
+                    conversation.LastMessage.MessageId,
+                    conversation.LastMessage.SenderId,
+                    conversation.LastMessage.SenderName,
+                    conversation.LastMessage.Content,
+                    conversation.LastMessage.SentAt)
+                : null,
+            conversation.CreatedAt,
+            conversation.UpdatedAt
+        );
+    }
+}
