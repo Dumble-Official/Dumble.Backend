@@ -1,0 +1,86 @@
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.SignalR;
+using Dumble.ChatService.Application.Contracts;
+using Dumble.ChatService.Application.Features.Messages.Commands.SendMessage;
+
+namespace Dumble.ChatService.API.Hubs;
+
+[Authorize]
+public class ChatHub : Hub
+{
+    private readonly IMediator _mediator;
+    private readonly IPresenceService _presenceService;
+
+    public ChatHub(IMediator mediator, IPresenceService presenceService)
+    {
+        _mediator = mediator;
+        _presenceService = presenceService;
+    }
+
+    public override async Task OnConnectedAsync()
+    {
+        var userId = Context.UserIdentifier;
+        if (userId is not null)
+        {
+            await _presenceService.SetOnlineAsync(userId);
+            await Clients.Others.SendAsync("UserOnline", new { userId });
+        }
+        await base.OnConnectedAsync();
+    }
+
+    public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        var userId = Context.UserIdentifier;
+        if (userId is not null)
+        {
+            await _presenceService.SetOfflineAsync(userId);
+            await Clients.Others.SendAsync("UserOffline", new { userId });
+        }
+        await base.OnDisconnectedAsync(exception);
+    }
+
+    public async Task JoinConversation(string conversationId)
+    {
+        await Groups.AddToGroupAsync(Context.ConnectionId, conversationId);
+    }
+
+    public async Task LeaveConversation(string conversationId)
+    {
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, conversationId);
+    }
+
+    public async Task SendMessage(string conversationId, string content, string? replyToId)
+    {
+        var userId = Context.UserIdentifier!;
+        var userName = Context.User?.FindFirst("displayName")?.Value ?? "User";
+        var profileImage = Context.User?.FindFirst("profileImage")?.Value;
+
+        var result = await _mediator.Send(new SendMessageCommand(
+            conversationId, userId, userName, profileImage, content, replyToId));
+
+        // Message is already broadcast via IChatHubService in the handler
+    }
+
+    public async Task StartTyping(string conversationId)
+    {
+        var userId = Context.UserIdentifier!;
+        var displayName = Context.User?.FindFirst("displayName")?.Value ?? "User";
+
+        await _presenceService.SetTypingAsync(conversationId, userId);
+        await Clients.Group(conversationId).SendAsync("UserTyping", new { conversationId, userId, displayName });
+    }
+
+    public async Task StopTyping(string conversationId)
+    {
+        var userId = Context.UserIdentifier!;
+        await Clients.Group(conversationId).SendAsync("UserStoppedTyping", new { conversationId, userId });
+    }
+
+    public async Task Heartbeat()
+    {
+        var userId = Context.UserIdentifier;
+        if (userId is not null)
+            await _presenceService.SetOnlineAsync(userId);
+    }
+}
