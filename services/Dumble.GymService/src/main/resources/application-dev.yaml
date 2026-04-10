@@ -1,0 +1,32 @@
+server:
+  port: 8181
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/gym_service_db?createDatabaseIfNotExist=true&useSSL=false
+    username: root
+    password: root123!
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        highlight_sql: true
+    show-sql: true
+
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 20MB
+
+# SpringDoc Swagger
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+
+

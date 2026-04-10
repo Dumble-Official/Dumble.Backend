@@ -29,5 +29,35 @@ services:
       db:
         condition: service_healthy
 
+  gym-db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: gym_service_db
+      MYSQL_ROOT_PASSWORD: root123!
+    ports:
+      - "3307:3306"
+    volumes:
+      - gymdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  gym-service:
+    build:
+      context: ../services/Dumble.GymService
+      dockerfile: Dockerfile
+    ports:
+      - "8181:8181"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://gym-db:3306/gym_service_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root123!
+    depends_on:
+      gym-db:
+        condition: service_healthy  
+
 volumes:
   pgdata:
+  gymdata:
