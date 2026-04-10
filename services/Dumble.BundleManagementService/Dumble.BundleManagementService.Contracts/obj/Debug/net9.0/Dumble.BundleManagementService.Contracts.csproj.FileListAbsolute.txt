@@ -1,0 +1,13 @@
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Contracts\bin\Debug\net9.0\Dumble.BundleManagementService.Contracts.deps.json
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Contracts\bin\Debug\net9.0\Dumble.BundleManagementService.Contracts.dll
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Contracts\bin\Debug\net9.0\Dumble.BundleManagementService.Contracts.pdb
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Contracts\obj\Debug\net9.0\Dumble.BundleManagementService.Contracts.csproj.AssemblyReference.cache
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Contracts\obj\Debug\net9.0\Dumble.BundleManagementService.Contracts.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Contracts\obj\Debug\net9.0\Dumble.BundleManagementService.Contracts.AssemblyInfoInputs.cache
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Contracts\obj\Debug\net9.0\Dumble.BundleManagementService.Contracts.AssemblyInfo.cs
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Contracts\obj\Debug\net9.0\Dumble.BundleManagementService.Contracts.csproj.CoreCompileInputs.cache
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Contracts\obj\Debug\net9.0\Dumble.BundleManagementService.Contracts.sourcelink.json
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Contracts\obj\Debug\net9.0\Dumble.BundleManagementService.Contracts.dll
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Contracts\obj\Debug\net9.0\refint\Dumble.BundleManagementService.Contracts.dll
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Contracts\obj\Debug\net9.0\Dumble.BundleManagementService.Contracts.pdb
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Contracts\obj\Debug\net9.0\ref\Dumble.BundleManagementService.Contracts.dll

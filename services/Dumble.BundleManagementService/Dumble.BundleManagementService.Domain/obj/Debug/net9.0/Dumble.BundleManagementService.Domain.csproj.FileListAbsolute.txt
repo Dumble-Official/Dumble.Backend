@@ -1,0 +1,12 @@
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Domain\bin\Debug\net9.0\Dumble.BundleManagementService.Domain.deps.json
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Domain\bin\Debug\net9.0\Dumble.BundleManagementService.Domain.dll
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Domain\bin\Debug\net9.0\Dumble.BundleManagementService.Domain.pdb
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Domain\obj\Debug\net9.0\Dumble.BundleManagementService.Domain.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Domain\obj\Debug\net9.0\Dumble.BundleManagementService.Domain.AssemblyInfoInputs.cache
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Domain\obj\Debug\net9.0\Dumble.BundleManagementService.Domain.AssemblyInfo.cs
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Domain\obj\Debug\net9.0\Dumble.BundleManagementService.Domain.csproj.CoreCompileInputs.cache
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Domain\obj\Debug\net9.0\Dumble.BundleManagementService.Domain.sourcelink.json
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Domain\obj\Debug\net9.0\Dumble.BundleManagementService.Domain.dll
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Domain\obj\Debug\net9.0\refint\Dumble.BundleManagementService.Domain.dll
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Domain\obj\Debug\net9.0\Dumble.BundleManagementService.Domain.pdb
+C:\Users\youss\OneDrive\Desktop\Dumble\src\Dumble.BundleManagementService\Dumble.BundleManagementService.Domain\obj\Debug\net9.0\ref\Dumble.BundleManagementService.Domain.dll
