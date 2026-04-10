@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="Dumble.ChatService.API/Dumble.ChatService.API.csproj" />
+  <Project Path="Dumble.ChatService.Application/Dumble.ChatService.Application.csproj" />
+  <Project Path="Dumble.ChatService.Contracts/Dumble.ChatService.Contracts.csproj" />
+  <Project Path="Dumble.ChatService.Domain/Dumble.ChatService.Domain.csproj" />
+  <Project Path="Dumble.ChatService.Infrastructure/Dumble.ChatService.Infrastructure.csproj" />
+</Solution>
