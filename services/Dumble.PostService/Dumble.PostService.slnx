@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="../Dumble.SharedKernel/Dumble.SharedKernel/Dumble.SharedKernel.csproj" />
+  <Project Path="Dumble.PostService.API/Dumble.PostService.API.csproj" />
+  <Project Path="Dumble.PostService.Application/Dumble.PostService.Application.csproj" />
+  <Project Path="Dumble.PostService.Contracts/Dumble.PostService.Contracts.csproj" />
+  <Project Path="Dumble.PostService.Domain/Dumble.PostService.Domain.csproj" />
+  <Project Path="Dumble.PostService.Infrastructure/Dumble.PostService.Infrastructure.csproj" />
+</Solution>
