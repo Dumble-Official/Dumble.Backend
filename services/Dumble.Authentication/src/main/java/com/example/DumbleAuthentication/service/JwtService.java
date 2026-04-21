@@ -44,11 +44,20 @@ public class JwtService {
 
     // ── Access Token Operations ──────────────────────────────────────────
 
-    public String generateAccessToken(UserDetails userDetails) {
+    public String generateAccessToken(UserDetails userDetails, User user) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("roles", userDetails.getAuthorities().stream()
                 .map(Object::toString)
                 .toList());
+        claims.put("userId", user.getId().toString());
+        claims.put("email", user.getEmail());
+        String displayName = user.getDisplayName() != null ? user.getDisplayName()
+                : (user.getFirstName() + " " + user.getLastName()).trim();
+        claims.put("displayName", displayName);
+        if (user.getPfp() != null) {
+            claims.put("profileImage", user.getPfp());
+        }
+        claims.put("userType", user.getUserType().name());
         return buildToken(claims, userDetails.getUsername(), accessTokenExpiration);
     }
 
@@ -108,6 +117,8 @@ public class JwtService {
         return Jwts.builder()
                 .claims(extraClaims)
                 .subject(subject)
+                .issuer("dumble-auth")
+                .audience().add("dumble-app").and()
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getSigningKey())

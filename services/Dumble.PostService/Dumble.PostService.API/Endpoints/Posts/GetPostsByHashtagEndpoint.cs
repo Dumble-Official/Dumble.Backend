@@ -24,8 +24,8 @@ public class GetPostsByHashtagEndpoint : EndpointWithoutRequest<CursorPagedRespo
     public override async Task HandleAsync(CancellationToken ct)
     {
         var tag = Route<string>("tag")!;
-        var cursor = Query<string?>("cursor");
-        var limit = Query<int?>("limit") ?? 20;
+        var cursor = Query<string?>("cursor", isRequired: false);
+        var limit = Query<int?>("limit", isRequired: false) ?? 20;
 
         var result = await _mediator.Send(new GetPostsByHashtagQuery(tag, cursor, limit), ct);
         await SendAsync(result, cancellation: ct);

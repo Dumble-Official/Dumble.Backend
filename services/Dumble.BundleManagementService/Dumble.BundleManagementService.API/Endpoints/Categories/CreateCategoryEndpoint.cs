@@ -12,7 +12,7 @@ internal sealed class CreateCategoryEndpoint(ISender mediator) : Endpoint<Create
     public override void Configure()
     {
         Post("/api/categories");
-        AllowAnonymous();
+        Claims("userId");
         Options(x => x.WithTags("Categories"));
     }
 

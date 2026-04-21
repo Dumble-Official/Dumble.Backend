@@ -47,7 +47,7 @@ public static class DependencyInjection
 
         services.AddHttpClient<ILoggedInUserService, LoggedInUserService>(client =>
         {
-            client.BaseAddress = new Uri(configuration["Services:AuthService"] ?? "http://localhost:8080");
+            client.BaseAddress = new Uri(configuration["Services:AuthService"] ?? "http://localhost:8081");
         });
 
         // MassTransit + RabbitMQ

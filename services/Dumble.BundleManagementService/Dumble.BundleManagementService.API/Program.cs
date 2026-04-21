@@ -1,10 +1,9 @@
+using System.Text;
 using Dumble.BundleManagementService.Application;
 using Dumble.BundleManagementService.Infrastructure;
 using FastEndpoints;
 using FastEndpoints.Swagger;
-using Microsoft.AspNetCore.Authentication.BearerToken;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,8 +13,6 @@ builder.WebHost.ConfigureKestrel(opt =>
     opt.AddServerHeader = false;
 });
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddApplication().AddInfrastructure(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddAuthentication(opt =>
@@ -24,26 +21,24 @@ builder.Services.AddAuthentication(opt =>
     opt.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 }).AddJwtBearer(opt =>
 {
-    opt.RequireHttpsMetadata = false || builder.Environment.IsProduction();
+    opt.RequireHttpsMetadata = builder.Environment.IsProduction();
     opt.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuer = false,
-        ValidateAudience = false,
+        ValidateIssuer = true,
+        ValidateAudience = true,
         ValidateLifetime = true,
-        ValidateIssuerSigningKey = false
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(
+            Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"] ?? "this is a very secure secret key for jwt token generation")),
+        RoleClaimType = "roles"
     };
 });
 builder.Services.AddAuthorization();
 builder.Services.AddFastEndpoints().SwaggerDocument();
 
 var app = builder.Build();
-
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-}
-
-app.UseHttpsRedirection();
 
 app.UseAuthentication();
 

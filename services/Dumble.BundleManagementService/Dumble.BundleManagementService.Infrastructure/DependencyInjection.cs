@@ -50,8 +50,6 @@ public static class DependencyInjection
             return cloudinary;
         });
         
-        services.AddSingleton<IFileService, CloudinaryFileService>();
-        
         return services;
     }
 }

@@ -13,7 +13,7 @@ public sealed class UpdateBundleEndpoint(ISender mediator) : Endpoint<UpdateBund
    public override void Configure()
    {
       Put("/api/bundles");
-      AllowAnonymous();
+      Claims("userId");
       Options(x => x.WithTags("Bundles")
          .Accepts<CreateBundleRequest>("multipart/form-data"));
    }

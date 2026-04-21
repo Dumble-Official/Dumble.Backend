@@ -23,7 +23,7 @@ public class SearchHashtagsEndpoint : EndpointWithoutRequest<List<HashtagRespons
     public override async Task HandleAsync(CancellationToken ct)
     {
         var query = Query<string>("q") ?? "";
-        var limit = Query<int?>("limit") ?? 20;
+        var limit = Query<int?>("limit", isRequired: false) ?? 20;
         var result = await _mediator.Send(new SearchHashtagsQuery(query, limit), ct);
         await SendAsync(result, cancellation: ct);
     }

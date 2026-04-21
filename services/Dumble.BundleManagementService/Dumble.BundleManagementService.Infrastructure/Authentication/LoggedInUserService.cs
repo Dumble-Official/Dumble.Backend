@@ -7,27 +7,47 @@ namespace Dumble.BundleManagementService.Infrastructure.Authentication;
 
 internal sealed class LoggedInUserService(IHttpContextAccessor httpContextAccessor) : ILoggedInUserService
 {
-    private readonly ClaimsPrincipal _claimsPrincipal = httpContextAccessor.HttpContext.User;
-    
     public User GetCurrentUser()
     {
-        // var user = new User()
-        // {
-        //     Id = Guid.Parse(_claimsPrincipal.FindFirst(ClaimTypes.NameIdentifier)!.Value),
-        //     Email = _claimsPrincipal.FindFirst(ClaimTypes.Email)!.Value,
-        //     AccountType = Enum.Parse<OwnerType>(_claimsPrincipal.FindFirst("AccountType")!.Value),
-        //     Roles = _claimsPrincipal.FindAll(ClaimTypes.Role).Select(r => r.Value).ToList()
-        // };
+        var httpContext = httpContextAccessor.HttpContext
+            ?? throw new UnauthorizedAccessException("No HTTP context available");
 
-        var user = new User()
+        var principal = httpContext.User;
+
+        var userIdStr = principal.FindFirst("userId")?.Value
+            ?? throw new UnauthorizedAccessException("userId claim missing from token");
+
+        var email = principal.FindFirst("email")?.Value
+                 ?? principal.FindFirst("sub")?.Value
+                 ?? "";
+
+        // Map Auth service userType to BundleManagement OwnerType
+        var userTypeStr = principal.FindFirst("userType")?.Value ?? "";
+        var accountType = userTypeStr.ToUpperInvariant() switch
         {
-            Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
-            Email = "test@example.com",
-            AccountType = OwnerType.Gym,
-            Roles = new List<string> { "Admin", "Manager" }
+            "TRAINER" => OwnerType.Trainer,
+            "OWNER" => OwnerType.Gym,
+            _ => OwnerType.Gym // default fallback
         };
 
-        
-        return user;
+        var roles = principal.FindAll("roles").Select(r => r.Value).ToList();
+
+        // Auth service uses Long IDs; convert to deterministic Guid for domain compatibility
+        Guid userId;
+        if (!Guid.TryParse(userIdStr, out userId))
+        {
+            var longId = long.Parse(userIdStr);
+            var bytes = new byte[16];
+            BitConverter.GetBytes(longId).CopyTo(bytes, 0);
+            userId = new Guid(bytes);
+        }
+
+        return new User
+        {
+            Id = userId,
+            Email = email,
+            AccountType = accountType,
+            Roles = roles
+        };
     }
 }

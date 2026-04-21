@@ -22,8 +22,9 @@ public class LoggedInUserService : ILoggedInUserService
         var authHeader = _httpContextAccessor.HttpContext?.Request.Headers["Authorization"].ToString();
         if (string.IsNullOrEmpty(authHeader)) throw new UnauthorizedAccessException();
 
+        var token = authHeader.Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase).Trim();
         _authHttpClient.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            new AuthenticationHeaderValue("Bearer", token);
 
         var response = await _authHttpClient.GetAsync("/api/users/me");
         response.EnsureSuccessStatusCode();

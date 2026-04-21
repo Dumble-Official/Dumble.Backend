@@ -13,7 +13,7 @@ public sealed class DeleteBundleEndpoint(ISender mediator) : Endpoint<DeleteBund
     public override void Configure()
     {
         Delete("/api/bundles");
-        AllowAnonymous();
+        Claims("userId");
         Options(x => x.WithTags("Bundles")
             .Accepts<DeleteBundleRequest>("multipart/form-data"));
     }

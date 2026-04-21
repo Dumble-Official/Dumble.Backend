@@ -97,7 +97,7 @@ public class AuthService {
         User user = refreshToken.getUser();
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
-        String newAccessToken = jwtService.generateAccessToken(userDetails);
+        String newAccessToken = jwtService.generateAccessToken(userDetails, user);
 
         return new AuthResponse(newAccessToken, refreshTokenValue, UserResponse.from(user));
     }
@@ -201,7 +201,7 @@ public class AuthService {
 
     private AuthResponse generateAuthResponse(User user) {
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
-        String accessToken = jwtService.generateAccessToken(userDetails);
+        String accessToken = jwtService.generateAccessToken(userDetails, user);
         RefreshToken refreshToken = jwtService.generateRefreshToken(user);
 
         return new AuthResponse(accessToken, refreshToken.getToken(), UserResponse.from(user));

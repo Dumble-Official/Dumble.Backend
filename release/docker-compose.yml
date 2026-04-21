@@ -1,4 +1,8 @@
 services:
+  # ──────────────────────────────────────────────
+  # Infrastructure
+  # ──────────────────────────────────────────────
+
   db:
     image: postgres:16-alpine
     environment:
@@ -15,19 +19,65 @@ services:
       timeout: 3s
       retries: 10
 
-  authentication:
-    build:
-      context: ../services/Dumble.Authentication
-      dockerfile: Dockerfile
-    ports:
-      - "8081:8081"
+  postgres-social:
+    image: postgres:16-alpine
     environment:
-      DATABASEPASS: root
-      GOOGLE_CLIENT_ID: 489462519676-ke7eteiom3rv52jufga8b2tgvfjj8850.apps.googleusercontent.com
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/dumble_project
-    depends_on:
-      db:
-        condition: service_healthy
+      POSTGRES_USER: dumble
+      POSTGRES_PASSWORD: dumble123
+      POSTGRES_DB: dumble_posts
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_social_data:/var/lib/postgresql/data
+      - ./init-social-dbs.sql:/docker-entrypoint-initdb.d/init-social-dbs.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dumble -d dumble_posts"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mongodb:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   gym-db:
     image: mysql:8.0
@@ -44,6 +94,39 @@ services:
       timeout: 5s
       retries: 10
 
+  bundle-db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "BundleDb_Pass123!"
+    ports:
+      - "1433:1433"
+    volumes:
+      - bundledata:/var/opt/mssql/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'BundleDb_Pass123!' -Q 'SELECT 1' -C -b"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ──────────────────────────────────────────────
+  # Existing Services
+  # ──────────────────────────────────────────────
+
+  authentication:
+    build:
+      context: ../services/Dumble.Authentication
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      DATABASEPASS: root
+      GOOGLE_CLIENT_ID: 489462519676-ke7eteiom3rv52jufga8b2tgvfjj8850.apps.googleusercontent.com
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/dumble_project
+    depends_on:
+      db:
+        condition: service_healthy
+
   gym-service:
     build:
       context: ../services/Dumble.GymService
@@ -56,8 +139,140 @@ services:
       SPRING_DATASOURCE_PASSWORD: root123!
     depends_on:
       gym-db:
-        condition: service_healthy  
+        condition: service_healthy
+
+  # ──────────────────────────────────────────────
+  # Social Media Services
+  # ──────────────────────────────────────────────
+
+  post-service:
+    build:
+      context: ../services
+      dockerfile: Dumble.PostService/Dockerfile
+    ports:
+      - "5020:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__PostDb: "Host=postgres-social;Port=5432;Database=dumble_posts;Username=dumble;Password=dumble123"
+      Jwt__Secret: "this is a very secure secret key for jwt token generation"
+      Jwt__Issuer: "dumble-auth"
+      Jwt__Audience: "dumble-app"
+      AuthService__BaseUrl: "http://authentication:8081"
+      Cloudinary__Url: ""
+      RabbitMQ__Host: "rabbitmq"
+      RabbitMQ__Username: "guest"
+      RabbitMQ__Password: "guest"
+    depends_on:
+      postgres-social:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  notification-service:
+    build:
+      context: ../services
+      dockerfile: Dumble.NotificationService/Dockerfile
+    ports:
+      - "5023:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__MongoDb: "mongodb://admin:admin123@mongodb:27017"
+      ConnectionStrings__Redis: "redis:6379"
+      MongoDb__DatabaseName: "dumble_notifications"
+      Jwt__Secret: "this is a very secure secret key for jwt token generation"
+      Jwt__Issuer: "dumble-auth"
+      Jwt__Audience: "dumble-app"
+      RabbitMQ__Host: "rabbitmq"
+      RabbitMQ__Username: "guest"
+      RabbitMQ__Password: "guest"
+      Firebase__CredentialsPath: ""
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  social-service:
+    build:
+      context: ../services
+      dockerfile: Dumble.SocialService/Dockerfile
+    ports:
+      - "5021:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__PostgreSql: "Host=postgres-social;Port=5432;Database=dumble_social;Username=dumble;Password=dumble123"
+      ConnectionStrings__Redis: "redis:6379"
+      Jwt__Secret: "this is a very secure secret key for jwt token generation"
+      Jwt__Issuer: "dumble-auth"
+      Jwt__Audience: "dumble-app"
+      RabbitMQ__Host: "rabbitmq"
+      RabbitMQ__Username: "guest"
+      RabbitMQ__Password: "guest"
+      Services__PostService: "http://post-service:8080"
+      Services__RankingApi: "http://ranking-api:8000"
+      Services__AuthService: "http://authentication:8081"
+    depends_on:
+      postgres-social:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      post-service:
+        condition: service_started
+
+  chat-service:
+    build:
+      context: ../services
+      dockerfile: Dumble.ChatService/Dockerfile
+    ports:
+      - "5022:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__MongoDb: "mongodb://admin:admin123@mongodb:27017"
+      ConnectionStrings__Redis: "redis:6379"
+      MongoDb__DatabaseName: "dumble_chat"
+      Jwt__Secret: "this is a very secure secret key for jwt token generation"
+      Jwt__Issuer: "dumble-auth"
+      Jwt__Audience: "dumble-app"
+      RabbitMQ__Host: "rabbitmq"
+      RabbitMQ__Username: "guest"
+      RabbitMQ__Password: "guest"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # ──────────────────────────────────────────────
+  # Bundle Management Service
+  # ──────────────────────────────────────────────
+
+  bundle-service:
+    build:
+      context: ../services/Dumble.BundleManagementService
+      dockerfile: Dumble.BundleManagementService.API/Dockerfile
+    ports:
+      - "5012:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DatabaseConnection: "Server=bundle-db;Database=Dumble.BundleManagementService;User Id=sa;Password=BundleDb_Pass123!;TrustServerCertificate=True;Encrypt=False"
+      Jwt__Secret: "this is a very secure secret key for jwt token generation"
+      Jwt__Issuer: "dumble-auth"
+      Jwt__Audience: "dumble-app"
+    depends_on:
+      bundle-db:
+        condition: service_healthy
 
 volumes:
   pgdata:
   gymdata:
+  bundledata:
+  postgres_social_data:
+  mongodb_data:
+  redis_data:
+  rabbitmq_data:

@@ -13,7 +13,7 @@ internal sealed class CreateBundleEndpoint(ISender mediator) : Endpoint<CreateBu
     public override void Configure()
     {
         Post("/api/bundles");
-        AllowAnonymous();
+        Claims("userId");
         Options(x => x.WithTags("Bundles")
             .Accepts<CreateBundleRequest>("multipart/form-data"));
     }
