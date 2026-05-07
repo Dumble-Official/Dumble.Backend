@@ -1,10 +1,12 @@
 using MediatR;
+using MassTransit;
 using Dumble.PostService.Application.Contracts;
 using Dumble.PostService.Contracts.Posts;
 using Dumble.PostService.Domain.Entities;
 using Dumble.PostService.Domain.Enums;
 using Dumble.SharedKernel.Contracts;
 using Dumble.SharedKernel.Enums;
+using Dumble.SharedKernel.Events.Posts;
 
 namespace Dumble.PostService.Application.Features.Posts.Commands.UpdatePost;
 
@@ -13,15 +15,18 @@ public class UpdatePostCommandHandler : IRequestHandler<UpdatePostCommand, PostR
     private readonly IPostRepository _postRepository;
     private readonly IHashtagRepository _hashtagRepository;
     private readonly ILoggedInUserService _userService;
+    private readonly IPublishEndpoint _publishEndpoint;
 
     public UpdatePostCommandHandler(
         IPostRepository postRepository,
         IHashtagRepository hashtagRepository,
-        ILoggedInUserService userService)
+        ILoggedInUserService userService,
+        IPublishEndpoint publishEndpoint)
     {
         _postRepository = postRepository;
         _hashtagRepository = hashtagRepository;
         _userService = userService;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<PostResponse> Handle(UpdatePostCommand request, CancellationToken ct)
@@ -41,12 +46,10 @@ public class UpdatePostCommandHandler : IRequestHandler<UpdatePostCommand, PostR
 
         if (request.Hashtags is not null)
         {
-            // Decrement old hashtag counts
             var oldHashtagIds = post.PostHashtags.Select(ph => ph.HashtagId).ToList();
             if (oldHashtagIds.Count > 0)
                 await _hashtagRepository.DecrementUsageCountAsync(oldHashtagIds, ct);
 
-            // Clear and re-add
             post.PostHashtags.Clear();
             var hashtagNames = request.Hashtags
                 .Where(h => !string.IsNullOrWhiteSpace(h))
@@ -73,6 +76,13 @@ public class UpdatePostCommandHandler : IRequestHandler<UpdatePostCommand, PostR
             .Select(ph => ph.Hashtag?.Name ?? string.Empty)
             .Where(n => !string.IsNullOrEmpty(n))
             .ToList();
+
+        await _publishEndpoint.Publish(new PostUpdatedEvent(
+            post.Id.ToString(),
+            post.AuthorId,
+            currentHashtags,
+            new DateTimeOffset(post.UpdatedAt, TimeSpan.Zero)
+        ), ct);
 
         return new PostResponse(
             post.Id, post.AuthorId, post.AuthorDisplayName, post.AuthorProfileImage,

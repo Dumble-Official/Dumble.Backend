@@ -50,14 +50,12 @@ public class CreatePostCommandHandler : IRequestHandler<CreatePostCommand, PostR
             UpdatedAt = DateTime.UtcNow
         };
 
-        // Upload images
         if (request.Images is { Count: > 0 })
         {
-            for (int i = 0; i < request.Images.Count; i++)
+            for (var i = 0; i < request.Images.Count; i++)
             {
-                var file = request.Images[i];
-                await using var stream = file.OpenReadStream();
-                var (url, publicId) = await _fileService.UploadAsync(stream, file.FileName, file.ContentType, ct);
+                var image = request.Images[i];
+                var (url, publicId) = await _fileService.UploadAsync(image.Content, image.FileName, image.ContentType, ct);
 
                 post.Images.Add(new PostImage
                 {
@@ -70,7 +68,6 @@ public class CreatePostCommandHandler : IRequestHandler<CreatePostCommand, PostR
             }
         }
 
-        // Process hashtags
         var hashtagNames = new List<string>();
         if (request.Hashtags is { Count: > 0 })
         {
