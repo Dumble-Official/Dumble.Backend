@@ -18,7 +18,8 @@ public class UnfollowUserCommandHandler : IRequestHandler<UnfollowUserCommand>
 
     public async Task Handle(UnfollowUserCommand request, CancellationToken ct)
     {
-        await _followRepository.DeleteAsync(request.FollowerId, request.FolloweeId, ct);
-        await _publishEndpoint.Publish(new UserUnfollowedEvent(request.FollowerId, request.FolloweeId), ct);
+        var deleted = await _followRepository.DeleteAsync(request.FollowerId, request.FolloweeId, ct);
+        if (deleted)
+            await _publishEndpoint.Publish(new UserUnfollowedEvent(request.FollowerId, request.FolloweeId), ct);
     }
 }

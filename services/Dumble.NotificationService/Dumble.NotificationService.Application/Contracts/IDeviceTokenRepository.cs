@@ -7,4 +7,5 @@ public interface IDeviceTokenRepository
     Task<List<DeviceToken>> GetByUserIdAsync(string userId, CancellationToken ct = default);
     Task UpsertAsync(DeviceToken deviceToken, CancellationToken ct = default);
     Task DeleteByTokenAsync(string token, CancellationToken ct = default);
+    Task<bool> DeleteOwnedByTokenAsync(string token, string userId, CancellationToken ct = default);
 }

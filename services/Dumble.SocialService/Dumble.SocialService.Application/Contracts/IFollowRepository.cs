@@ -6,7 +6,7 @@ public interface IFollowRepository
 {
     Task<Follow?> GetAsync(string followerId, string followeeId, CancellationToken ct = default);
     Task CreateAsync(Follow follow, CancellationToken ct = default);
-    Task DeleteAsync(string followerId, string followeeId, CancellationToken ct = default);
+    Task<bool> DeleteAsync(string followerId, string followeeId, CancellationToken ct = default);
     Task<List<Follow>> GetFollowersAsync(string userId, DateTime? cursor, int limit, CancellationToken ct = default);
     Task<List<Follow>> GetFollowingAsync(string userId, DateTime? cursor, int limit, CancellationToken ct = default);
     Task<int> GetFollowersCountAsync(string userId, CancellationToken ct = default);

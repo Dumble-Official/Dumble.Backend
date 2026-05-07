@@ -22,7 +22,8 @@ public class UnregisterDeviceEndpoint : EndpointWithoutRequest
     public override async Task HandleAsync(CancellationToken ct)
     {
         var token = Route<string>("token")!;
-        await _mediator.Send(new UnregisterDeviceCommand(token), ct);
+        var userId = User.FindFirst("userId")!.Value;
+        await _mediator.Send(new UnregisterDeviceCommand(token, userId), ct);
         await SendNoContentAsync(ct);
     }
 }

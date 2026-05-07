@@ -14,6 +14,6 @@ public class UnregisterDeviceCommandHandler : IRequestHandler<UnregisterDeviceCo
 
     public async Task Handle(UnregisterDeviceCommand request, CancellationToken ct)
     {
-        await _repository.DeleteByTokenAsync(request.Token, ct);
+        await _repository.DeleteOwnedByTokenAsync(request.Token, request.CallerId, ct);
     }
 }

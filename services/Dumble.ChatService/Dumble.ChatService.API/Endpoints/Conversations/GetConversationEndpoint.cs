@@ -23,7 +23,8 @@ public class GetConversationEndpoint : EndpointWithoutRequest<ConversationRespon
     public override async Task HandleAsync(CancellationToken ct)
     {
         var id = Route<string>("id")!;
-        var result = await _mediator.Send(new GetConversationQuery(id), ct);
+        var userId = User.FindFirst("userId")!.Value;
+        var result = await _mediator.Send(new GetConversationQuery(id, userId), ct);
         await SendAsync(result, cancellation: ct);
     }
 }

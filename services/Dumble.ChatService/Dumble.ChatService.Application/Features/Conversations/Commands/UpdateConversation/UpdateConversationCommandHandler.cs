@@ -14,6 +14,12 @@ public class UpdateConversationCommandHandler(
         var conversation = await conversationRepository.GetByIdAsync(request.ConversationId, cancellationToken)
             ?? throw new KeyNotFoundException($"Conversation '{request.ConversationId}' not found.");
 
+        var caller = conversation.Participants.FirstOrDefault(p => p.UserId == request.CallerId);
+        if (caller is null)
+            throw new UnauthorizedAccessException("You are not a participant in this conversation");
+        if (caller.Role != "Admin")
+            throw new UnauthorizedAccessException("Only admins can update this conversation");
+
         if (request.Name is not null)
             conversation.Name = request.Name;
 

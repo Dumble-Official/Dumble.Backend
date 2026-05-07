@@ -14,6 +14,9 @@ public class GetConversationQueryHandler(
         var conversation = await conversationRepository.GetByIdAsync(request.ConversationId, cancellationToken)
             ?? throw new KeyNotFoundException($"Conversation '{request.ConversationId}' not found.");
 
+        if (!conversation.Participants.Any(p => p.UserId == request.CallerId))
+            throw new UnauthorizedAccessException("You are not a participant in this conversation");
+
         return MapToResponse(conversation);
     }
 

@@ -1,3 +1,4 @@
+using Dumble.ChatService.Application.Common;
 using Dumble.ChatService.Application.Contracts;
 using Dumble.ChatService.Contracts.Common;
 using Dumble.ChatService.Contracts.Conversations;
@@ -13,9 +14,7 @@ public class GetConversationsQueryHandler(
     public async Task<CursorPagedResponse<ConversationResponse>> Handle(
         GetConversationsQuery request, CancellationToken cancellationToken)
     {
-        DateTime? cursor = request.Cursor is not null
-            ? DateTime.Parse(request.Cursor)
-            : null;
+        var cursor = ChatCursorParsing.ParseUtc(request.Cursor);
 
         var conversations = await conversationRepository.GetByUserIdAsync(
             request.UserId, cursor, request.Limit + 1, cancellationToken);
@@ -25,8 +24,8 @@ public class GetConversationsQueryHandler(
         if (hasMore)
             conversations = conversations.Take(request.Limit).ToList();
 
-        string? nextCursor = hasMore
-            ? conversations[^1].UpdatedAt.ToString("O")
+        var nextCursor = hasMore
+            ? ChatCursorParsing.Format(conversations[^1].UpdatedAt)
             : null;
 
         var items = conversations.Select(MapToResponse).ToList();

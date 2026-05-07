@@ -25,35 +25,38 @@ public class FollowRepository : IFollowRepository
         await _db.SaveChangesAsync(ct);
     }
 
-    public async Task DeleteAsync(string followerId, string followeeId, CancellationToken ct = default)
+    public async Task<bool> DeleteAsync(string followerId, string followeeId, CancellationToken ct = default)
     {
-        await _db.Follows
+        var rows = await _db.Follows
             .Where(f => f.FollowerId == followerId && f.FolloweeId == followeeId)
             .ExecuteDeleteAsync(ct);
+        return rows > 0;
     }
 
     public async Task<List<Follow>> GetFollowersAsync(string userId, DateTime? cursor, int limit, CancellationToken ct = default)
     {
-        var query = _db.Follows
-            .Where(f => f.FolloweeId == userId)
-            .OrderByDescending(f => f.CreatedAt);
+        IQueryable<Follow> query = _db.Follows.Where(f => f.FolloweeId == userId);
 
         if (cursor.HasValue)
-            query = (IOrderedQueryable<Follow>)query.Where(f => f.CreatedAt < cursor.Value);
+            query = query.Where(f => f.CreatedAt < cursor.Value);
 
-        return await query.Take(limit).ToListAsync(ct);
+        return await query
+            .OrderByDescending(f => f.CreatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
     }
 
     public async Task<List<Follow>> GetFollowingAsync(string userId, DateTime? cursor, int limit, CancellationToken ct = default)
     {
-        var query = _db.Follows
-            .Where(f => f.FollowerId == userId)
-            .OrderByDescending(f => f.CreatedAt);
+        IQueryable<Follow> query = _db.Follows.Where(f => f.FollowerId == userId);
 
         if (cursor.HasValue)
-            query = (IOrderedQueryable<Follow>)query.Where(f => f.CreatedAt < cursor.Value);
+            query = query.Where(f => f.CreatedAt < cursor.Value);
 
-        return await query.Take(limit).ToListAsync(ct);
+        return await query
+            .OrderByDescending(f => f.CreatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
     }
 
     public async Task<int> GetFollowersCountAsync(string userId, CancellationToken ct = default)

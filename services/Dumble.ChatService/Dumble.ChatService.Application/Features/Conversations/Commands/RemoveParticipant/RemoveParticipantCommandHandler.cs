@@ -9,7 +9,16 @@ public class RemoveParticipantCommandHandler(
 {
     public async Task Handle(RemoveParticipantCommand request, CancellationToken cancellationToken)
     {
+        var conversation = await conversationRepository.GetByIdAsync(request.ConversationId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Conversation '{request.ConversationId}' not found.");
+
+        var caller = conversation.Participants.FirstOrDefault(p => p.UserId == request.CallerId);
+        if (caller is null)
+            throw new UnauthorizedAccessException("You are not a participant in this conversation");
+        if (caller.Role != "Admin" && request.CallerId != request.TargetUserId)
+            throw new UnauthorizedAccessException("Only admins can remove other participants");
+
         await conversationRepository.RemoveParticipantAsync(
-            request.ConversationId, request.UserId, cancellationToken);
+            request.ConversationId, request.TargetUserId, cancellationToken);
     }
 }

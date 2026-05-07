@@ -23,7 +23,8 @@ public class UpdateConversationEndpoint : Endpoint<UpdateConversationRequest, Co
     public override async Task HandleAsync(UpdateConversationRequest req, CancellationToken ct)
     {
         var id = Route<string>("id")!;
-        var result = await _mediator.Send(new UpdateConversationCommand(id, req.Name, req.ImageUrl), ct);
+        var userId = User.FindFirst("userId")!.Value;
+        var result = await _mediator.Send(new UpdateConversationCommand(id, userId, req.Name, req.ImageUrl), ct);
         await SendAsync(result, cancellation: ct);
     }
 }

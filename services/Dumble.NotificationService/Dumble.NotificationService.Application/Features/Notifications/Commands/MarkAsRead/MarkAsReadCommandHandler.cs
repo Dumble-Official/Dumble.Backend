@@ -14,6 +14,12 @@ public class MarkAsReadCommandHandler : IRequestHandler<MarkAsReadCommand>
 
     public async Task Handle(MarkAsReadCommand request, CancellationToken ct)
     {
+        var notification = await _repository.GetByIdAsync(request.NotificationId, ct)
+            ?? throw new KeyNotFoundException($"Notification '{request.NotificationId}' not found");
+
+        if (notification.RecipientId != request.CallerId)
+            throw new UnauthorizedAccessException("You can only mark your own notifications as read");
+
         await _repository.MarkAsReadAsync(request.NotificationId, ct);
     }
 }

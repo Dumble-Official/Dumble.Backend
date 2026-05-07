@@ -19,6 +19,9 @@ public class FollowUserCommandHandler : IRequestHandler<FollowUserCommand>
 
     public async Task Handle(FollowUserCommand request, CancellationToken ct)
     {
+        if (request.FollowerId == request.FolloweeId)
+            throw new ArgumentException("You cannot follow yourself");
+
         var existing = await _followRepository.GetAsync(request.FollowerId, request.FolloweeId, ct);
         if (existing is not null) return;
 
@@ -26,6 +29,8 @@ public class FollowUserCommandHandler : IRequestHandler<FollowUserCommand>
         {
             Id = Guid.NewGuid(),
             FollowerId = request.FollowerId,
+            FollowerName = request.FollowerName,
+            FollowerImage = request.FollowerImage,
             FolloweeId = request.FolloweeId,
             FolloweeType = "User",
             CreatedAt = DateTime.UtcNow

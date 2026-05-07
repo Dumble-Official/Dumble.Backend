@@ -11,11 +11,16 @@ public class ChatHub : Hub
 {
     private readonly IMediator _mediator;
     private readonly IPresenceService _presenceService;
+    private readonly IConversationRepository _conversationRepository;
 
-    public ChatHub(IMediator mediator, IPresenceService presenceService)
+    public ChatHub(
+        IMediator mediator,
+        IPresenceService presenceService,
+        IConversationRepository conversationRepository)
     {
         _mediator = mediator;
         _presenceService = presenceService;
+        _conversationRepository = conversationRepository;
     }
 
     public override async Task OnConnectedAsync()
@@ -42,6 +47,15 @@ public class ChatHub : Hub
 
     public async Task JoinConversation(string conversationId)
     {
+        var userId = Context.UserIdentifier;
+        if (userId is null) throw new HubException("Not authenticated");
+
+        var conversation = await _conversationRepository.GetByIdAsync(conversationId)
+            ?? throw new HubException($"Conversation '{conversationId}' not found");
+
+        if (!conversation.Participants.Any(p => p.UserId == userId))
+            throw new HubException("You are not a participant in this conversation");
+
         await Groups.AddToGroupAsync(Context.ConnectionId, conversationId);
     }
 
@@ -56,10 +70,8 @@ public class ChatHub : Hub
         var userName = Context.User?.FindFirst("displayName")?.Value ?? "User";
         var profileImage = Context.User?.FindFirst("profileImage")?.Value;
 
-        var result = await _mediator.Send(new SendMessageCommand(
+        await _mediator.Send(new SendMessageCommand(
             conversationId, userId, userName, profileImage, content, replyToId));
-
-        // Message is already broadcast via IChatHubService in the handler
     }
 
     public async Task StartTyping(string conversationId)

@@ -22,7 +22,8 @@ public class DeleteMessageEndpoint : EndpointWithoutRequest
     public override async Task HandleAsync(CancellationToken ct)
     {
         var messageId = Route<string>("messageId")!;
-        await _mediator.Send(new DeleteMessageCommand(messageId), ct);
+        var userId = User.FindFirst("userId")!.Value;
+        await _mediator.Send(new DeleteMessageCommand(messageId, userId), ct);
         await SendNoContentAsync(ct);
     }
 }

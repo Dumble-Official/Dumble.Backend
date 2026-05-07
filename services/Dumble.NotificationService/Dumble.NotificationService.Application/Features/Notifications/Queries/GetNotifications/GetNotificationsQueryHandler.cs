@@ -1,4 +1,5 @@
 using MediatR;
+using Dumble.NotificationService.Application.Common;
 using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Contracts.Common;
 using Dumble.NotificationService.Contracts.Notifications;
@@ -16,7 +17,7 @@ public class GetNotificationsQueryHandler : IRequestHandler<GetNotificationsQuer
 
     public async Task<CursorPagedResponse<NotificationResponse>> Handle(GetNotificationsQuery request, CancellationToken ct)
     {
-        DateTime? cursor = request.Cursor is not null ? DateTime.Parse(request.Cursor) : null;
+        var cursor = NotificationCursorParsing.ParseUtc(request.Cursor);
 
         var notifications = await _repository.GetByRecipientAsync(request.RecipientId, cursor, request.Limit + 1, ct);
         var hasMore = notifications.Count > request.Limit;
@@ -27,7 +28,7 @@ public class GetNotificationsQueryHandler : IRequestHandler<GetNotificationsQuer
         )).ToList();
 
         var nextCursor = hasMore && items.Count > 0
-            ? items.Last().CreatedAt.ToString("O")
+            ? NotificationCursorParsing.Format(items.Last().CreatedAt)
             : null;
 
         return new CursorPagedResponse<NotificationResponse>(items, nextCursor, hasMore);

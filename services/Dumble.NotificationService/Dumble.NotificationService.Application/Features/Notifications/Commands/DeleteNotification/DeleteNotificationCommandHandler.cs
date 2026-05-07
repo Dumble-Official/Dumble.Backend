@@ -14,6 +14,12 @@ public class DeleteNotificationCommandHandler : IRequestHandler<DeleteNotificati
 
     public async Task Handle(DeleteNotificationCommand request, CancellationToken ct)
     {
+        var notification = await _repository.GetByIdAsync(request.NotificationId, ct)
+            ?? throw new KeyNotFoundException($"Notification '{request.NotificationId}' not found");
+
+        if (notification.RecipientId != request.CallerId)
+            throw new UnauthorizedAccessException("You can only delete your own notifications");
+
         await _repository.DeleteAsync(request.NotificationId, ct);
     }
 }

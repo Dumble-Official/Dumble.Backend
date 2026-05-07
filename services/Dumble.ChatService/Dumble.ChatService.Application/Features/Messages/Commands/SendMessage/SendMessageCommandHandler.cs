@@ -16,6 +16,13 @@ public class SendMessageCommandHandler(
 {
     public async Task<MessageResponse> Handle(SendMessageCommand request, CancellationToken cancellationToken)
     {
+        var conversation = await conversationRepository.GetByIdAsync(
+            request.ConversationId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Conversation '{request.ConversationId}' not found.");
+
+        if (!conversation.Participants.Any(p => p.UserId == request.SenderId))
+            throw new UnauthorizedAccessException("You are not a participant in this conversation");
+
         var now = DateTime.UtcNow;
 
         var message = new Message
@@ -45,13 +52,10 @@ public class SendMessageCommandHandler(
         await conversationRepository.UpdateLastMessageAsync(
             request.ConversationId, lastMessage, cancellationToken);
 
-        var conversation = await conversationRepository.GetByIdAsync(
-            request.ConversationId, cancellationToken);
-
-        var recipientIds = conversation?.Participants
+        var recipientIds = conversation.Participants
             .Where(p => p.UserId != request.SenderId)
             .Select(p => p.UserId)
-            .ToList() ?? new List<string>();
+            .ToList();
 
         var preview = request.Content.Length > 100
             ? request.Content[..100] + "..."
