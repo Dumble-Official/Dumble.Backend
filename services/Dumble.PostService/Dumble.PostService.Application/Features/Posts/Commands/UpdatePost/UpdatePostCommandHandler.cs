@@ -2,7 +2,9 @@ using MediatR;
 using Dumble.PostService.Application.Contracts;
 using Dumble.PostService.Contracts.Posts;
 using Dumble.PostService.Domain.Entities;
+using Dumble.PostService.Domain.Enums;
 using Dumble.SharedKernel.Contracts;
+using Dumble.SharedKernel.Enums;
 
 namespace Dumble.PostService.Application.Features.Posts.Commands.UpdatePost;
 
@@ -25,10 +27,13 @@ public class UpdatePostCommandHandler : IRequestHandler<UpdatePostCommand, PostR
     public async Task<PostResponse> Handle(UpdatePostCommand request, CancellationToken ct)
     {
         var currentUser = _userService.GetCurrentUser();
-        var post = await _postRepository.GetByIdWithDetailsAsync(request.PostId, ct)
-            ?? throw new KeyNotFoundException($"Post {request.PostId} not found");
+        var post = await _postRepository.GetByIdWithDetailsAsync(request.PostId, ct);
 
-        if (post.AuthorId != currentUser.Id)
+        if (post is null || post.Status == PostStatus.Deleted)
+            throw new KeyNotFoundException($"Post {request.PostId} not found");
+
+        var canModerate = currentUser.IsInAnyRole(UserType.Admin, UserType.Moderator);
+        if (post.AuthorId != currentUser.Id && !canModerate)
             throw new UnauthorizedAccessException("You can only update your own posts");
 
         if (request.Content is not null)
@@ -44,8 +49,9 @@ public class UpdatePostCommandHandler : IRequestHandler<UpdatePostCommand, PostR
             // Clear and re-add
             post.PostHashtags.Clear();
             var hashtagNames = request.Hashtags
-                .Select(h => h.TrimStart('#').ToLowerInvariant().Trim())
-                .Where(h => !string.IsNullOrEmpty(h))
+                .Where(h => !string.IsNullOrWhiteSpace(h))
+                .Select(h => h.Trim().TrimStart('#').ToLowerInvariant())
+                .Where(h => h.Length > 0)
                 .Distinct()
                 .ToList();
 

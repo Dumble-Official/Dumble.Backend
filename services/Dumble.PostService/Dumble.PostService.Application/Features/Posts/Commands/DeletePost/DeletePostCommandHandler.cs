@@ -3,6 +3,7 @@ using MassTransit;
 using Dumble.PostService.Application.Contracts;
 using Dumble.PostService.Domain.Enums;
 using Dumble.SharedKernel.Contracts;
+using Dumble.SharedKernel.Enums;
 using Dumble.SharedKernel.Events.Posts;
 
 namespace Dumble.PostService.Application.Features.Posts.Commands.DeletePost;
@@ -29,10 +30,13 @@ public class DeletePostCommandHandler : IRequestHandler<DeletePostCommand>
     public async Task Handle(DeletePostCommand request, CancellationToken ct)
     {
         var currentUser = _userService.GetCurrentUser();
-        var post = await _postRepository.GetByIdWithDetailsAsync(request.PostId, ct)
-            ?? throw new KeyNotFoundException($"Post {request.PostId} not found");
+        var post = await _postRepository.GetByIdWithDetailsAsync(request.PostId, ct);
 
-        if (post.AuthorId != currentUser.Id)
+        if (post is null || post.Status == PostStatus.Deleted)
+            throw new KeyNotFoundException($"Post {request.PostId} not found");
+
+        var canModerate = currentUser.IsInAnyRole(UserType.Admin, UserType.Moderator);
+        if (post.AuthorId != currentUser.Id && !canModerate)
             throw new UnauthorizedAccessException("You can only delete your own posts");
 
         post.Status = PostStatus.Deleted;

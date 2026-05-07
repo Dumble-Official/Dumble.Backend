@@ -75,8 +75,9 @@ public class CreatePostCommandHandler : IRequestHandler<CreatePostCommand, PostR
         if (request.Hashtags is { Count: > 0 })
         {
             hashtagNames = request.Hashtags
-                .Select(h => h.TrimStart('#').ToLowerInvariant().Trim())
-                .Where(h => !string.IsNullOrEmpty(h))
+                .Where(h => !string.IsNullOrWhiteSpace(h))
+                .Select(h => h.Trim().TrimStart('#').ToLowerInvariant())
+                .Where(h => h.Length > 0)
                 .Distinct()
                 .ToList();
 
