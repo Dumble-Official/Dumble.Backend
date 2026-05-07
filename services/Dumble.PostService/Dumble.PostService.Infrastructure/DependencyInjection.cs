@@ -36,12 +36,9 @@ public static class DependencyInjection
         }
         services.AddScoped<IFileService, CloudinaryFileService>();
 
-        // Auth service HTTP client
+        // Current user is read from validated JWT claims — no extra HTTP call.
         services.AddHttpContextAccessor();
-        services.AddHttpClient<ILoggedInUserService, LoggedInUserService>(client =>
-        {
-            client.BaseAddress = new Uri(configuration["AuthService:BaseUrl"] ?? "http://localhost:8081");
-        });
+        services.AddScoped<ILoggedInUserService, LoggedInUserService>();
 
         // MassTransit + RabbitMQ
         services.AddMassTransit(x =>

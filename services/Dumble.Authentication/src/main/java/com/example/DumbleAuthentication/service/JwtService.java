@@ -38,6 +38,9 @@ public class JwtService {
     @Value("${jwt.refresh-token-expiration}")
     private long refreshTokenExpiration;
 
+    @Value("${jwt.hub-token-expiration}")
+    private long hubTokenExpiration;
+
     public JwtService(RefreshTokenRepository refreshTokenRepository) {
         this.refreshTokenRepository = refreshTokenRepository;
     }
@@ -45,20 +48,34 @@ public class JwtService {
     // ── Access Token Operations ──────────────────────────────────────────
 
     public String generateAccessToken(UserDetails userDetails, User user) {
+        return buildToken(baseClaims(userDetails, user), userDetails.getUsername(), accessTokenExpiration);
+    }
+
+    /**
+     * Short-lived token (≈60s) for SignalR WebSocket auth. Same signing key
+     * and claims as the regular access token — the gateway validates it the
+     * same way — but with a `purpose=hub` claim so logging/audit can tell
+     * them apart, and an aggressive expiration so browser-history /
+     * Referer-header leakage of the URL is bounded.
+     */
+    public String generateHubToken(UserDetails userDetails, User user) {
+        Map<String, Object> claims = baseClaims(userDetails, user);
+        claims.put("purpose", "hub");
+        return buildToken(claims, userDetails.getUsername(), hubTokenExpiration);
+    }
+
+    private Map<String, Object> baseClaims(UserDetails userDetails, User user) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("roles", userDetails.getAuthorities().stream()
                 .map(Object::toString)
                 .toList());
-        claims.put("userId", user.getId().toString());
-        claims.put("email", user.getEmail());
-        String displayName = user.getDisplayName() != null ? user.getDisplayName()
-                : (user.getFirstName() + " " + user.getLastName()).trim();
-        claims.put("displayName", displayName);
-        if (user.getPfp() != null) {
-            claims.put("profileImage", user.getPfp());
-        }
-        claims.put("userType", user.getUserType().name());
-        return buildToken(claims, userDetails.getUsername(), accessTokenExpiration);
+        claims.put("userId", user.getId());
+        // Identity claims so downstream services don't need an extra /api/users/me round-trip
+        // every request. Stale display names on cached tokens are acceptable until next refresh.
+        if (user.getDisplayName() != null) claims.put("displayName", user.getDisplayName());
+        if (user.getPfp() != null) claims.put("profileImage", user.getPfp());
+        if (user.getUserType() != null) claims.put("userType", user.getUserType().name());
+        return claims;
     }
 
     public String extractUsername(String token) {

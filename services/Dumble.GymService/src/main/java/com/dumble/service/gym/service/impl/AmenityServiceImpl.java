@@ -1,6 +1,6 @@
 package com.dumble.service.gym.service.impl;
 
-import com.dumble.service.gym.client.UserClient;
+import com.dumble.service.gym.util.TokenExtractor;
 import com.dumble.service.gym.domain.dto.AmenityDto;
 import com.dumble.service.gym.domain.dto.UserResponse;
 import com.dumble.service.gym.domain.entity.Amenity;
@@ -23,10 +23,11 @@ public class AmenityServiceImpl implements AmenityService {
 
     private final AmenityRepository amenityRepository;
     private final AmenityMapper amenityMapper;
-    private final UserClient userClient;
+    private final TokenExtractor tokenExtractor;
+
 
     private void validateAdmin(String token) {
-        UserResponse user = userClient.getCurrentUser(token);
+        UserResponse user = tokenExtractor.extractUser(token);
         if (!"ADMIN".equals(user.getUserType())) {
             throw new UnauthorizedAccessException("Only system admins can manage amenities.");
         }

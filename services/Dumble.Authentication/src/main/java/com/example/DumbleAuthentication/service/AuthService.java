@@ -53,6 +53,20 @@ public class AuthService {
         this.userDetailsService = userDetailsService;
     }
 
+    /**
+     * Issues a 60s token for SignalR WebSocket negotiation. Caller must already
+     * be authenticated (regular access token in Authorization header).
+     */
+    public String issueHubToken(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        if (!user.isActive()) {
+            throw new IllegalStateException("Account is deactivated");
+        }
+        UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+        return jwtService.generateHubToken(userDetails, user);
+    }
+
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         String email = request.getEmail().trim().toLowerCase();

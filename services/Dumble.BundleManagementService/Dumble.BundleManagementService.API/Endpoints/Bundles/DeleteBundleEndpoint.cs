@@ -13,7 +13,8 @@ public sealed class DeleteBundleEndpoint(ISender mediator) : Endpoint<DeleteBund
     public override void Configure()
     {
         Delete("/api/bundles");
-        Claims("userId");
+        // Authenticated by default. DeleteBundleCommandHandler enforces
+        // ownership (only the bundle's owner can delete it).
         Options(x => x.WithTags("Bundles")
             .Accepts<DeleteBundleRequest>("multipart/form-data"));
     }
