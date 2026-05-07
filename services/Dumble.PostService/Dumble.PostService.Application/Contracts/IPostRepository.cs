@@ -14,4 +14,9 @@ public interface IPostRepository
     Task<Post> CreateAsync(Post post, CancellationToken ct = default);
     Task UpdateAsync(Post post, CancellationToken ct = default);
     Task DeleteAsync(Post post, CancellationToken ct = default);
+
+    Task IncrementReactionsAsync(Guid postId, CancellationToken ct = default);
+    Task DecrementReactionsAsync(Guid postId, CancellationToken ct = default);
+    Task IncrementCommentsAsync(Guid postId, CancellationToken ct = default);
+    Task DecrementCommentsAsync(Guid postId, CancellationToken ct = default);
 }

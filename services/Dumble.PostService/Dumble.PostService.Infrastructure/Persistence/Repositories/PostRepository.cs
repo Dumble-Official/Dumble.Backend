@@ -86,7 +86,7 @@ public class PostRepository : IPostRepository
 
     public async Task<List<Post>> SearchAsync(string query, DateTime? cursor, int limit, CancellationToken ct)
     {
-        var searchPattern = $"%{query}%";
+        var searchPattern = $"%{LikeEscaping.EscapePattern(query)}%";
         var dbQuery = _context.Posts
             .Include(p => p.Images.OrderBy(i => i.Order))
             .Include(p => p.PostHashtags).ThenInclude(ph => ph.Hashtag)
@@ -121,4 +121,20 @@ public class PostRepository : IPostRepository
         _context.Posts.Remove(post);
         await _context.SaveChangesAsync(ct);
     }
+
+    public Task IncrementReactionsAsync(Guid postId, CancellationToken ct) =>
+        _context.Posts.Where(p => p.Id == postId)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.ReactionsCount, p => p.ReactionsCount + 1), ct);
+
+    public Task DecrementReactionsAsync(Guid postId, CancellationToken ct) =>
+        _context.Posts.Where(p => p.Id == postId && p.ReactionsCount > 0)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.ReactionsCount, p => p.ReactionsCount - 1), ct);
+
+    public Task IncrementCommentsAsync(Guid postId, CancellationToken ct) =>
+        _context.Posts.Where(p => p.Id == postId)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.CommentsCount, p => p.CommentsCount + 1), ct);
+
+    public Task DecrementCommentsAsync(Guid postId, CancellationToken ct) =>
+        _context.Posts.Where(p => p.Id == postId && p.CommentsCount > 0)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.CommentsCount, p => p.CommentsCount - 1), ct);
 }

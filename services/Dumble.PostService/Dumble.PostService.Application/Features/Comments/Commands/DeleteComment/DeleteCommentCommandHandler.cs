@@ -39,12 +39,8 @@ public class DeleteCommentCommandHandler : IRequestHandler<DeleteCommentCommand>
         comment.UpdatedAt = DateTime.UtcNow;
         await _commentRepository.UpdateAsync(comment, ct);
 
+        await _postRepository.DecrementCommentsAsync(comment.PostId, ct);
         var post = await _postRepository.GetByIdAsync(comment.PostId, ct);
-        if (post is not null && post.CommentsCount > 0)
-        {
-            post.CommentsCount--;
-            await _postRepository.UpdateAsync(post, ct);
-        }
 
         await _publishEndpoint.Publish(new CommentDeletedEvent(
             comment.Id.ToString(),

@@ -55,9 +55,7 @@ public class AddReactionCommandHandler : IRequestHandler<AddReactionCommand, Rea
         };
 
         await _reactionRepository.CreateAsync(reaction, ct);
-
-        post.ReactionsCount++;
-        await _postRepository.UpdateAsync(post, ct);
+        await _postRepository.IncrementReactionsAsync(post.Id, ct);
 
         await _publishEndpoint.Publish(new PostReactedEvent(
             post.Id.ToString(),

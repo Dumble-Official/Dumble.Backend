@@ -50,9 +50,7 @@ public class AddCommentReactionCommandHandler : IRequestHandler<AddCommentReacti
         };
 
         await _commentReactionRepository.CreateAsync(reaction, ct);
-
-        comment.ReactionsCount++;
-        await _commentRepository.UpdateAsync(comment, ct);
+        await _commentRepository.IncrementReactionsAsync(comment.Id, ct);
 
         return new ReactionResponse(reaction.Id, reaction.UserId, reaction.Type.ToString(), reaction.CreatedAt);
     }

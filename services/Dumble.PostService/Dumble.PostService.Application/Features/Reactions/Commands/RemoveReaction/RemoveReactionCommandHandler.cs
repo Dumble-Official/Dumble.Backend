@@ -32,13 +32,9 @@ public class RemoveReactionCommandHandler : IRequestHandler<RemoveReactionComman
             ?? throw new KeyNotFoundException("Reaction not found");
 
         await _reactionRepository.DeleteAsync(reaction, ct);
+        await _postRepository.DecrementReactionsAsync(request.PostId, ct);
 
         var post = await _postRepository.GetByIdAsync(request.PostId, ct);
-        if (post is not null && post.ReactionsCount > 0)
-        {
-            post.ReactionsCount--;
-            await _postRepository.UpdateAsync(post, ct);
-        }
 
         await _publishEndpoint.Publish(new ReactionRemovedEvent(
             request.PostId.ToString(),

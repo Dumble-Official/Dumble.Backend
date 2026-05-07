@@ -72,4 +72,27 @@ public class CommentRepository : ICommentRepository
         _context.Comments.Remove(comment);
         await _context.SaveChangesAsync(ct);
     }
+
+    public Task IncrementReactionsAsync(Guid commentId, CancellationToken ct) =>
+        _context.Comments.Where(c => c.Id == commentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.ReactionsCount, c => c.ReactionsCount + 1), ct);
+
+    public Task DecrementReactionsAsync(Guid commentId, CancellationToken ct) =>
+        _context.Comments.Where(c => c.Id == commentId && c.ReactionsCount > 0)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.ReactionsCount, c => c.ReactionsCount - 1), ct);
+
+    public async Task<Dictionary<Guid, int>> GetRepliesCountForManyAsync(IReadOnlyList<Guid> parentIds, CancellationToken ct)
+    {
+        if (parentIds.Count == 0) return new Dictionary<Guid, int>();
+
+        var counts = await _context.Comments
+            .Where(c => c.ParentCommentId != null
+                        && parentIds.Contains(c.ParentCommentId.Value)
+                        && c.Status != CommentStatus.Deleted)
+            .GroupBy(c => c.ParentCommentId!.Value)
+            .Select(g => new { ParentId = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+
+        return counts.ToDictionary(x => x.ParentId, x => x.Count);
+    }
 }
