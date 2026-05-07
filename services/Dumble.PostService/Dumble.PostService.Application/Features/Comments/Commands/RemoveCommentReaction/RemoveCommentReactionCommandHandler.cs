@@ -22,7 +22,7 @@ public class RemoveCommentReactionCommandHandler : IRequestHandler<RemoveComment
 
     public async Task Handle(RemoveCommentReactionCommand request, CancellationToken ct)
     {
-        var currentUser = await _userService.GetCurrentUserAsync(ct);
+        var currentUser = _userService.GetCurrentUser();
         var reaction = await _commentReactionRepository.GetByCommentAndUserAsync(request.CommentId, currentUser.Id, ct)
             ?? throw new KeyNotFoundException("Reaction not found");
 

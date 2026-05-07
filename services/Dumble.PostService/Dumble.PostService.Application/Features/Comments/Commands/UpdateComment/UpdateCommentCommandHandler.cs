@@ -20,7 +20,7 @@ public class UpdateCommentCommandHandler : IRequestHandler<UpdateCommentCommand,
 
     public async Task<CommentResponse> Handle(UpdateCommentCommand request, CancellationToken ct)
     {
-        var currentUser = await _userService.GetCurrentUserAsync(ct);
+        var currentUser = _userService.GetCurrentUser();
         var comment = await _commentRepository.GetByIdAsync(request.CommentId, ct)
             ?? throw new KeyNotFoundException($"Comment {request.CommentId} not found");
 

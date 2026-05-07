@@ -1,10 +1,13 @@
+using Dumble.SharedKernel.Common;
+using Dumble.SharedKernel.Enums;
+
 namespace Dumble.SharedKernel.Events.Posts;
 
 public record PostCreatedEvent(
     string PostId,
     string AuthorId,
-    string AuthorType,
+    UserType AuthorType,
     string? GymId,
-    List<string> Hashtags,
-    DateTime CreatedAt
-);
+    IReadOnlyList<string> Hashtags,
+    DateTimeOffset CreatedAt
+) : IntegrationEvent;

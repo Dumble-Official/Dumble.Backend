@@ -1,4 +1,5 @@
 using Dumble.PostService.Domain.Enums;
+using Dumble.SharedKernel.Enums;
 
 namespace Dumble.PostService.Domain.Entities;
 
@@ -8,7 +9,7 @@ public class Post
     public string AuthorId { get; set; } = string.Empty;
     public string AuthorDisplayName { get; set; } = string.Empty;
     public string? AuthorProfileImage { get; set; }
-    public AuthorType AuthorType { get; set; }
+    public UserType AuthorType { get; set; }
     public string? Content { get; set; }
     public string? GymId { get; set; }
     public PostStatus Status { get; set; } = PostStatus.Active;

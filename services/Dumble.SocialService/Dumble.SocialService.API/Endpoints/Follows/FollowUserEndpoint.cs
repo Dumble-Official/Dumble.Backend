@@ -25,7 +25,7 @@ public class FollowUserEndpoint : EndpointWithoutRequest
     public override async Task HandleAsync(CancellationToken ct)
     {
         var targetUserId = Route<string>("userId")!;
-        var currentUser = await _userService.GetCurrentUserAsync();
+        var currentUser = _userService.GetCurrentUser();
 
         await _mediator.Send(new FollowUserCommand(
             currentUser.Id, currentUser.DisplayName, currentUser.ProfileImage, targetUserId), ct);

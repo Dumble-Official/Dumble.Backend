@@ -7,5 +7,10 @@ public record CurrentUser(
     string Email,
     string DisplayName,
     string? ProfileImage,
-    UserType UserType
-);
+    UserType UserType,
+    IReadOnlyList<string> Roles
+)
+{
+    public static CurrentUser Empty { get; } =
+        new(string.Empty, string.Empty, string.Empty, null, UserType.Participant, Array.Empty<string>());
+}

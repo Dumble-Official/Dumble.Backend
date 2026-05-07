@@ -30,7 +30,7 @@ public class GetReactionsEndpoint : EndpointWithoutRequest<ReactionsSummaryRespo
 
         try
         {
-            var user = await _userService.GetCurrentUserAsync(ct);
+            var user = _userService.GetCurrentUser();
             currentUserId = user.Id;
         }
         catch

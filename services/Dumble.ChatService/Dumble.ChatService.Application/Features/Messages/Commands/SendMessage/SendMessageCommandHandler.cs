@@ -61,9 +61,10 @@ public class SendMessageCommandHandler(
             request.ConversationId,
             request.SenderId,
             request.SenderName,
+            request.SenderProfileImage,
             recipientIds,
             preview,
-            now
+            new DateTimeOffset(now, TimeSpan.Zero)
         ), cancellationToken);
 
         var response = MapToResponse(message);

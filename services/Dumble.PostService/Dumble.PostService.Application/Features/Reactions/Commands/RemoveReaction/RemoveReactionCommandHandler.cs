@@ -27,7 +27,7 @@ public class RemoveReactionCommandHandler : IRequestHandler<RemoveReactionComman
 
     public async Task Handle(RemoveReactionCommand request, CancellationToken ct)
     {
-        var currentUser = await _userService.GetCurrentUserAsync(ct);
+        var currentUser = _userService.GetCurrentUser();
         var reaction = await _reactionRepository.GetByPostAndUserAsync(request.PostId, currentUser.Id, ct)
             ?? throw new KeyNotFoundException("Reaction not found");
 
@@ -42,6 +42,7 @@ public class RemoveReactionCommandHandler : IRequestHandler<RemoveReactionComman
 
         await _publishEndpoint.Publish(new ReactionRemovedEvent(
             request.PostId.ToString(),
+            post?.AuthorId ?? string.Empty,
             currentUser.Id
         ), ct);
     }

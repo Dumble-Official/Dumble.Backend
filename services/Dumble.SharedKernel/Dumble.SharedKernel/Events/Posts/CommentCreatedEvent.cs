@@ -1,3 +1,5 @@
+using Dumble.SharedKernel.Common;
+
 namespace Dumble.SharedKernel.Events.Posts;
 
 public record CommentCreatedEvent(
@@ -6,7 +8,8 @@ public record CommentCreatedEvent(
     string PostAuthorId,
     string CommentAuthorId,
     string CommenterName,
+    string? CommenterImage,
     string? ParentCommentAuthorId,
     string Preview,
-    DateTime CreatedAt
-);
+    DateTimeOffset CreatedAt
+) : IntegrationEvent;

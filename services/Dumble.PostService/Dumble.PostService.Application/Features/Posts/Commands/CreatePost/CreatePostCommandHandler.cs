@@ -5,6 +5,7 @@ using Dumble.PostService.Contracts.Posts;
 using Dumble.PostService.Domain.Entities;
 using Dumble.PostService.Domain.Enums;
 using Dumble.SharedKernel.Contracts;
+using Dumble.SharedKernel.Enums;
 using Dumble.SharedKernel.Events.Posts;
 
 namespace Dumble.PostService.Application.Features.Posts.Commands.CreatePost;
@@ -33,7 +34,7 @@ public class CreatePostCommandHandler : IRequestHandler<CreatePostCommand, PostR
 
     public async Task<PostResponse> Handle(CreatePostCommand request, CancellationToken ct)
     {
-        var currentUser = await _userService.GetCurrentUserAsync(ct);
+        var currentUser = _userService.GetCurrentUser();
 
         var post = new Post
         {
@@ -41,7 +42,7 @@ public class CreatePostCommandHandler : IRequestHandler<CreatePostCommand, PostR
             AuthorId = currentUser.Id,
             AuthorDisplayName = currentUser.DisplayName,
             AuthorProfileImage = currentUser.ProfileImage,
-            AuthorType = Enum.Parse<AuthorType>(currentUser.UserType.ToString()),
+            AuthorType = currentUser.UserType,
             Content = request.Content,
             GymId = request.GymId,
             Status = PostStatus.Active,
@@ -97,10 +98,10 @@ public class CreatePostCommandHandler : IRequestHandler<CreatePostCommand, PostR
         await _publishEndpoint.Publish(new PostCreatedEvent(
             post.Id.ToString(),
             post.AuthorId,
-            post.AuthorType.ToString(),
+            post.AuthorType,
             post.GymId,
             hashtagNames,
-            post.CreatedAt
+            new DateTimeOffset(post.CreatedAt, TimeSpan.Zero)
         ), ct);
 
         return new PostResponse(
