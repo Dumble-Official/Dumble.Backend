@@ -1,8 +1,8 @@
+using Dumble.BundleManagementService.Application.Contracts;
 using Dumble.BundleManagementService.Application.Features.Bundles.Commands.CreateBundle;
 using Dumble.BundleManagementService.Contracts.Bundles.CreateBundle;
 using FastEndpoints;
 using MediatR;
-using Microsoft.AspNetCore.Http;
 
 namespace Dumble.BundleManagementService.API.Endpoints.Bundles;
 
@@ -18,8 +18,14 @@ internal sealed class CreateBundleEndpoint(ISender mediator) : Endpoint<CreateBu
 
     public override async Task HandleAsync(CreateBundleRequest req, CancellationToken ct)
     {
+        var images = req.Images?.Select(f => new UploadedImage(
+                f.OpenReadStream(),
+                f.FileName,
+                f.ContentType))
+            .ToList();
+
         var bundleId = await mediator.Send(new CreateBundleCommand(
-            req.Images,
+            images,
             req.Name,
             req.Description,
             req.Price,
@@ -27,7 +33,6 @@ internal sealed class CreateBundleEndpoint(ISender mediator) : Endpoint<CreateBu
             req.ExpiresOn,
             req.CategoryId), ct);
 
-        HttpContext.Response.Headers.Location = $"/api/bundles/{bundleId.Value}";
         await Send.CreatedAtAsync<GetBundleByIdEndpoint>(
             new { id = bundleId.Value },
             new CreateBundleResponse(bundleId.Value),

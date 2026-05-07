@@ -15,6 +15,8 @@ public sealed class AccountId : ValueObject
 
     public static AccountId Create(Guid id)
     {
+        if (id == Guid.Empty)
+            throw new ArgumentException("AccountId cannot be empty", nameof(id));
         return new AccountId(id);
     }
 

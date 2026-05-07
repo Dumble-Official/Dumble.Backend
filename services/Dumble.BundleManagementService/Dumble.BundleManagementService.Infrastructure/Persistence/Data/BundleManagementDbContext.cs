@@ -1,5 +1,6 @@
-﻿using System.Reflection;
+using System.Reflection;
 using Dumble.BundleManagementService.Domain.BundleAggregate;
+using Dumble.BundleManagementService.Domain.CategoryAggregate;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dumble.BundleManagementService.Infrastructure.Persistence.Data;
@@ -7,7 +8,8 @@ namespace Dumble.BundleManagementService.Infrastructure.Persistence.Data;
 public sealed class BundleManagementDbContext(DbContextOptions<BundleManagementDbContext> options) : DbContext(options)
 {
     public DbSet<Bundle> Bundles { get; private set; } = default!;
-    
+    public DbSet<Category> Categories { get; private set; } = default!;
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());

@@ -401,3 +401,10 @@ C:\Users\youss\Desktop\Dumble.Backend\services\Dumble.BundleManagementService\Du
 C:\Users\youss\Desktop\Dumble.Backend\services\Dumble.BundleManagementService\Dumble.BundleManagementService.API\bin\Debug\net9.0\Microsoft.Extensions.Http.dll
 C:\Users\youss\Desktop\Dumble.Backend\services\Dumble.BundleManagementService\Dumble.BundleManagementService.API\bin\Debug\net9.0\Microsoft.Extensions.Options.ConfigurationExtensions.dll
 C:\Users\youss\Desktop\Dumble.Backend\services\Dumble.BundleManagementService\Dumble.BundleManagementService.API\bin\Debug\net9.0\System.Diagnostics.DiagnosticSource.dll
+C:\Users\youss\Desktop\Dumble.Backend\services\Dumble.BundleManagementService\Dumble.BundleManagementService.API\bin\Debug\net9.0\FluentValidation.AspNetCore.dll
+C:\Users\youss\Desktop\Dumble.Backend\services\Dumble.BundleManagementService\Dumble.BundleManagementService.API\bin\Debug\net9.0\FluentValidation.DependencyInjectionExtensions.dll
+C:\Users\youss\Desktop\Dumble.Backend\services\Dumble.BundleManagementService\Dumble.BundleManagementService.API\bin\Debug\net9.0\Microsoft.Extensions.Diagnostics.HealthChecks.dll
+C:\Users\youss\Desktop\Dumble.Backend\services\Dumble.BundleManagementService\Dumble.BundleManagementService.API\bin\Debug\net9.0\Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions.dll
+C:\Users\youss\Desktop\Dumble.Backend\services\Dumble.BundleManagementService\Dumble.BundleManagementService.API\bin\Debug\net9.0\Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore.dll
+C:\Users\youss\Desktop\Dumble.Backend\services\Dumble.BundleManagementService\Dumble.BundleManagementService.API\bin\Debug\net9.0\Microsoft.Extensions.FileProviders.Abstractions.dll
+C:\Users\youss\Desktop\Dumble.Backend\services\Dumble.BundleManagementService\Dumble.BundleManagementService.API\bin\Debug\net9.0\Microsoft.Extensions.Hosting.Abstractions.dll

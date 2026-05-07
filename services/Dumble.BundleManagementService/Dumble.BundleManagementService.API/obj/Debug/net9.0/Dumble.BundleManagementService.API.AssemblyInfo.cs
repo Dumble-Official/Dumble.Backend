@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Dumble.BundleManagementService.API")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b9332123fc5fea26aaeec2aefe56dde7b1a9a1b1")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+751473198e0f3783c06ceb1b5cb1eb4c3a003e9f")]
 [assembly: System.Reflection.AssemblyProductAttribute("Dumble.BundleManagementService.API")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Dumble.BundleManagementService.API")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

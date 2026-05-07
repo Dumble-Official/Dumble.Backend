@@ -11,12 +11,15 @@
         <!-- FastEndpoints -->
         <PackageReference Include="FastEndpoints" Version="7.1.1" />
         <PackageReference Include="FastEndpoints.Swagger" Version="7.1.1" />
+        <PackageReference Include="FluentValidation" Version="12.1.1" />
+        <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.1" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.11" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.11">
           <PrivateAssets>all</PrivateAssets>
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
+        <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="9.0.11" />
 
         <!-- Swagger / OpenAPI -->
         <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="9.0.1" />

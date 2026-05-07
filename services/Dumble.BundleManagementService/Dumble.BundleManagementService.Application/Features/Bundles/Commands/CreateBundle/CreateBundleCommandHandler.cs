@@ -5,15 +5,13 @@ using Dumble.BundleManagementService.Domain.BundleAggregate.Enums;
 using Dumble.BundleManagementService.Domain.BundleAggregate.ValueObjects;
 using Dumble.BundleManagementService.Domain.CategoryAggregate.ValueObjects;
 using MediatR;
-using Microsoft.Extensions.Logging;
 using Name = Dumble.BundleManagementService.Domain.BundleAggregate.ValueObjects.Name;
 
 namespace Dumble.BundleManagementService.Application.Features.Bundles.Commands.CreateBundle;
 
 public class CreateBundleCommandHandler(ILoggedInUserService loggedInUserService, 
     IFileService fileService,
-    IGenericRepository<Bundle, BundleId> bundlesRepository, 
-    ILogger<CreateBundleCommandHandler> logger) : IRequestHandler<CreateBundleCommand, BundleId>
+    IGenericRepository<Bundle, BundleId> bundlesRepository) : IRequestHandler<CreateBundleCommand, BundleId>
 {
     public async Task<BundleId> Handle(CreateBundleCommand request, CancellationToken cancellationToken)
     {
@@ -27,17 +25,12 @@ public class CreateBundleCommandHandler(ILoggedInUserService loggedInUserService
         var accountId = AccountId.Create(AccountIdentity.ToAccountGuid(currentUser.Id));
 
         IEnumerable<BundleImage>? imageUrls = null;
-        
-        //  3. Upload Bundle Images.
-        if (request.Images is not null)
+        if (request.Images is { Count: > 0 })
         {
             var uploadTasks = request.Images.Select(async img =>
-            {
-                await using var stream = img.OpenReadStream();
-                return BundleImage.Create(await fileService.UploadAsync(stream, img.Name, img.ContentType));
-            });
-            
-            imageUrls = (await Task.WhenAll(uploadTasks));
+                BundleImage.Create(await fileService.UploadAsync(img.Content, img.FileName, img.ContentType)));
+
+            imageUrls = await Task.WhenAll(uploadTasks);
         }
         
         // 4. Check for how Many Active Bundles the user and see if it is valid to his subscription or not
@@ -50,7 +43,7 @@ public class CreateBundleCommandHandler(ILoggedInUserService loggedInUserService
             Name.Create(request.Name),
             Description.Create(request.Description),
             Price.Create(request.Price),
-            Enum.Parse<Status>(request.Status),
+            Enum.Parse<Status>(request.Status, ignoreCase: true),
             CategoryId.Create(request.CategoryId),
             AccountId.Create(currentUser.Id),
             request.ExpiresOn,
