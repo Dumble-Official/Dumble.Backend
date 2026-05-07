@@ -1,8 +1,9 @@
+using Dumble.BundleManagementService.Application.Contracts;
 using Dumble.BundleManagementService.Application.Contracts.Repositories;
+using Dumble.BundleManagementService.Application.Identity;
 using Dumble.BundleManagementService.Domain.BundleAggregate;
 using Dumble.BundleManagementService.Domain.BundleAggregate.Enums;
 using Dumble.BundleManagementService.Domain.BundleAggregate.ValueObjects;
-using Dumble.BundleManagementService.Domain.CategoryAggregate.ValueObjects;
 using Dumble.SharedKernel.Contracts;
 using MediatR;
 using Name = Dumble.BundleManagementService.Domain.BundleAggregate.ValueObjects.Name;
@@ -10,6 +11,8 @@ using Name = Dumble.BundleManagementService.Domain.BundleAggregate.ValueObjects.
 namespace Dumble.BundleManagementService.Application.Features.Bundles.Commands.UpdateBundle;
 
 internal sealed class UpdateBundleCommandHandler(
+    ILogger<UpdateBundleCommandHandler> logger,
+    IFileService fileService,
     IGenericRepository<Bundle, BundleId> bundlesRepository,
     ILoggedInUserService loggedInUserService) : IRequestHandler<UpdateBundleCommand>
 {
@@ -20,22 +23,12 @@ internal sealed class UpdateBundleCommandHandler(
         var bundle = await bundlesRepository.Get(BundleId.Create(request.Id))
             ?? throw new KeyNotFoundException($"Bundle {request.Id} not found");
 
-        var modifier = AccountId.Create(AccountIdentity.ToAccountGuid(loggedInUser.Id));
-        bundle.AssertOwnedBy(modifier);
+        var currentUserAccountId = AccountId.Create(AccountIdentity.ToAccountGuid(loggedInUser.Id));
 
-        Status? status = request.Status is null ? null : Enum.Parse<Status>(request.Status, ignoreCase: true);
-
-        bundle.Modify(
-            modifier: modifier,
-            name: request.Name is null ? null : Name.Create(request.Name),
-            description: request.Description is null ? null : Description.Create(request.Description),
-            price: request.Price is null ? null : Price.Create(request.Price.Value),
-            status: status,
-            expiresOn: request.ExpiresOn,
-            categoryId: request.CategoryId is null ? null : CategoryId.Create(request.CategoryId.Value));
+        if (!currentUserAccountId.Equals(bundle.OwnerId))
+            throw new UnauthorizedAccessException("You can only update your own bundles");
 
         bundlesRepository.Update(bundle);
-
-        var rowsAffected = await bundlesRepository.CompleteAsync();
+        await bundlesRepository.CompleteAsync();
     }
 }

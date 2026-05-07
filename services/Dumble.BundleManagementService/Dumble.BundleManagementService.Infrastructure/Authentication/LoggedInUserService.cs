@@ -1,56 +1,39 @@
 using System.Security.Claims;
-using Dumble.BundleManagementService.Application.Contracts;
-using Dumble.BundleManagementService.Domain.BundleAggregate.Enums;
+using Dumble.SharedKernel.Authentication;
+using Dumble.SharedKernel.Contracts;
 using Microsoft.AspNetCore.Http;
 
 namespace Dumble.BundleManagementService.Infrastructure.Authentication;
 
-internal sealed class LoggedInUserService(IHttpContextAccessor httpContextAccessor) : ILoggedInUserService
+internal sealed class LoggedInUserService : ILoggedInUserService
 {
-    private readonly ClaimsPrincipal _claimsPrincipal = httpContextAccessor.HttpContext!.User;
-    
-    public User GetCurrentUser()
+    private readonly IHttpContextAccessor _httpContextAccessor;
+
+    public LoggedInUserService(IHttpContextAccessor httpContextAccessor)
     {
-        // Auth JWT carries: sub (email), userId (long), roles (list of "ROLE_*"),
-        // displayName, profileImage, userType. With MapInboundClaims=false the
-        // raw claim names are preserved on HttpContext.User.
-        var userIdClaim = _claimsPrincipal.FindFirst("userId")?.Value
-            ?? throw new UnauthorizedAccessException("Missing userId claim");
+        _httpContextAccessor = httpContextAccessor;
+    }
 
-        var email = _claimsPrincipal.FindFirst(ClaimTypes.Name)?.Value
-            ?? _claimsPrincipal.FindFirst("sub")?.Value
-            ?? "";
+    public CurrentUser GetCurrentUser()
+    {
+        var principal = _httpContextAccessor.HttpContext?.User
+            ?? throw new UnauthorizedAccessException("No HttpContext.User available");
 
-        var roles = _claimsPrincipal.FindAll(ClaimTypes.Role)
-            .Select(r => r.Value)
-            .ToList();
+        var userId = principal.FindFirst("userId")?.Value
+            ?? throw new UnauthorizedAccessException("Missing 'userId' claim");
 
-        // If no standard role claims, try the "roles" claim from the JWT
+        var email = principal.FindFirst(ClaimTypes.Name)?.Value
+            ?? principal.FindFirst("sub")?.Value
+            ?? string.Empty;
+
+        var displayName = principal.FindFirst("displayName")?.Value ?? email;
+        var profileImage = principal.FindFirst("profileImage")?.Value;
+        var userType = JwtUserTypeParser.Parse(principal.FindFirst("userType")?.Value);
+
+        var roles = principal.FindAll(ClaimTypes.Role).Select(r => r.Value).ToList();
         if (roles.Count == 0)
-        {
-            roles = _claimsPrincipal.FindAll("roles")
-                .Select(r => r.Value)
-                .ToList();
-        }
+            roles = principal.FindAll("roles").Select(r => r.Value).ToList();
 
-        // Convert long userId to a deterministic GUID for domain compatibility
-        var userId = long.Parse(userIdClaim);
-        var guidBytes = new byte[16];
-        BitConverter.GetBytes(userId).CopyTo(guidBytes, 0);
-
-        // OwnerType.Gym means "this bundle is owned by the gym side of the
-        // marketplace" — i.e. the human who owns the gym (GYM_OWNER), not the
-        // gym page itself (GYM). Trainers and participants get OwnerType.User.
-        var accountType = roles.Any(r => r.Equals("ROLE_GYM_OWNER", StringComparison.OrdinalIgnoreCase))
-            ? OwnerType.Gym
-            : OwnerType.User;
-
-        return new User
-        {
-            Id = new Guid(guidBytes),
-            Email = email,
-            AccountType = accountType,
-            Roles = roles
-        };
+        return new CurrentUser(userId, email, displayName, profileImage, userType, roles);
     }
 }
