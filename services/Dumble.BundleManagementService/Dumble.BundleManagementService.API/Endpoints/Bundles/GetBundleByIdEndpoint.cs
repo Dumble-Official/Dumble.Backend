@@ -1,11 +1,11 @@
-﻿using Dumble.BundleManagementService.Application.Features.Bundles.Queries.GetBundleQuery;
+using Dumble.BundleManagementService.Application.Features.Bundles.Queries.GetBundleQuery;
 using Dumble.BundleManagementService.Contracts.Bundles.GetBundle;
 using FastEndpoints;
 using MediatR;
 
 namespace Dumble.BundleManagementService.API.Endpoints.Bundles;
 
-public sealed class GetBundleByIdEndpoint(ISender mediator) 
+public sealed class GetBundleByIdEndpoint(ISender mediator)
     : Endpoint<GetBundleRequest, GetBundleResponse>
 {
     public override void Configure()
@@ -17,24 +17,21 @@ public sealed class GetBundleByIdEndpoint(ISender mediator)
 
     public override async Task<GetBundleResponse> ExecuteAsync(GetBundleRequest req, CancellationToken ct)
     {
-        var query = new GetBundleQuery(req.Id);
+        var viewerId = User.Identity?.IsAuthenticated == true
+            ? User.FindFirst("userId")?.Value
+            : null;
 
-        var result = await mediator.Send(query, ct);
+        var result = await mediator.Send(new GetBundleQuery(req.Id, viewerId), ct);
 
-        var response = new GetBundleResponse(
-            result.Id.Value,
-            result.Images.Select(i => i.Value),
-            result.Name.Value,
-            result.Description.Value,
-            result.Price.Value,
+        return new GetBundleResponse(
+            result.Id,
+            result.Images,
+            result.Name,
+            result.Description,
+            result.Price,
             result.ExpiresOn,
-            result.Status.ToString(),
-            result.Viewers.Count,
-            "Test"
-        );
-
-        await Send.OkAsync(response, ct);
-        
-        return response;
+            result.Status,
+            result.ViewCount,
+            result.CategoryName);
     }
 }

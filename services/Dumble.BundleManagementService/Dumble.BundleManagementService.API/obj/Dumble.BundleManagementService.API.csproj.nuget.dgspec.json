@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.API\\Dumble.BundleManagementService.API.csproj": {}
+    "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.API\\Dumble.BundleManagementService.API.csproj": {}
   },
   "projects": {
-    "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.API\\Dumble.BundleManagementService.API.csproj": {
+    "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.API\\Dumble.BundleManagementService.API.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.API\\Dumble.BundleManagementService.API.csproj",
+        "projectUniqueName": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.API\\Dumble.BundleManagementService.API.csproj",
         "projectName": "Dumble.BundleManagementService.API",
-        "projectPath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.API\\Dumble.BundleManagementService.API.csproj",
+        "projectPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.API\\Dumble.BundleManagementService.API.csproj",
         "packagesPath": "C:\\Users\\youss\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.API\\obj\\",
+        "outputPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.API\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -32,14 +32,14 @@
           "net9.0": {
             "targetAlias": "net9.0",
             "projectReferences": {
-              "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Application\\Dumble.BundleManagementService.Application.csproj": {
-                "projectPath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Application\\Dumble.BundleManagementService.Application.csproj"
+              "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Application\\Dumble.BundleManagementService.Application.csproj": {
+                "projectPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Application\\Dumble.BundleManagementService.Application.csproj"
               },
-              "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj": {
-                "projectPath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj"
+              "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj": {
+                "projectPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj"
               },
-              "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Infrastructure\\Dumble.BundleManagementService.Infrastructure.csproj": {
-                "projectPath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Infrastructure\\Dumble.BundleManagementService.Infrastructure.csproj"
+              "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Infrastructure\\Dumble.BundleManagementService.Infrastructure.csproj": {
+                "projectPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Infrastructure\\Dumble.BundleManagementService.Infrastructure.csproj"
               }
             }
           }
@@ -54,7 +54,7 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "9.0.100"
+        "SdkAnalysisLevel": "10.0.200"
       },
       "frameworks": {
         "net9.0": {
@@ -98,6 +98,24 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Host.win-x64",
+              "version": "[9.0.14, 9.0.14]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            },
+            {
+              "name": "Microsoft.WindowsDesktop.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            }
+          ],
           "frameworkReferences": {
             "Microsoft.AspNetCore.App": {
               "privateAssets": "none"
@@ -106,18 +124,18 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.101/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.201/PortableRuntimeIdentifierGraph.json"
         }
       }
     },
-    "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Application\\Dumble.BundleManagementService.Application.csproj": {
+    "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Application\\Dumble.BundleManagementService.Application.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Application\\Dumble.BundleManagementService.Application.csproj",
+        "projectUniqueName": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Application\\Dumble.BundleManagementService.Application.csproj",
         "projectName": "Dumble.BundleManagementService.Application",
-        "projectPath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Application\\Dumble.BundleManagementService.Application.csproj",
+        "projectPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Application\\Dumble.BundleManagementService.Application.csproj",
         "packagesPath": "C:\\Users\\youss\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Application\\obj\\",
+        "outputPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Application\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -138,8 +156,11 @@
           "net9.0": {
             "targetAlias": "net9.0",
             "projectReferences": {
-              "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Domain\\Dumble.BundleManagementService.Domain.csproj": {
-                "projectPath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Domain\\Dumble.BundleManagementService.Domain.csproj"
+              "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Domain\\Dumble.BundleManagementService.Domain.csproj": {
+                "projectPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Domain\\Dumble.BundleManagementService.Domain.csproj"
+              },
+              "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.SharedKernel\\Dumble.SharedKernel\\Dumble.SharedKernel.csproj": {
+                "projectPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.SharedKernel\\Dumble.SharedKernel\\Dumble.SharedKernel.csproj"
               }
             }
           }
@@ -154,7 +175,7 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "9.0.100"
+        "SdkAnalysisLevel": "10.0.200"
       },
       "frameworks": {
         "net9.0": {
@@ -184,23 +205,37 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            },
+            {
+              "name": "Microsoft.WindowsDesktop.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            }
+          ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.101/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.201/PortableRuntimeIdentifierGraph.json"
         }
       }
     },
-    "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj": {
+    "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj",
+        "projectUniqueName": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj",
         "projectName": "Dumble.BundleManagementService.Contracts",
-        "projectPath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj",
+        "projectPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj",
         "packagesPath": "C:\\Users\\youss\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\obj\\",
+        "outputPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -233,7 +268,7 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "9.0.100"
+        "SdkAnalysisLevel": "10.0.200"
       },
       "frameworks": {
         "net9.0": {
@@ -255,23 +290,37 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            },
+            {
+              "name": "Microsoft.WindowsDesktop.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            }
+          ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.101/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.201/PortableRuntimeIdentifierGraph.json"
         }
       }
     },
-    "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Domain\\Dumble.BundleManagementService.Domain.csproj": {
+    "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Domain\\Dumble.BundleManagementService.Domain.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Domain\\Dumble.BundleManagementService.Domain.csproj",
+        "projectUniqueName": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Domain\\Dumble.BundleManagementService.Domain.csproj",
         "projectName": "Dumble.BundleManagementService.Domain",
-        "projectPath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Domain\\Dumble.BundleManagementService.Domain.csproj",
+        "projectPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Domain\\Dumble.BundleManagementService.Domain.csproj",
         "packagesPath": "C:\\Users\\youss\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Domain\\obj\\",
+        "outputPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Domain\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -304,7 +353,7 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "9.0.100"
+        "SdkAnalysisLevel": "10.0.200"
       },
       "frameworks": {
         "net9.0": {
@@ -320,23 +369,37 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            },
+            {
+              "name": "Microsoft.WindowsDesktop.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            }
+          ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.101/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.201/PortableRuntimeIdentifierGraph.json"
         }
       }
     },
-    "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Infrastructure\\Dumble.BundleManagementService.Infrastructure.csproj": {
+    "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Infrastructure\\Dumble.BundleManagementService.Infrastructure.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Infrastructure\\Dumble.BundleManagementService.Infrastructure.csproj",
+        "projectUniqueName": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Infrastructure\\Dumble.BundleManagementService.Infrastructure.csproj",
         "projectName": "Dumble.BundleManagementService.Infrastructure",
-        "projectPath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Infrastructure\\Dumble.BundleManagementService.Infrastructure.csproj",
+        "projectPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Infrastructure\\Dumble.BundleManagementService.Infrastructure.csproj",
         "packagesPath": "C:\\Users\\youss\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Infrastructure\\obj\\",
+        "outputPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Infrastructure\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -357,8 +420,8 @@
           "net9.0": {
             "targetAlias": "net9.0",
             "projectReferences": {
-              "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Application\\Dumble.BundleManagementService.Application.csproj": {
-                "projectPath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Application\\Dumble.BundleManagementService.Application.csproj"
+              "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Application\\Dumble.BundleManagementService.Application.csproj": {
+                "projectPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Application\\Dumble.BundleManagementService.Application.csproj"
               }
             }
           }
@@ -373,7 +436,7 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "9.0.100"
+        "SdkAnalysisLevel": "10.0.200"
       },
       "frameworks": {
         "net9.0": {
@@ -393,9 +456,92 @@
             },
             "Microsoft.Extensions.Configuration.Abstractions": {
               "target": "Package",
-              "version": "[10.0.0, )"
+              "version": "[10.0.7, )"
+            },
+            "Microsoft.Extensions.Http": {
+              "target": "Package",
+              "version": "[10.0.7, )"
             }
           },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            },
+            {
+              "name": "Microsoft.WindowsDesktop.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.201/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.SharedKernel\\Dumble.SharedKernel\\Dumble.SharedKernel.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.SharedKernel\\Dumble.SharedKernel\\Dumble.SharedKernel.csproj",
+        "projectName": "Dumble.SharedKernel",
+        "projectPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.SharedKernel\\Dumble.SharedKernel\\Dumble.SharedKernel.csproj",
+        "packagesPath": "C:\\Users\\youss\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.SharedKernel\\Dumble.SharedKernel\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\youss\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.200"
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
           "imports": [
             "net461",
             "net462",
@@ -412,7 +558,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.101/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.201/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

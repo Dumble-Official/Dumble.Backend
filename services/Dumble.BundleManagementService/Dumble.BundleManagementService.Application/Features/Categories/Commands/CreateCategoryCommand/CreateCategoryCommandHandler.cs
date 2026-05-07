@@ -15,15 +15,10 @@ public sealed class CreateCategoryCommandHandler(
     {
         // 1. Check if he is an admin or not.
         var user = loggedInUserService.GetCurrentUser();
+        if (!user.IsInRole(UserType.Admin))
+            throw new UnauthorizedAccessException("Only administrators can create categories");
 
-        var isAdmin = user.Roles.Any(role => role == "Admin");
-
-        if (!isAdmin) throw new Exception("UnAuthorized");
-        
-        // 2. Create Category 
-        var category = Category.Create(
-            Name.Create(request.Name)
-            );
+        var category = Category.Create(Name.Create(request.Name));
 
         // 3. Persist Changes to the database
         await categoryRepository.Create(category);

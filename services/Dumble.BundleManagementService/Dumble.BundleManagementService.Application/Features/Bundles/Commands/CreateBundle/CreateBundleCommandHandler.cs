@@ -19,10 +19,12 @@ public class CreateBundleCommandHandler(ILoggedInUserService loggedInUserService
     {
         // 1. Get current logged In user
         var currentUser = loggedInUserService.GetCurrentUser();
-        
-        // 2. Check his Permissions.
-        if (currentUser.AccountType is not OwnerType.Gym or OwnerType.Trainer)
-            throw new Exception("UnAuthorized");
+
+        if (!currentUser.IsInAnyRole(UserType.GymOwner, UserType.Gym, UserType.Trainer))
+            throw new UnauthorizedAccessException("Only gym owners, gyms, and trainers can create bundles");
+
+        var ownerType = AccountIdentity.ToOwnerType(currentUser.UserType, currentUser.Roles);
+        var accountId = AccountId.Create(AccountIdentity.ToAccountGuid(currentUser.Id));
 
         IEnumerable<BundleImage>? imageUrls = null;
         

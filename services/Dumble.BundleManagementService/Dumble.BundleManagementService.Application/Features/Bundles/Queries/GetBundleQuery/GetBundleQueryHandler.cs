@@ -2,39 +2,42 @@
 using Dumble.BundleManagementService.Application.Contracts.Repositories;
 using Dumble.BundleManagementService.Domain.BundleAggregate;
 using Dumble.BundleManagementService.Domain.BundleAggregate.ValueObjects;
+using Dumble.BundleManagementService.Domain.CategoryAggregate;
+using Dumble.BundleManagementService.Domain.CategoryAggregate.ValueObjects;
 using MediatR;
-using Microsoft.Extensions.Logging;
 
 namespace Dumble.BundleManagementService.Application.Features.Bundles.Queries.GetBundleQuery;
 
-internal sealed class GetBundleQueryHandler(ILogger<GetBundleQueryHandler> logger, 
-                                            IGenericRepository<Bundle, BundleId> bundlesRepository,
-                                            ILoggedInUserService loggedInUserService) : IRequestHandler<GetBundleQuery, Bundle>
+internal sealed class GetBundleQueryHandler(
+    IGenericRepository<Bundle, BundleId> bundlesRepository,
+    IGenericRepository<Category, CategoryId> categoryRepository) : IRequestHandler<GetBundleQuery, GetBundleResult>
 {
-    public async Task<Bundle> Handle(GetBundleQuery request, CancellationToken cancellationToken)
+    public async Task<GetBundleResult> Handle(GetBundleQuery request, CancellationToken cancellationToken)
     {
-        // 1. Fetch the bundle 
-        var bundle = await bundlesRepository.Get(BundleId.Create(request.Id));
-        
-        // 3. Check if it is null or not
-        if (bundle is null) throw new Exception();
-        
-        // 4. Add Viewer to the bundle 
-        var currentUser = loggedInUserService.GetCurrentUser();
+        var bundle = await bundlesRepository.Get(BundleId.Create(request.Id))
+            ?? throw new KeyNotFoundException($"Bundle {request.Id} not found");
 
-        var accountId = AccountId.Create(currentUser.Id);
-        
-        var isAdded = bundle.View(accountId);
-        
-        // 5. Persist the changes
-        if (isAdded)
+        if (request.ViewerExternalId is { Length: > 0 } externalId)
         {
-            bundlesRepository.Update(bundle);
-
-            await bundlesRepository.CompleteAsync();   
+            var viewerId = AccountId.Create(AccountIdentity.ToAccountGuid(externalId));
+            if (bundle.View(viewerId))
+            {
+                bundlesRepository.Update(bundle);
+                await bundlesRepository.CompleteAsync();
+            }
         }
-        
-        // 6. Return the bundle
-        return bundle;
+
+        var category = await categoryRepository.Get(bundle.CategoryId);
+
+        return new GetBundleResult(
+            bundle.Id.Value,
+            bundle.Images.Select(i => i.Value).ToList(),
+            bundle.Name.Value,
+            bundle.Description.Value,
+            bundle.Price.Value,
+            bundle.ExpiresOn,
+            bundle.Status.ToString(),
+            bundle.Viewers.Count,
+            category?.Name.Value ?? string.Empty);
     }
 }

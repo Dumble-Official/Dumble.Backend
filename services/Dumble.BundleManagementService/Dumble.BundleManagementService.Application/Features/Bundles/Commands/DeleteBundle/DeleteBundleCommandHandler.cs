@@ -1,14 +1,13 @@
 ﻿using Dumble.BundleManagementService.Application.Contracts;
 using Dumble.BundleManagementService.Application.Contracts.Repositories;
-using Dumble.BundleManagementService.Application.Features.Bundles.Commands.UpdateBundle;
+using Dumble.BundleManagementService.Application.Identity;
 using Dumble.BundleManagementService.Domain.BundleAggregate;
 using Dumble.BundleManagementService.Domain.BundleAggregate.ValueObjects;
 using MediatR;
-using Microsoft.Extensions.Logging;
 
 namespace Dumble.BundleManagementService.Application.Features.Bundles.Commands.DeleteBundle;
 
-internal sealed class DeleteBundleCommandHandler(ILogger<UpdateBundleCommandHandler> logger, 
+internal sealed class DeleteBundleCommandHandler(
     IFileService fileService,
     IGenericRepository<Bundle,BundleId> bundlesRepository, 
     ILoggedInUserService loggedInUserService) : IRequestHandler<DeleteBundleCommand>
@@ -17,15 +16,11 @@ internal sealed class DeleteBundleCommandHandler(ILogger<UpdateBundleCommandHand
     {
         var loggedInUser = loggedInUserService.GetCurrentUser();
 
-        var bundle = await bundlesRepository.Get(BundleId.Create(request.Id));
-        
-        if (bundle is null) throw new Exception("Not Found Exception!");
+        var bundle = await bundlesRepository.Get(BundleId.Create(request.Id))
+            ?? throw new KeyNotFoundException($"Bundle {request.Id} not found");
 
-        var currentUserAccountId = AccountId.Create(loggedInUser.Id);
-        
-        if (!currentUserAccountId.Equals(bundle.OwnerId))
-            throw new Exception("UnAuthorized");
-        
+        bundle.AssertOwnedBy(AccountId.Create(AccountIdentity.ToAccountGuid(loggedInUser.Id)));
+
         var tasks = bundle.Images.Select(img => fileService.DeleteAsync(img.Value));
 
         var results = await Task.WhenAll(tasks);
