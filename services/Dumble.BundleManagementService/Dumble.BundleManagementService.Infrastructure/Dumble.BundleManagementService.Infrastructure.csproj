@@ -18,7 +18,8 @@
       <PackageReference Include="CloudinaryDotNet" Version="1.27.9" />
       <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.0" />
       <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.11" />
-      <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
+      <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.7" />
+      <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.7" />
     </ItemGroup>
 
 </Project>
