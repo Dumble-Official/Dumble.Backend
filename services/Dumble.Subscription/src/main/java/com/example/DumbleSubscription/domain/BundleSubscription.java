@@ -104,6 +104,15 @@ public class BundleSubscription {
     /* ----- Dunning state (Decision 7.3) ----- */
     private Instant pastDueAt;
 
+    /**
+     * Timestamp of the last RenewalPromptNeeded emission for this sub. Used by
+     * RenewalService to drop the row out of the renewal pool after the prompt
+     * fires, so wallet/no-token subs don't re-prompt every hour forever
+     * (bug_019).
+     */
+    @Column(name = "renewal_prompted_at")
+    private Instant renewalPromptedAt;
+
     @Column(nullable = false)
     private int retryAttempts;
 

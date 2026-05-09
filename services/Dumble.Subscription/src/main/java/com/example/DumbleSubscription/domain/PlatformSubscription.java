@@ -50,6 +50,12 @@ public class PlatformSubscription {
 
     /* ----- Renewal + dunning (Decision 7.3) ----- */
     private String paymentMethodToken;
+
+    /** CARD | WALLET | OTHER — gates whether renewals can auto-charge (Decision 7.2). */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_method_type", length = 20)
+    private com.example.DumbleSubscription.domain.enums.PaymentMethodType paymentMethodType;
+
     private Instant pastDueAt;
 
     @Column(nullable = false)

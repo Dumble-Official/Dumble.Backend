@@ -3,6 +3,7 @@ package com.example.DumbleSubscription.controller;
 import com.example.DumbleSubscription.domain.ParticipantPreferences;
 import com.example.DumbleSubscription.dto.CurrentUser;
 import com.example.DumbleSubscription.repository.ParticipantPreferencesRepository;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -38,13 +39,15 @@ public class PreferencesController {
 
     @PutMapping
     public ParticipantPreferences set(@AuthenticationPrincipal CurrentUser user,
-                                      @RequestBody PreferencesUpdate body) {
+                                      @Valid @RequestBody PreferencesUpdate body) {
         ParticipantPreferences pref = repository.findById(user.getId()).orElseGet(() -> {
             ParticipantPreferences fresh = new ParticipantPreferences();
             fresh.setParticipantId(user.getId());
             return fresh;
         });
-        pref.setHideFromGymLists(Boolean.TRUE.equals(body.getHideFromGymLists()));
+        // @NotNull on hideFromGymLists is now enforced via @Valid above, so
+        // the field is non-null here — Boolean autoboxes safely.
+        pref.setHideFromGymLists(body.getHideFromGymLists());
         pref.setUpdatedAt(Instant.now());
         return repository.save(pref);
     }

@@ -31,9 +31,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -122,9 +127,18 @@ public class BundleSubscriptionService {
 
         // Pay either entirely from wallet (if balance covers) or entirely via Payment.
         // No partial wallet+card splits in v1 — see Wallet PDF Decision 4.1.
+        //
+        // Idempotency key derivation (Decision 12.3 + bug_003): use a hash of
+        // the stable purchase tuple — (participant, bundle, amount) — instead
+        // of UUID.randomUUID(). Two retries of the same purchase produce the
+        // same downstream key, so Payment / Wallet collapse them into a single
+        // charge even if the controller-level Idempotency-Key headers differ
+        // (e.g. mobile retry without client-side dedup).
         boolean paidFromWallet = false;
         String providerRef = null;
-        String checkoutIntentId = UUID.randomUUID().toString();
+        boolean paymentPending = false;
+        String pendingProviderRef = null;
+        String checkoutIntentId = stableCheckoutKey(participantId, bundle.getId(), amountToCharge);
 
         if (req.isUseWalletBalance()) {
             WalletSummaryResponse summary = walletServiceClient.summary(participantId);
@@ -143,10 +157,22 @@ public class BundleSubscriptionService {
                     .description("Subscribe to " + bundle.getName())
                     .callerReference(checkoutIntentId)
                     .build());
-            if (charge == null || !"Succeeded".equalsIgnoreCase(charge.getStatus())) {
+            if (charge == null) {
                 throw new BusinessRuleViolationException("Payment failed");
             }
-            providerRef = charge.getProviderRef();
+            String chargeStatus = charge.getStatus();
+            if ("Succeeded".equalsIgnoreCase(chargeStatus)) {
+                providerRef = charge.getProviderRef();
+            } else if ("Pending".equalsIgnoreCase(chargeStatus)) {
+                // Decision: Paymob's Egyptian card flow returns Pending when the
+                // bank requires async OTP / 3DS confirmation. Don't fail the
+                // sub — leave it PENDING, persist the providerRef, and let the
+                // payment.charge.completed webhook flip it to ACTIVE.
+                paymentPending = true;
+                pendingProviderRef = charge.getProviderRef();
+            } else {
+                throw new BusinessRuleViolationException("Payment failed");
+            }
         }
 
         // Create the subscription with bundle data SNAPSHOTTED (Decision 12.1)
@@ -161,12 +187,16 @@ public class BundleSubscriptionService {
         sub.setCurrency(bundle.getCurrency());
         sub.setDurationDays(bundle.getDurationDays());
         sub.setBundleExpiresOnSnapshot(bundle.getExpiresOn());
-        sub.setStatus(SubscriptionStatus.ACTIVE);
+        // bug_029 — Pending charges leave the sub PENDING until the
+        // payment.charge.completed webhook arrives (handled by
+        // PaymentEventListener). Wallet payments and Succeeded card charges
+        // go straight to ACTIVE.
+        sub.setStatus(paymentPending ? SubscriptionStatus.PENDING : SubscriptionStatus.ACTIVE);
         sub.setStartedAt(now);
         sub.setEndsAt(now.plus(bundle.getDurationDays(), ChronoUnit.DAYS));
         // Decision 2.3 — bundles with ExpiresOn never auto-renew
         sub.setAutoRenew(bundle.getExpiresOn() == null);
-        sub.setProviderRef(providerRef);
+        sub.setProviderRef(paymentPending ? pendingProviderRef : providerRef);
         // Capture payment method token + type so RenewalService can re-charge correctly
         // (Decision 7.2 + fix for the prior providerRef-as-token bug).
         sub.setPaymentMethodToken(paidFromWallet ? null : req.getPaymentMethodToken());
@@ -179,9 +209,11 @@ public class BundleSubscriptionService {
         sub.setUpdatedAt(now);
         bundleSubscriptionRepository.save(sub);
 
-        // Decision 4.2 — annual subs split into 12 monthly tranches; others use the duration directly.
-        createEscrowEntries(sub, amountToCharge);
-
+        // Promo redemption is recorded regardless of pending — the discount
+        // was applied in the charge amount, and the sub keeps the promo code
+        // even while PENDING. If the charge ultimately fails, the redemption
+        // row remains as an audit trail of what was attempted, which matches
+        // the wider append-only audit policy (Section 14).
         if (promo != null && promo.isValid() && discountCents > 0) {
             PromoCodeRedemption redemption = new PromoCodeRedemption();
             redemption.setBundleSubscriptionId(sub.getId());
@@ -193,6 +225,23 @@ public class BundleSubscriptionService {
             promoCodeRedemptionRepository.save(redemption);
         }
 
+        // Defer escrow + receipt + activation outbox until the charge confirms
+        // (bug_029). For PENDING subs, the payment.charge.completed handler
+        // will create escrow tranches and emit the activation event.
+        if (paymentPending) {
+            auditLogger.log(sub.getId(), "CheckoutPending", "USER", participantId.toString(),
+                    "awaiting_payment_confirmation",
+                    Map.of("providerRef", pendingProviderRef == null ? "" : pendingProviderRef));
+            outboxWriter.write("BundleSubscriptionPending", "subscription.bundle.pending",
+                    Map.of("subscriptionId", sub.getId(),
+                            "participantId", sub.getParticipantId(),
+                            "providerRef", pendingProviderRef == null ? "" : pendingProviderRef));
+            return BundleSubscriptionResponse.from(sub);
+        }
+
+        // Decision 4.2 — annual subs split into 12 monthly tranches; others use the duration directly.
+        createEscrowEntries(sub, amountToCharge);
+
         // Receipt — Decision 11.5
         receiptService.issueForBundleSubscription(participantId, sub.getId(), checkoutIntentId,
                 amountToCharge, sub.getCurrency(), sub.getBundleName(), sub.getDurationDays());
@@ -203,6 +252,75 @@ public class BundleSubscriptionService {
                 BundleSubscriptionResponse.from(sub));
 
         return BundleSubscriptionResponse.from(sub);
+    }
+
+    /**
+     * bug_029 — completes a sub that was left PENDING after a Paymob OTP/3DS
+     * confirmation. Idempotent on subscriptionId + status; safe to call from
+     * the payment.charge.completed webhook even on retried delivery.
+     */
+    @Transactional
+    public void confirmPendingCharge(UUID subscriptionId, String providerRef) {
+        BundleSubscription sub = bundleSubscriptionRepository.findById(subscriptionId).orElse(null);
+        if (sub == null || sub.getStatus() != SubscriptionStatus.PENDING) {
+            return;
+        }
+        Instant now = Instant.now();
+        sub.setStatus(SubscriptionStatus.ACTIVE);
+        if (providerRef != null && !providerRef.isBlank()) {
+            sub.setProviderRef(providerRef);
+        }
+        sub.setUpdatedAt(now);
+        bundleSubscriptionRepository.save(sub);
+
+        createEscrowEntries(sub, sub.getPricePaidCents());
+
+        String checkoutIntentId = stableCheckoutKey(sub.getParticipantId(), sub.getBundleId(), sub.getPricePaidCents());
+        receiptService.issueForBundleSubscription(sub.getParticipantId(), sub.getId(), checkoutIntentId,
+                sub.getPricePaidCents(), sub.getCurrency(), sub.getBundleName(), sub.getDurationDays());
+
+        auditLogger.log(sub.getId(), "Activated", "WEBHOOK", "payment.charge.completed",
+                "pending_charge_confirmed", sub);
+        outboxWriter.write("BundleSubscriptionActivated", "subscription.bundle.activated",
+                BundleSubscriptionResponse.from(sub));
+    }
+
+    /**
+     * bug_029 — terminates a sub that was left PENDING when the deferred
+     * Paymob confirmation ultimately failed (OTP wrong, card rejected, etc.).
+     */
+    @Transactional
+    public void failPendingCharge(UUID subscriptionId, String reason) {
+        BundleSubscription sub = bundleSubscriptionRepository.findById(subscriptionId).orElse(null);
+        if (sub == null || sub.getStatus() != SubscriptionStatus.PENDING) {
+            return;
+        }
+        Instant now = Instant.now();
+        sub.setStatus(SubscriptionStatus.EXPIRED);
+        sub.setUpdatedAt(now);
+        bundleSubscriptionRepository.save(sub);
+        auditLogger.log(sub.getId(), "Expired", "WEBHOOK", "payment.charge.failed",
+                reason == null ? "pending_charge_failed" : reason, null);
+        outboxWriter.write("BundleSubscriptionExpired", "subscription.bundle.expired",
+                Map.of("subscriptionId", sub.getId(), "reason", "pending_charge_failed"));
+    }
+
+    /**
+     * bug_003 — derive a stable, deterministic Idempotency-Key for the
+     * downstream Wallet/Payment calls. Two retries of the same purchase intent
+     * (same participant, bundle, amount) collapse into the same downstream
+     * key, so Payment dedupes them even if the controller-level
+     * Idempotency-Key headers differ.
+     */
+    static String stableCheckoutKey(UUID participantId, UUID bundleId, long amountCents) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            String material = participantId + "|" + bundleId + "|" + amountCents;
+            byte[] hash = digest.digest(material.getBytes(StandardCharsets.UTF_8));
+            return "co-" + HexFormat.of().formatHex(hash, 0, 16);   // 32 hex chars + prefix
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 unavailable", ex);
+        }
     }
 
     private PaymentMethodType resolvePaymentMethodType(BundleCheckoutRequest req, boolean paidFromWallet) {

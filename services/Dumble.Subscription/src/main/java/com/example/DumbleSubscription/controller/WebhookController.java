@@ -6,6 +6,7 @@ import com.example.DumbleSubscription.security.SystemTokenVerifier;
 import com.example.DumbleSubscription.service.SellerLifecycleService;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.jsonwebtoken.Claims;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -73,19 +74,31 @@ public class WebhookController {
         return ResponseEntity.accepted().build();
     }
 
-    /** Returns false if this eventId was already processed → caller should skip the action. */
+    /**
+     * Returns false if this eventId was already processed → caller should skip
+     * the action.
+     *
+     * bug_012 — insert-first-then-act. The previous version did existsById
+     * then save() which is a check-then-act race: two concurrent webhook
+     * deliveries (Payment retry on timeout) both passed the existence check,
+     * the loser failed with PK violation, and the listener returned 500
+     * instead of an idempotent 202. The PK on inbound_webhook_events is now
+     * the dedup primitive — let saveAndFlush throw on duplicate, catch the
+     * DataIntegrityViolationException, and treat it as "already processed".
+     */
     private boolean recordOrSkip(String eventId, Claims claims, String type, JsonNode body) {
-        if (inboundWebhookEventRepository.existsById(eventId)) {
-            return false;
-        }
         InboundWebhookEvent record = new InboundWebhookEvent();
         record.setEventId(eventId);
         record.setSource(claims.getIssuer() == null ? "unknown" : claims.getIssuer());
         record.setEventType(type);
         record.setReceivedAt(Instant.now());
         record.setPayloadSummary(truncate(body == null ? null : body.toString(), 1900));
-        inboundWebhookEventRepository.save(record);
-        return true;
+        try {
+            inboundWebhookEventRepository.saveAndFlush(record);
+            return true;
+        } catch (DataIntegrityViolationException dup) {
+            return false;     // raced with concurrent delivery; treat as already processed
+        }
     }
 
     private String truncate(String s, int max) {

@@ -14,6 +14,9 @@ import java.util.UUID;
 public interface PlatformSubscriptionRepository extends JpaRepository<PlatformSubscription, UUID> {
     Optional<PlatformSubscription> findByUserId(UUID userId);
 
+    /** bug_029 — used by the charge.completed webhook to confirm a PENDING upgrade. */
+    Optional<PlatformSubscription> findByProviderRef(String providerRef);
+
     /**
      * Period-end transitions:
      *   1. Cancelled-PRO whose currentPeriodEnd has passed → drop to FREE

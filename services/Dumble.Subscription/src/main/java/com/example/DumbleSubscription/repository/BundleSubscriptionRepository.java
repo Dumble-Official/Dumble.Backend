@@ -17,6 +17,15 @@ public interface BundleSubscriptionRepository extends JpaRepository<BundleSubscr
 
     List<BundleSubscription> findBySellerIdAndStatus(UUID sellerId, SubscriptionStatus status);
 
+    /**
+     * bug_031 — used by RefundService.refundOnSellerBan to find every sub
+     * with potentially-unreleased escrow on a banned seller, not just ACTIVE.
+     */
+    List<BundleSubscription> findBySellerIdAndStatusIn(UUID sellerId, java.util.Collection<SubscriptionStatus> statuses);
+
+    /** bug_029 — used by the charge.completed webhook to confirm a PENDING sub. */
+    Optional<BundleSubscription> findByProviderRef(String providerRef);
+
     /** Active dup check — supports the unique constraint enforcement at app level. */
     Optional<BundleSubscription> findByParticipantIdAndBundleIdAndStatus(UUID participantId, UUID bundleId, SubscriptionStatus status);
 

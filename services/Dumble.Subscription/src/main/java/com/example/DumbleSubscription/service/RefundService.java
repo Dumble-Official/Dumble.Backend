@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -48,11 +49,26 @@ public class RefundService {
         this.auditLogger = auditLogger;
     }
 
+    /** Statuses whose escrow may still be unreleased and therefore must be inspected on ban. */
+    private static final Set<SubscriptionStatus> REFUNDABLE_STATUSES = Set.of(
+            SubscriptionStatus.ACTIVE,
+            SubscriptionStatus.PAST_DUE,
+            SubscriptionStatus.CANCELLED,
+            SubscriptionStatus.EXPIRED,
+            SubscriptionStatus.PENDING
+    );
+
     @Transactional
     public void refundOnSellerBan(UUID sellerId, String reason) {
         Instant now = Instant.now();
+        // bug_031 — Decision 16.3 says "all unreleased escrow" must be
+        // refunded on ban. The previous query only matched ACTIVE subs, so
+        // PAST_DUE / CANCELLED / EXPIRED / PENDING subs with HELD or AVAILABLE
+        // escrow had their funds stranded forever (CohortPayoutJob is also
+        // blocked once the seller is BANNED, so there was no compensating
+        // path).
         List<BundleSubscription> subs = bundleSubscriptionRepository
-                .findBySellerIdAndStatus(sellerId, SubscriptionStatus.ACTIVE);
+                .findBySellerIdAndStatusIn(sellerId, REFUNDABLE_STATUSES);
 
         log.info("Ban refund flow: seller={} affected_subs={} reason={}", sellerId, subs.size(), reason);
 

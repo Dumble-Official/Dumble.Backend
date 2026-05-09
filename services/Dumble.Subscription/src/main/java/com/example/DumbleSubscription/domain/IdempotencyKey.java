@@ -29,8 +29,16 @@ public class IdempotencyKey {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
-    /** Cached response body the original call returned. */
-    @Column(nullable = false, columnDefinition = "TEXT")
+    /**
+     * Lifecycle gate. Inserted PENDING up-front so the PK serializes concurrent
+     * peers; flipped to COMPLETED once the action has run and its response is
+     * cached. See IdempotencyService.executeOrFetch.
+     */
+    @Column(nullable = false, length = 20)
+    private String state;
+
+    /** Cached response body the original call returned (null while PENDING). */
+    @Column(columnDefinition = "TEXT")
     private String responseJson;
 
     @Column(nullable = false)

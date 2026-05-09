@@ -81,22 +81,33 @@ public class RenewalService {
             return;
         }
         // Decision 7.2 — only cards auto-renew silently. Wallets get a prompt.
+        // bug_019 — after emitting the prompt, drop the row out of the renewal
+        // pool by clearing autoRenew. ExpirationJob will reap it cleanly; the
+        // user re-subscribes via the normal checkout flow if they want to.
         if (sub.getPaymentMethodType() == com.example.DumbleSubscription.domain.enums.PaymentMethodType.WALLET) {
-            outboxWriter.write("RenewalPromptNeeded", "subscription.bundle.renewal-prompt",
-                    Map.of("subscriptionId", sub.getId(),
-                            "participantId", sub.getParticipantId(),
-                            "amountCents", sub.getPricePaidCents(),
-                            "currency", sub.getCurrency()));
+            emitRenewalPromptAndExit(sub, "wallet_requires_authorization");
             return;
         }
         if (sub.getPaymentMethodToken() == null || sub.getPaymentMethodToken().isBlank()) {
-            outboxWriter.write("RenewalPromptNeeded", "subscription.bundle.renewal-prompt",
-                    Map.of("subscriptionId", sub.getId(),
-                            "participantId", sub.getParticipantId(),
-                            "reason", "no_token"));
+            emitRenewalPromptAndExit(sub, "no_token");
             return;
         }
         attemptCharge(sub, sub.getPaymentMethodToken(), false);
+    }
+
+    private void emitRenewalPromptAndExit(BundleSubscription sub, String reason) {
+        Instant now = Instant.now();
+        outboxWriter.write("RenewalPromptNeeded", "subscription.bundle.renewal-prompt",
+                Map.of("subscriptionId", sub.getId(),
+                        "participantId", sub.getParticipantId(),
+                        "amountCents", sub.getPricePaidCents(),
+                        "currency", sub.getCurrency(),
+                        "reason", reason));
+        sub.setAutoRenew(false);
+        sub.setRenewalPromptedAt(now);
+        sub.setUpdatedAt(now);
+        auditLogger.log(sub.getId(), "RenewalPromptEmitted", "SYSTEM", "renewal-job",
+                reason, null);
     }
 
     @Transactional
@@ -114,7 +125,11 @@ public class RenewalService {
 
     private void attemptCharge(BundleSubscription sub, String paymentMethodToken, boolean isRetry) {
         Instant now = Instant.now();
-        String idempotencyKey = "renewal-" + sub.getId() + "-" + sub.getRetryAttempts() + "-" + now.toEpochMilli();
+        // bug_003 — deterministic idempotency key per (sub, attempt) so the
+        // *same* attempt re-issued (e.g. job restart) collapses at Payment.
+        // We deliberately keep retryAttempts in the key so each *new* dunning
+        // attempt is a fresh charge.
+        String idempotencyKey = "renewal-" + sub.getId() + "-" + sub.getRetryAttempts();
 
         try {
             ChargeResponse response = paymentServiceClient.charge(idempotencyKey,
@@ -127,9 +142,22 @@ public class RenewalService {
                             .callerReference(sub.getId().toString())
                             .build());
 
-            if (response != null && "Succeeded".equalsIgnoreCase(response.getStatus())) {
-                onChargeSuccess(sub, now);
-                return;
+            if (response != null) {
+                if ("Succeeded".equalsIgnoreCase(response.getStatus())) {
+                    onChargeSuccess(sub, now);
+                    return;
+                }
+                if ("Pending".equalsIgnoreCase(response.getStatus())) {
+                    // bug_029 — Paymob returned Pending (OTP/3DS in flight).
+                    // DO NOT bump retryAttempts or move to PAST_DUE — leave
+                    // the sub as-is and trust the payment.charge.completed
+                    // webhook to either flip it to ACTIVE or call
+                    // onChargeFailure-equivalent on a Failed completion.
+                    log.info("Renewal charge for sub {} returned Pending — awaiting webhook confirmation",
+                            sub.getId());
+                    sub.setUpdatedAt(now);
+                    return;
+                }
             }
         } catch (Exception ex) {
             log.warn("Renewal charge raised exception for sub {}: {}", sub.getId(), ex.getMessage());
@@ -228,6 +256,40 @@ public class RenewalService {
     public void renewPlatformPro(PlatformSubscription sub) {
         Plan pro = planRepository.findByCode(PlatformPlanCode.PRO).orElseThrow();
         Instant now = Instant.now();
+
+        // bug_011 — Decision 7.2: wallet-funded PRO upgrades cannot be silently
+        // re-charged. Mirror the bundle-renewal guard here.
+        if (sub.getPaymentMethodType() == com.example.DumbleSubscription.domain.enums.PaymentMethodType.WALLET) {
+            outboxWriter.write("RenewalPromptNeeded", "subscription.platform.renewal-prompt",
+                    Map.of("userId", sub.getUserId(),
+                            "subscriptionId", sub.getId(),
+                            "amountCents", pro.getPriceCents(),
+                            "currency", pro.getCurrency()));
+            // Drop out of the renewal pool — Decision 7.2.
+            sub.setStatus(SubscriptionStatus.EXPIRED);
+            sub.setPlanCode(PlatformPlanCode.FREE);
+            sub.setUpdatedAt(now);
+            outboxWriter.write("PlatformSubscriptionExpired", "subscription.platform.expired",
+                    Map.of("userId", sub.getUserId(), "reason", "wallet_renewal_prompt"));
+            outboxWriter.write("PlanChanged", "subscription.plan.changed",
+                    Map.of("userId", sub.getUserId(), "newPlan", "FREE"));
+            return;
+        }
+        if (sub.getPaymentMethodToken() == null || sub.getPaymentMethodToken().isBlank()) {
+            outboxWriter.write("RenewalPromptNeeded", "subscription.platform.renewal-prompt",
+                    Map.of("userId", sub.getUserId(),
+                            "subscriptionId", sub.getId(),
+                            "reason", "no_token"));
+            sub.setStatus(SubscriptionStatus.EXPIRED);
+            sub.setPlanCode(PlatformPlanCode.FREE);
+            sub.setUpdatedAt(now);
+            outboxWriter.write("PlatformSubscriptionExpired", "subscription.platform.expired",
+                    Map.of("userId", sub.getUserId(), "reason", "no_payment_method"));
+            outboxWriter.write("PlanChanged", "subscription.plan.changed",
+                    Map.of("userId", sub.getUserId(), "newPlan", "FREE"));
+            return;
+        }
+
         String idempotencyKey = "platform-renewal-" + sub.getId() + "-" + sub.getRetryAttempts() + "-" + now.toEpochMilli();
 
         try {
@@ -241,18 +303,28 @@ public class RenewalService {
                             .callerReference(sub.getId().toString())
                             .build());
 
-            if (response != null && "Succeeded".equalsIgnoreCase(response.getStatus())) {
-                sub.setCurrentPeriodEnd(sub.getCurrentPeriodEnd().plus(30, ChronoUnit.DAYS));
-                sub.setStatus(SubscriptionStatus.ACTIVE);
-                sub.setRetryAttempts(0);
-                sub.setNextRetryAt(null);
-                sub.setPastDueAt(null);
-                sub.setUpdatedAt(now);
-                outboxWriter.write("PlatformSubscriptionRenewed", "subscription.platform.renewed",
-                        Map.of("userId", sub.getUserId()));
-                auditLogger.log(sub.getId(), "Renewed", "SYSTEM", "renewal-job",
-                        "PRO auto-renewal succeeded", null);
-                return;
+            if (response != null) {
+                if ("Succeeded".equalsIgnoreCase(response.getStatus())) {
+                    sub.setCurrentPeriodEnd(sub.getCurrentPeriodEnd().plus(30, ChronoUnit.DAYS));
+                    sub.setStatus(SubscriptionStatus.ACTIVE);
+                    sub.setRetryAttempts(0);
+                    sub.setNextRetryAt(null);
+                    sub.setPastDueAt(null);
+                    sub.setUpdatedAt(now);
+                    outboxWriter.write("PlatformSubscriptionRenewed", "subscription.platform.renewed",
+                            Map.of("userId", sub.getUserId()));
+                    auditLogger.log(sub.getId(), "Renewed", "SYSTEM", "renewal-job",
+                            "PRO auto-renewal succeeded", null);
+                    return;
+                }
+                if ("Pending".equalsIgnoreCase(response.getStatus())) {
+                    // bug_029 — Paymob OTP/3DS deferred. Wait for the webhook
+                    // to either succeed or fail; don't bump retryAttempts.
+                    log.info("PRO renewal for user {} returned Pending — awaiting webhook confirmation",
+                            sub.getUserId());
+                    sub.setUpdatedAt(now);
+                    return;
+                }
             }
         } catch (Exception ex) {
             log.warn("PRO renewal failed for user {}: {}", sub.getUserId(), ex.getMessage());

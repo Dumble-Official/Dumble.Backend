@@ -70,19 +70,26 @@ public class CohortPayoutJob {
                 .findByStatusAndOriginalScheduledAtLessThanEqual(EscrowStatus.HELD, now);
         if (due.isEmpty()) return;
 
-        Map<UUID, List<EscrowEntry>> bySeller = due.stream()
-                .collect(Collectors.groupingBy(EscrowEntry::getSellerId));
+        // bug_028 — group by (sellerId, cohortKey) so each cohort is its own
+        // payout batch. The previous group-by-sellerId-only collapsed multiple
+        // cohorts under a single PayoutRequest.cohortKey, mis-attributing
+        // funds in audit + downstream reconciliation.
+        Map<CohortBucket, List<EscrowEntry>> byCohort = due.stream()
+                .collect(Collectors.groupingBy(e -> new CohortBucket(e.getSellerId(), e.getCohortKey())));
 
-        log.info("CohortPayoutJob: {} entries due across {} sellers", due.size(), bySeller.size());
+        log.info("CohortPayoutJob: {} entries due across {} (seller, cohort) buckets", due.size(), byCohort.size());
 
-        for (Map.Entry<UUID, List<EscrowEntry>> e : bySeller.entrySet()) {
-            UUID sellerId = e.getKey();
-            List<EscrowEntry> entries = e.getValue();
+        for (Map.Entry<CohortBucket, List<EscrowEntry>> bucketEntry : byCohort.entrySet()) {
+            CohortBucket bucket = bucketEntry.getKey();
+            UUID sellerId = bucket.sellerId();
+            String cohortKey = bucket.cohortKey();
+            List<EscrowEntry> entries = bucketEntry.getValue();
 
             // Banned / Frozen sellers don't get payouts. RefundService will handle
             // their escrow separately on the ban path.
             if (!sellerLifecycleService.canFirePayouts(sellerId)) {
-                log.debug("CohortPayoutJob: skipping seller {} (lifecycle blocks payouts)", sellerId);
+                log.debug("CohortPayoutJob: skipping seller {} cohort {} (lifecycle blocks payouts)",
+                        sellerId, cohortKey);
                 continue;
             }
 
@@ -96,15 +103,16 @@ public class CohortPayoutJob {
                     entry.setUpdatedAt(now);
                 }
                 outboxWriter.write("PayoutDeferred", "subscription.payout.deferred",
-                        Map.of("sellerId", sellerId, "deferred", entries.size(),
+                        Map.of("sellerId", sellerId,
+                               "cohortKey", cohortKey,
+                               "deferred", entries.size(),
                                "reason", "NO_BANK_ACCOUNT_CONNECTED"));
                 continue;
             }
 
             long total = entries.stream().mapToLong(EscrowEntry::getAmountCents).sum();
             String currency = entries.get(0).getCurrency();
-            String batchRef = "cohort-" + sellerId + "-" + now.toEpochMilli();
-            String cohortKey = entries.get(0).getCohortKey();
+            String batchRef = "cohort-" + sellerId + "-" + cohortKey + "-" + now.toEpochMilli();
 
             try {
                 PayoutResponse response = paymentServiceClient.payout(batchRef, PayoutRequest.builder()
@@ -133,11 +141,15 @@ public class CohortPayoutJob {
                 }
                 auditLogger.log(sellerId, "PayoutInitiated", "SYSTEM", "cohort-payout-job",
                         "Initiated payout for cohort " + cohortKey,
-                        Map.of("amount", total, "entries", entries.size()));
+                        Map.of("amount", total, "entries", entries.size(), "cohortKey", cohortKey));
             } catch (Exception ex) {
-                log.error("Cohort payout failed for seller {} — entries left HELD for retry next run", sellerId, ex);
+                log.error("Cohort payout failed for seller {} cohort {} — entries left HELD for retry next run",
+                        sellerId, cohortKey, ex);
                 // Leave entries HELD; next run will retry
             }
         }
     }
+
+    /** Composite grouping key — one payout batch per (seller, cohort). */
+    private record CohortBucket(UUID sellerId, String cohortKey) {}
 }

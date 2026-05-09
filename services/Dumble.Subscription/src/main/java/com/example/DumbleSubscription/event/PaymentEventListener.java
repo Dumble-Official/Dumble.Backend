@@ -2,21 +2,27 @@ package com.example.DumbleSubscription.event;
 
 import com.example.DumbleSubscription.domain.BundleSubscription;
 import com.example.DumbleSubscription.domain.EscrowEntry;
+import com.example.DumbleSubscription.domain.PlatformSubscription;
 import com.example.DumbleSubscription.domain.enums.EscrowStatus;
 import com.example.DumbleSubscription.domain.enums.SubscriptionStatus;
 import com.example.DumbleSubscription.repository.BundleSubscriptionRepository;
 import com.example.DumbleSubscription.repository.EscrowEntryRepository;
+import com.example.DumbleSubscription.repository.PlatformSubscriptionRepository;
 import com.example.DumbleSubscription.service.AuditLogger;
+import com.example.DumbleSubscription.service.BundleSubscriptionService;
+import com.example.DumbleSubscription.service.PlatformPlanService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -26,9 +32,11 @@ import java.util.UUID;
  * cares about — payout confirmations + chargeback notifications from Payment.
  *
  * Routing keys:
- *   payment.payout.completed   → mark escrow PAID_OUT
- *   payment.payout.failed      → roll escrow back to HELD
- *   payment.chargeback.filed   → lock related escrow + mark sub REFUNDED (Decision 6.2)
+ *   payment.payout.completed     → mark escrow PAID_OUT
+ *   payment.payout.failed        → roll escrow back to HELD
+ *   payment.charge.completed     → flip PENDING sub to ACTIVE (Decision: Paymob 3DS/OTP confirm)
+ *   payment.charge.failed        → flip PENDING sub to EXPIRED
+ *   payment.chargeback.filed     → lock related escrow + mark sub REFUNDED (Decision 6.2)
  */
 @Component
 public class PaymentEventListener {
@@ -37,20 +45,29 @@ public class PaymentEventListener {
 
     private final EscrowEntryRepository escrowEntryRepository;
     private final BundleSubscriptionRepository bundleSubscriptionRepository;
+    private final PlatformSubscriptionRepository platformSubscriptionRepository;
     private final ObjectMapper objectMapper;
     private final AuditLogger auditLogger;
     private final OutboxWriter outboxWriter;
+    private final BundleSubscriptionService bundleSubscriptionService;
+    private final PlatformPlanService platformPlanService;
 
     public PaymentEventListener(EscrowEntryRepository escrowEntryRepository,
                                 BundleSubscriptionRepository bundleSubscriptionRepository,
+                                PlatformSubscriptionRepository platformSubscriptionRepository,
                                 ObjectMapper objectMapper,
                                 AuditLogger auditLogger,
-                                OutboxWriter outboxWriter) {
+                                OutboxWriter outboxWriter,
+                                @Lazy BundleSubscriptionService bundleSubscriptionService,
+                                @Lazy PlatformPlanService platformPlanService) {
         this.escrowEntryRepository = escrowEntryRepository;
         this.bundleSubscriptionRepository = bundleSubscriptionRepository;
+        this.platformSubscriptionRepository = platformSubscriptionRepository;
         this.objectMapper = objectMapper;
         this.auditLogger = auditLogger;
         this.outboxWriter = outboxWriter;
+        this.bundleSubscriptionService = bundleSubscriptionService;
+        this.platformPlanService = platformPlanService;
     }
 
     @RabbitListener(queues = "subscription.inbound")
@@ -63,6 +80,8 @@ public class PaymentEventListener {
             switch (type) {
                 case "payment.payout.completed"   -> handlePayoutCompleted(node);
                 case "payment.payout.failed"      -> handlePayoutFailed(node);
+                case "payment.charge.completed"   -> handleChargeCompleted(node);
+                case "payment.charge.failed"      -> handleChargeFailed(node);
                 case "payment.chargeback.filed"   -> handleChargebackFiled(node);
                 default -> log.debug("Ignoring event type {}", type);
             }
@@ -104,11 +123,96 @@ public class PaymentEventListener {
     }
 
     /**
+     * bug_029 — Paymob's Egyptian card flow returns Pending on the first call
+     * (3DS/OTP required). When the participant confirms the OTP, Payment emits
+     * payment.charge.completed; we use that to flip the PENDING sub to ACTIVE.
+     *
+     * Expects payload: { "providerRef": "...", "subscriptionId": "...", "userId": "..." }
+     * subscriptionId/userId are accepted as alternate lookup keys when
+     * providerRef isn't carried.
+     */
+    private void handleChargeCompleted(JsonNode node) {
+        String providerRef = node.path("providerRef").asText("");
+        String subIdStr = node.path("subscriptionId").asText("");
+        String userIdStr = node.path("userId").asText("");
+
+        if (!subIdStr.isEmpty()) {
+            UUID subId = parseUuid(subIdStr, "charge.completed.subscriptionId");
+            if (subId != null) {
+                bundleSubscriptionService.confirmPendingCharge(subId, providerRef);
+                return;
+            }
+        }
+        if (!providerRef.isEmpty()) {
+            BundleSubscription sub = bundleSubscriptionRepository.findByProviderRef(providerRef).orElse(null);
+            if (sub != null) {
+                bundleSubscriptionService.confirmPendingCharge(sub.getId(), providerRef);
+                return;
+            }
+            PlatformSubscription pSub = platformSubscriptionRepository.findByProviderRef(providerRef).orElse(null);
+            if (pSub != null) {
+                platformPlanService.confirmPendingUpgrade(pSub.getUserId(), providerRef);
+                return;
+            }
+        }
+        if (!userIdStr.isEmpty()) {
+            UUID userId = parseUuid(userIdStr, "charge.completed.userId");
+            if (userId != null) {
+                platformPlanService.confirmPendingUpgrade(userId, providerRef);
+                return;
+            }
+        }
+        log.warn("charge.completed event matched no PENDING subscription (providerRef={}, sub={}, user={})",
+                providerRef, subIdStr, userIdStr);
+    }
+
+    private void handleChargeFailed(JsonNode node) {
+        String providerRef = node.path("providerRef").asText("");
+        String subIdStr = node.path("subscriptionId").asText("");
+        String userIdStr = node.path("userId").asText("");
+        String reason = node.path("reason").asText("payment_declined");
+
+        if (!subIdStr.isEmpty()) {
+            UUID subId = parseUuid(subIdStr, "charge.failed.subscriptionId");
+            if (subId != null) {
+                bundleSubscriptionService.failPendingCharge(subId, reason);
+                return;
+            }
+        }
+        if (!providerRef.isEmpty()) {
+            BundleSubscription sub = bundleSubscriptionRepository.findByProviderRef(providerRef).orElse(null);
+            if (sub != null) {
+                bundleSubscriptionService.failPendingCharge(sub.getId(), reason);
+                return;
+            }
+            PlatformSubscription pSub = platformSubscriptionRepository.findByProviderRef(providerRef).orElse(null);
+            if (pSub != null) {
+                platformPlanService.failPendingUpgrade(pSub.getUserId(), reason);
+                return;
+            }
+        }
+        if (!userIdStr.isEmpty()) {
+            UUID userId = parseUuid(userIdStr, "charge.failed.userId");
+            if (userId != null) {
+                platformPlanService.failPendingUpgrade(userId, reason);
+                return;
+            }
+        }
+        log.warn("charge.failed event matched no PENDING subscription (providerRef={}, sub={}, user={})",
+                providerRef, subIdStr, userIdStr);
+    }
+
+    /**
      * Decision 6.2 — when Paymob processes a chargeback, the participant has
      * already been credited externally. We need to lock related escrow and
      * mark the sub as refunded so cohort payouts don't fire to the seller.
      *
      * Expects payload: { "subscriptionId": "...", "amountCents": 12345 }
+     *
+     * bug_015 — read amountCents and branch partial vs full. Card networks
+     * support partial dispute amounts (Visa Reason Code 13.x), so a
+     * single-month chargeback on a 12-month sub must NOT lock all 11 remaining
+     * tranches and invalidate the participant's whole sub.
      */
     private void handleChargebackFiled(JsonNode node) {
         String subId = node.path("subscriptionId").asText();
@@ -133,29 +237,71 @@ public class PaymentEventListener {
             return;     // already handled (idempotent against retried webhooks)
         }
 
-        Instant now = Instant.now();
+        // Negative payload values are nonsense; <=0 means "unspecified".
+        long chargebackCents = node.has("amountCents") ? node.path("amountCents").asLong(0) : 0;
 
-        // Lock all unreleased escrow — money has been pulled back externally,
-        // so we must not pay it out to the seller.
+        Instant now = Instant.now();
         List<EscrowEntry> entries = escrowEntryRepository.findByBundleSubscriptionId(subscriptionId);
+
+        long unreleased = entries.stream()
+                .filter(e -> e.getStatus() == EscrowStatus.HELD || e.getStatus() == EscrowStatus.AVAILABLE)
+                .mapToLong(EscrowEntry::getAmountCents)
+                .sum();
+
+        boolean isFullChargeback = chargebackCents <= 0 || chargebackCents >= unreleased;
         long lockedCents = 0;
-        for (EscrowEntry entry : entries) {
-            if (entry.getStatus() == EscrowStatus.HELD || entry.getStatus() == EscrowStatus.AVAILABLE) {
+
+        if (isFullChargeback) {
+            for (EscrowEntry entry : entries) {
+                if (entry.getStatus() == EscrowStatus.HELD || entry.getStatus() == EscrowStatus.AVAILABLE) {
+                    entry.setStatus(EscrowStatus.REFUNDED);
+                    entry.setUpdatedAt(now);
+                    lockedCents += entry.getAmountCents();
+                }
+            }
+            sub.setStatus(SubscriptionStatus.REFUNDED);
+            sub.setCancelledAt(now);
+        } else {
+            // Partial: lock oldest HELD/AVAILABLE entries first (matches how
+            // banks reconcile disputes by transaction date) until we cover the
+            // chargeback amount. Leave the remainder + the sub itself active.
+            List<EscrowEntry> lockable = entries.stream()
+                    .filter(e -> e.getStatus() == EscrowStatus.HELD || e.getStatus() == EscrowStatus.AVAILABLE)
+                    .sorted(Comparator.comparing(EscrowEntry::getOriginalScheduledAt))
+                    .toList();
+            long remaining = chargebackCents;
+            for (EscrowEntry entry : lockable) {
+                if (remaining <= 0) break;
                 entry.setStatus(EscrowStatus.REFUNDED);
                 entry.setUpdatedAt(now);
                 lockedCents += entry.getAmountCents();
+                remaining -= entry.getAmountCents();
             }
+            // Sub stays in its prior status — partial dispute does not
+            // invalidate the participant's remaining service period.
         }
-
-        sub.setStatus(SubscriptionStatus.REFUNDED);
-        sub.setCancelledAt(now);
         sub.setUpdatedAt(now);
 
         auditLogger.log(sub.getId(), "ChargebackFiled", "WEBHOOK", subId,
-                "Bank chargeback — locking escrow", Map.of("lockedCents", lockedCents));
+                isFullChargeback ? "Full chargeback — locking escrow" : "Partial chargeback — locking matching escrow",
+                Map.of("lockedCents", lockedCents,
+                       "chargebackCents", chargebackCents,
+                       "unreleasedCents", unreleased,
+                       "partial", !isFullChargeback));
         outboxWriter.write("ChargebackProcessed", "subscription.chargeback.processed",
                 Map.of("subscriptionId", sub.getId(),
                         "participantId", sub.getParticipantId(),
-                        "lockedCents", lockedCents));
+                        "lockedCents", lockedCents,
+                        "chargebackCents", chargebackCents,
+                        "partial", !isFullChargeback));
+    }
+
+    private UUID parseUuid(String raw, String label) {
+        try {
+            return UUID.fromString(raw);
+        } catch (IllegalArgumentException ex) {
+            log.warn("Malformed UUID for {}: {}", label, raw);
+            return null;
+        }
     }
 }
