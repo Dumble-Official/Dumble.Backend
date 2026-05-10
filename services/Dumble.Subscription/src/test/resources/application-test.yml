@@ -1,0 +1,64 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: false
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+  task:
+    scheduling:
+      pool:
+        size: 0       # disable scheduler thread pool entirely
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
+
+# Keep schedulers from firing during context loads — every @Scheduled method
+# is gated on this flag so we can run @SpringBootTest without hitting
+# Payment/Wallet URLs.
+subscription:
+  scheduling:
+    enabled: false
+
+jwt:
+  secret: dGVzdC1zZWNyZXQta2V5LWZvci10ZXN0LWVudmlyb25tZW50LW9ubHk=
+
+services:
+  payment:
+    base-url: http://localhost:0
+  wallet:
+    base-url: http://localhost:0
+  bundle-management:
+    base-url: http://localhost:0
+  gym:
+    base-url: http://localhost:0
+  authentication:
+    base-url: http://localhost:0
+
+service-jwt:
+  signing-key: test-only
+
+subscription:
+  pro-plan:
+    code: PRO
+    price-cents: 1000
+    currency: EGP
+  idempotency:
+    ttl-hours: 24
+  entry-token:
+    ttl-minutes: 5
+  withdrawal:
+    minimum-cents: 5000
+  cohort-payout:
+    cron: "0 0 3 ? * MON"

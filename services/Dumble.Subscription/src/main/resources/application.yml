@@ -1,0 +1,88 @@
+spring:
+  application:
+    name: subscription-service
+  profiles:
+    active: dev
+
+  datasource:
+    url: ${SUBSCRIPTION_DB_URL:jdbc:postgresql://localhost:5432/dumble_subscription}
+    username: ${SUBSCRIPTION_DB_USERNAME:postgres}
+    password: ${SUBSCRIPTION_DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate         # Schema changes only via Flyway migrations
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+
+server:
+  port: 8182
+  servlet:
+    context-path: /api
+
+# Auth — same JWT_SECRET that Authentication / GymService use, validated locally
+jwt:
+  secret: ${JWT_SECRET}
+
+# URLs of sibling services (set per-environment; in dev these point to docker-compose names)
+services:
+  payment:
+    base-url: ${PAYMENT_SERVICE_URL:http://localhost:8183}
+  wallet:
+    base-url: ${WALLET_SERVICE_URL:http://localhost:8184}
+  bundle-management:
+    base-url: ${BUNDLE_MANAGEMENT_URL:http://localhost:8081}
+  gym:
+    base-url: ${GYM_SERVICE_URL:http://localhost:8181}
+  authentication:
+    base-url: ${AUTHENTICATION_URL:http://localhost:8081}
+
+# Service-to-service auth — Class B system JWT signing key (per Subscription PDF Decision 8.4)
+service-jwt:
+  signing-key: ${SERVICE_JWT_SIGNING_KEY:dev-only-replace-in-prod}
+  issuer: subscription
+  ttl-seconds: 60
+
+# Domain configuration
+subscription:
+  pro-plan:
+    code: PRO
+    price-cents: 1000          # 10 EGP, per Decision 3.2
+    currency: EGP
+  idempotency:
+    ttl-hours: 24              # Decision 12.3
+  entry-token:
+    ttl-minutes: 5             # Decision 21.2
+  withdrawal:
+    minimum-cents: 5000        # 50 EGP minimum (Wallet PDF Decision 4.5)
+  cohort-payout:
+    cron: "0 0 3 ? * MON"      # Mondays 03:00 UTC — runs after the previous week closed
+  scheduling:
+    enabled: true              # set false in test profile to suppress @Scheduled jobs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
