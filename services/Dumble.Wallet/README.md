@@ -65,13 +65,14 @@ Cached `Wallet.availableCents / pendingCents` are atomically updated alongside e
 ### Withdrawal lifecycle
 
 ```
-PENDING ──▶ SENT ──▶ COMPLETED       (happy path)
-   │                ▲
-   │                └────┐
-   │                FAILED  ──▶ wallet credited back
+PENDING ──▶ SUBMITTING ──▶ SENT ──▶ COMPLETED       (happy path)
+   │                       │         ▲
+   │                       └─────────┴──▶ FAILED  ──▶ wallet credited back
    ▼
-CANCELLED  (user-initiated, only while PENDING)
+CANCELLED  (user-initiated, allowed only while PENDING)
 ```
+
+`SUBMITTING` is an internal sub-state of `PENDING` that closes the cancel/Phase-2 race — see Decision 4.3. Once we hand off to Payment we can't safely reverse without coordinating with Paymob, so the transition `PENDING → SUBMITTING` happens in its own short tx (under a row-level pessimistic lock) before the HTTP call. Cancel is only accepted on `PENDING`; if it slips in between Phase 1 and the lock acquisition the row is already `CANCELLED` and we abort without dispatching to Payment.
 
 Wallet does not talk to Paymob (Decision 1.3). It hands off to Payment service via `POST /api/payment/withdrawals`; Payment emits `WithdrawalCompleted` / `WithdrawalFailed` events on the `wallet.inbound` queue and Wallet finalises the ledger.
 
@@ -102,3 +103,13 @@ Configurable per environment via `wallet.withdrawal.minimum-cents` (default 5000
 Single migration so far (`V1__initial_schema.sql`) covers:
 - `wallets`, `wallet_entries` (append-only via DB trigger), `withdrawal_requests`
 - `idempotency_keys`, `outbox_events`, `inbound_listener_events`, `wallet_event_log`
+- `CREATE EXTENSION IF NOT EXISTS pgcrypto;` for `gen_random_uuid()` (idempotent — Postgres 13+ ships pgcrypto but it isn't always pre-installed)
+
+## Tests
+
+`mvn test` runs against H2 (test profile uses `application-test.yml` — Flyway off, `ddl-auto=create-drop`, RabbitMQ listener container disabled). Coverage today:
+
+- `WalletServiceTest` — credit auto-creates a wallet, debit fails closed on insufficient balance, summary computes available + recent activity, parseSource accepts both PascalCase (`BanRefund` — what Subscription's existing client sends) and SNAKE_CASE.
+- `DumbleWalletApplicationTests` — Spring context loads cleanly.
+
+**Known gap**: the append-only enforcement on `wallet_entries` is a Postgres `plpgsql` trigger and isn't installed when H2 generates the schema from JPA. Tests that need to verify "DB rejects UPDATE/DELETE on a ledger row" should switch to Testcontainers + real Postgres so the V1 migration runs verbatim. Service-layer correctness is otherwise covered by H2.

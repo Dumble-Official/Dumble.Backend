@@ -3,6 +3,10 @@
 -- Source of truth: Wallet-Service-Decisions.pdf (sections 1-8)
 -- ============================================================================
 
+-- pgcrypto provides gen_random_uuid(); ships with Postgres 13+ but isn't
+-- always pre-installed in fresh databases. Idempotent.
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- ----------------------------------------------------------------------------
 -- Wallet (Decision 2.1, 2.2) — one row per user. user_id is the PK so we never
 -- have two wallets for the same user. AvailableCents is the cached balance
@@ -65,7 +69,7 @@ CREATE TABLE withdrawal_requests (
     amount_cents      BIGINT NOT NULL,
     currency          CHAR(3) NOT NULL DEFAULT 'EGP',
     destination_json  TEXT NOT NULL,
-    status            VARCHAR(20) NOT NULL,        -- PENDING | SENT | COMPLETED | FAILED | CANCELLED
+    status            VARCHAR(20) NOT NULL,        -- PENDING | SUBMITTING | SENT | COMPLETED | FAILED | CANCELLED
     payment_ref       VARCHAR(255),                -- Payment service withdrawal id
     failure_reason    VARCHAR(500),
     version           BIGINT NOT NULL DEFAULT 0,
@@ -74,7 +78,7 @@ CREATE TABLE withdrawal_requests (
     completed_at      TIMESTAMPTZ,
 
     CONSTRAINT chk_withdrawal_amount_pos CHECK (amount_cents > 0),
-    CONSTRAINT chk_withdrawal_status     CHECK (status IN ('PENDING', 'SENT', 'COMPLETED', 'FAILED', 'CANCELLED'))
+    CONSTRAINT chk_withdrawal_status     CHECK (status IN ('PENDING', 'SUBMITTING', 'SENT', 'COMPLETED', 'FAILED', 'CANCELLED'))
 );
 
 CREATE INDEX ix_withdrawal_user_created ON withdrawal_requests (wallet_user_id, created_at DESC);

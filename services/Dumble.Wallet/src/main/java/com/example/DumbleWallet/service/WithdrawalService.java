@@ -77,6 +77,16 @@ public class WithdrawalService {
         // Phase 1 — claim balance + persist PENDING row in a short tx.
         WithdrawalRequest claimed = persister.claimBalanceAndPersist(userId, body.getAmountCents(), destinationJson);
 
+        // Phase 1b — flip PENDING → SUBMITTING in its own short tx so the
+        // cancel endpoint can no longer race the in-flight HTTP call. If a
+        // concurrent cancel slipped in between Phase 1 and now, the row is
+        // CANCELLED already and we abort without ever calling Payment.
+        if (!persister.tryMarkSubmitting(claimed.getId())) {
+            log.info("Withdrawal {} cancelled before Payment dispatch", claimed.getId());
+            return WithdrawalResponse.from(
+                    withdrawalRequestRepository.findById(claimed.getId()).orElseThrow());
+        }
+
         // Phase 2 — HTTP to Payment outside any tx.
         try {
             PaymentWithdrawalResponse paymentResponse = paymentServiceClient.requestWithdrawal(
@@ -117,7 +127,9 @@ public class WithdrawalService {
             log.warn("WithdrawalCompleted matched no request (id={}, paymentRef={})", withdrawalId, paymentRef);
             return;
         }
-        if (w.getStatus() != WithdrawalStatus.PENDING && w.getStatus() != WithdrawalStatus.SENT) {
+        if (w.getStatus() != WithdrawalStatus.PENDING
+                && w.getStatus() != WithdrawalStatus.SUBMITTING
+                && w.getStatus() != WithdrawalStatus.SENT) {
             log.warn("WithdrawalCompleted on withdrawal {} in unexpected status {}", w.getId(), w.getStatus());
             return;
         }

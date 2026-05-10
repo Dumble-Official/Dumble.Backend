@@ -1,0 +1,40 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:dumble_payment;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+
+  flyway:
+    enabled: false
+
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+
+# Test-mode secrets — long enough to satisfy SystemSigningKey, dev-shaped so
+# StartupGuard accepts them under the "test" profile (DEV_TEST_PROFILES gate).
+jwt:
+  secret: dGVzdC1qd3Qtc2VjcmV0LXRlc3Qtand0LXNlY3JldC10ZXN0LWp3dC1zZWNyZXQ=
+
+service-jwt:
+  signing-key: dGVzdC1qd3Qtc2VjcmV0LXRlc3Qtand0LXNlY3JldC10ZXN0LWp3dC1zZWNyZXQ=
+
+paymob:
+  enabled: false
+  api-key: test-paymob-key
+  hmac-secret: test-hmac-secret
+  base-url: http://localhost:0
+  prod-key-prefix: live_
+
+payment:
+  scheduling:
+    enabled: false

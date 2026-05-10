@@ -32,13 +32,19 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Operational
                         .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
+                        // User-facing wallet view — listed FIRST because Spring's single-segment
+                        // wildcard {@code /wallet/*/summary} below would otherwise also match
+                        // {@code /wallet/me/summary}, letting an unauthenticated request reach the
+                        // controller and NPE on a null principal. First-match-wins routing keeps
+                        // the user-context paths gated on a real user JWT.
+                        .requestMatchers("/wallet/me/**").authenticated()
                         // System endpoints — auth enforced inside the controller via SystemTokenVerifier
                         // (Wallet PDF Decision 6.4 Class B). Whitelisted at Spring Security level so
                         // a user JWT isn't required.
                         .requestMatchers("/wallet/credit", "/wallet/debit").permitAll()
-                        // Inter-service summary lookup (Subscription pre-checkout balance check)
+                        // Inter-service summary lookup (Subscription pre-checkout balance check).
                         .requestMatchers("/wallet/*/summary").permitAll()
-                        // Everything else (user-facing /wallet/me/*, admin /admin/wallet/*) needs a user JWT
+                        // Everything else (admin /admin/wallet/*, etc.) needs a user JWT
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(e -> e

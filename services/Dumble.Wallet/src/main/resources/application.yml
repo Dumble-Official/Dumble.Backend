@@ -57,6 +57,16 @@ wallet:
   currency: EGP
   withdrawal:
     minimum-cents: 5000               # 50 EGP minimum (Decision 4.5)
+    # Stuck-row reaper for crashes / lost webhooks. Reaper queries Payment by
+    # callerReference for any PENDING/SUBMITTING/SENT row older than the grace
+    # window and either advances or reverses based on Payment's authoritative
+    # state. Disable via reaper.enabled=false until Payment ships its
+    # /by-caller-ref lookup endpoint (otherwise every tick will see "NotFound"
+    # and reverse stuck rows).
+    reaper:
+      enabled: true
+      grace-seconds: 600               # rows must be idle ≥ 10 min before reaping
+      delay-ms: 60000                  # reaper runs every 60 s
   idempotency:
     ttl-hours: 24
   reconciliation:

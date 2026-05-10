@@ -101,11 +101,52 @@ public class WithdrawalPersister {
         return saved;
     }
 
+    /**
+     * No-op state mutation — bumps {@code updatedAt} so the reaper's
+     * grace-window query (`findStuckBefore`) drops the row for another tick.
+     * Used on Pending / unknown-status / already-correct branches to stop
+     * the reaper from polling Payment for the same row every minute.
+     *
+     * Implemented as a direct UPDATE that bypasses {@code @Version} — the
+     * reaper races concurrent {@code markSent} / webhook handlers on the
+     * same row, and an optimistic-lock conflict on a logically-no-op write
+     * would just be noise. Since {@code touch} doesn't change logical
+     * state, skipping the version check doesn't relax any real invariant.
+     */
+    @Transactional
+    public void touch(UUID withdrawalId) {
+        withdrawalRequestRepository.bumpUpdatedAt(withdrawalId, Instant.now());
+    }
+
+    /**
+     * Closes the cancel race by flipping PENDING → SUBMITTING in its own
+     * tx BEFORE the Payment HTTP call. Once SUBMITTING, the cancel endpoint
+     * refuses and only the Payment lifecycle event can advance state. Returns
+     * false if the withdrawal isn't in PENDING (e.g. already cancelled).
+     *
+     * Uses a pessimistic row lock so a concurrent cancel serialises behind
+     * us instead of racing into an optimistic @Version conflict.
+     */
+    @Transactional
+    public boolean tryMarkSubmitting(UUID withdrawalId) {
+        WithdrawalRequest w = withdrawalRequestRepository.findByIdForUpdate(withdrawalId)
+                .orElseThrow(() -> new ResourceNotFoundException("Withdrawal not found"));
+        if (w.getStatus() != WithdrawalStatus.PENDING) {
+            return false;
+        }
+        w.setStatus(WithdrawalStatus.SUBMITTING);
+        w.setUpdatedAt(Instant.now());
+        withdrawalRequestRepository.save(w);
+        return true;
+    }
+
     @Transactional
     public WithdrawalRequest markSent(UUID withdrawalId, String paymentRef) {
         WithdrawalRequest w = withdrawalRequestRepository.findById(withdrawalId)
                 .orElseThrow(() -> new ResourceNotFoundException("Withdrawal not found"));
-        if (w.getStatus() == WithdrawalStatus.PENDING) {
+        // Accept either PENDING (no markSubmitting yet — defensive) or
+        // SUBMITTING (the normal path). Anything else is already terminal.
+        if (w.getStatus() == WithdrawalStatus.PENDING || w.getStatus() == WithdrawalStatus.SUBMITTING) {
             w.setStatus(WithdrawalStatus.SENT);
             w.setPaymentRef(paymentRef);
             w.setUpdatedAt(Instant.now());
@@ -197,7 +238,9 @@ public class WithdrawalPersister {
 
     @Transactional
     public WithdrawalRequest cancel(UUID userId, UUID withdrawalId) {
-        WithdrawalRequest w = withdrawalRequestRepository.findById(withdrawalId)
+        // Pessimistic lock so we either win the race against tryMarkSubmitting
+        // (and see PENDING here) or lose it (and see SUBMITTING and reject).
+        WithdrawalRequest w = withdrawalRequestRepository.findByIdForUpdate(withdrawalId)
                 .orElseThrow(() -> new ResourceNotFoundException("Withdrawal not found"));
         if (!w.getWalletUserId().equals(userId)) {
             throw new ResourceNotFoundException("Withdrawal not found");

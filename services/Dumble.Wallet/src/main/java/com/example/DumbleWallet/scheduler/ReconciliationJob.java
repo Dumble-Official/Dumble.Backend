@@ -3,6 +3,7 @@ package com.example.DumbleWallet.scheduler;
 import com.example.DumbleWallet.domain.Wallet;
 import com.example.DumbleWallet.repository.WalletEntryRepository;
 import com.example.DumbleWallet.repository.WalletRepository;
+import com.example.DumbleWallet.repository.projection.LedgerSum;
 import com.example.DumbleWallet.service.AuditLogger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +12,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -46,11 +48,19 @@ public class ReconciliationJob {
     @Scheduled(cron = "${wallet.reconciliation.cron:0 30 2 * * *}")
     @Transactional(readOnly = true)
     public void run() {
+        // Two queries total instead of N+1: one GROUP BY for ledger sums, one
+        // findAll for wallets. The ledger map covers every user with any
+        // entry; users with no entries map to net=0.
+        Map<UUID, Long> ledgerNetByUser = new HashMap<>();
+        for (LedgerSum row : walletEntryRepository.sumNetByUser()) {
+            ledgerNetByUser.put(row.getWalletUserId(), row.getNetCents());
+        }
+
         int checked = 0;
         int mismatched = 0;
         for (Wallet wallet : walletRepository.findAll()) {
             checked++;
-            long ledgerNet = walletEntryRepository.sumNetForUser(wallet.getUserId());
+            long ledgerNet = ledgerNetByUser.getOrDefault(wallet.getUserId(), 0L);
             // The ledger reflects net Available — the WITHDRAWAL_REQUESTED debit
             // logged at request time stays even while the funds sit in Pending,
             // and the WITHDRAWAL_REVERSED credit on a cancelled / failed
