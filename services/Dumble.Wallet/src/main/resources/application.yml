@@ -1,0 +1,77 @@
+spring:
+  application:
+    name: wallet-service
+  profiles:
+    active: dev
+
+  datasource:
+    url: ${WALLET_DB_URL:jdbc:postgresql://localhost:5432/dumble_wallet}
+    username: ${WALLET_DB_USERNAME:postgres}
+    password: ${WALLET_DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+
+server:
+  port: 8184
+  servlet:
+    context-path: /api
+
+# Same JWT_SECRET shared across the platform; validated locally (no callback to Authentication).
+jwt:
+  secret: ${JWT_SECRET}
+
+# Sibling services Wallet calls (Payment for withdrawal execution).
+services:
+  payment:
+    base-url: ${PAYMENT_SERVICE_URL:http://localhost:8183}
+
+# Service-to-service auth — Class B system JWT signing key (Wallet PDF Decision 6.4).
+service-jwt:
+  signing-key: ${SERVICE_JWT_SIGNING_KEY:dev-only-replace-in-prod}
+  issuer: wallet
+  ttl-seconds: 60
+
+# Domain configuration — Wallet PDF.
+wallet:
+  currency: EGP
+  withdrawal:
+    minimum-cents: 5000               # 50 EGP minimum (Decision 4.5)
+  idempotency:
+    ttl-hours: 24
+  reconciliation:
+    cron: "0 30 2 * * *"              # 02:30 daily — sums ledger vs cached balance (Decision 5.2)
+  outbox:
+    publish-delay-ms: 2000             # broker drain cadence
+  scheduling:
+    enabled: true                      # set false in test profile to suppress @Scheduled jobs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
