@@ -4,8 +4,6 @@ import com.example.DumbleSubscription.exception.UnauthorizedAccessException;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.io.Decoders;
-import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -26,18 +24,8 @@ public class SystemTokenVerifier {
     private final SecretKey signingKey;
 
     public SystemTokenVerifier(@Value("${service-jwt.signing-key}") String secret) {
-        byte[] keyBytes;
-        try {
-            keyBytes = Decoders.BASE64.decode(secret);
-        } catch (Exception ex) {
-            keyBytes = secret.getBytes();
-        }
-        if (keyBytes.length < 32) {
-            byte[] padded = new byte[32];
-            System.arraycopy(keyBytes, 0, padded, 0, keyBytes.length);
-            keyBytes = padded;
-        }
-        this.signingKey = Keys.hmacShaKeyFor(keyBytes);
+        // bug_006 — fail loud instead of silently zero-padding short keys.
+        this.signingKey = SystemSigningKey.resolve(secret);
     }
 
     public Claims verify(String authHeader) {

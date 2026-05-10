@@ -32,6 +32,10 @@ import java.util.UUID;
  * Decision 13.1 — upgrade FREE → PRO: immediate effect, full charge today.
  * Decision 13.2 — downgrade PRO → FREE: takes effect at period end.
  * Decision 13.3 — no proration anywhere.
+ *
+ * Orchestration shape (bug_014, bug_003-run2): claim PENDING in a short tx,
+ * call Payment.charge with sub.id-salted Idempotency-Key outside any tx,
+ * then finalize in a second short tx.
  */
 @Service
 public class PlatformPlanService {
@@ -42,19 +46,22 @@ public class PlatformPlanService {
     private final OutboxWriter outboxWriter;
     private final AuditLogger auditLogger;
     private final ReceiptService receiptService;
+    private final PlatformUpgradePersister persister;
 
     public PlatformPlanService(PlatformSubscriptionRepository repository,
                                PlanRepository planRepository,
                                PaymentServiceClient paymentServiceClient,
                                OutboxWriter outboxWriter,
                                AuditLogger auditLogger,
-                               ReceiptService receiptService) {
+                               ReceiptService receiptService,
+                               PlatformUpgradePersister persister) {
         this.repository = repository;
         this.planRepository = planRepository;
         this.paymentServiceClient = paymentServiceClient;
         this.outboxWriter = outboxWriter;
         this.auditLogger = auditLogger;
         this.receiptService = receiptService;
+        this.persister = persister;
     }
 
     public MyPlanResponse getMyPlan(UUID userId) {
@@ -74,90 +81,56 @@ public class PlatformPlanService {
                 .build();
     }
 
-    @Transactional
     public MyPlanResponse upgradeToPro(UUID userId, PlanUpgradeRequest req) {
         Plan pro = planRepository.findByCode(PlatformPlanCode.PRO)
                 .orElseThrow(() -> new IllegalStateException("PRO plan not seeded"));
-
-        PlatformSubscription sub = repository.findByUserId(userId).orElseGet(() -> {
-            PlatformSubscription fresh = new PlatformSubscription();
-            fresh.setUserId(userId);
-            fresh.setPlanCode(PlatformPlanCode.FREE);
-            fresh.setStatus(SubscriptionStatus.ACTIVE);
-            fresh.setCreatedAt(Instant.now());
-            return fresh;
-        });
-
-        if (sub.getPlanCode() == PlatformPlanCode.PRO && sub.getStatus() == SubscriptionStatus.ACTIVE
-                && (sub.getCurrentPeriodEnd() == null || sub.getCurrentPeriodEnd().isAfter(Instant.now()))) {
-            throw new BusinessRuleViolationException("Already on PRO");
-        }
-
-        // bug_003 — deterministic Idempotency-Key for the downstream charge so
-        // a retry collapses at Payment instead of charging twice.
-        String upgradeIntentId = stableUpgradeKey(userId, pro.getPriceCents());
-
-        ChargeResponse charge = paymentServiceClient.charge(upgradeIntentId,
-                ChargeRequest.builder()
-                        .userId(userId)
-                        .amountCents(pro.getPriceCents())
-                        .currency(pro.getCurrency())
-                        .paymentMethodToken(req.getPaymentMethodToken())
-                        .description("Upgrade to PRO")
-                        .callerReference("platform-sub:" + userId)
-                        .build());
-        if (charge == null) {
-            throw new BusinessRuleViolationException("Payment failed");
-        }
 
         // bug_011 — record the payment-method type alongside the token so the
         // renewal path can honour Decision 7.2 (no silent wallet auto-charge).
         PaymentMethodType resolvedType = resolvePaymentMethodType(req.getPaymentMethodType());
 
-        Instant now = Instant.now();
-        String chargeStatus = charge.getStatus();
-        boolean pending = "Pending".equalsIgnoreCase(chargeStatus);
-        if (!pending && !"Succeeded".equalsIgnoreCase(chargeStatus)) {
-            throw new BusinessRuleViolationException("Payment failed");
-        }
-
-        sub.setPlanCode(PlatformPlanCode.PRO);
-        // bug_029 — Pending PRO charges (Paymob OTP/3DS) leave the sub PENDING
-        // until the payment.charge.completed webhook arrives.
-        sub.setStatus(pending ? SubscriptionStatus.PENDING : SubscriptionStatus.ACTIVE);
-        sub.setStartedAt(now);
-        sub.setCurrentPeriodEnd(pending ? null : now.plus(30, ChronoUnit.DAYS));
-        sub.setCancelScheduledAt(null);
-        sub.setProviderRef(charge.getProviderRef());
-        // Stash the token so RenewalJob can re-charge in 30 days.
-        sub.setPaymentMethodToken(req.getPaymentMethodToken());
-        sub.setPaymentMethodType(resolvedType);
-        sub.setRetryAttempts(0);
-        sub.setNextRetryAt(null);
-        sub.setUpdatedAt(now);
-        if (sub.getCreatedAt() == null) sub.setCreatedAt(now);
-        repository.save(sub);
-
-        if (pending) {
-            auditLogger.log(sub.getId(), "UpgradePending", "USER", userId.toString(),
-                    "awaiting_payment_confirmation",
-                    Map.of("providerRef", charge.getProviderRef() == null ? "" : charge.getProviderRef()));
-            outboxWriter.write("PlatformSubscriptionPending", "subscription.platform.pending",
-                    Map.of("userId", userId, "providerRef",
-                            charge.getProviderRef() == null ? "" : charge.getProviderRef()));
+        // Phase 1 — claim PENDING in its own short tx; on existing PENDING,
+        // surface the in-flight row instead of double-charging.
+        PlatformSubscription claimed = persister.claimPending(userId, req.getPaymentMethodToken(), resolvedType);
+        if (claimed.getStatus() == SubscriptionStatus.PENDING && claimed.getProviderRef() != null) {
+            // Already in flight — return without re-charging.
             return getMyPlan(userId);
         }
 
-        // Receipt — Decision 11.5
-        receiptService.issueForPlatformSubscription(userId, sub.getId(),
-                charge.getProviderRef() == null ? sub.getId().toString() : charge.getProviderRef(),
-                pro.getPriceCents(), pro.getCurrency());
+        // Phase 2 — Payment.charge outside any tx, salted with claimed.getId()
+        // so distinct purchase intents (re-buy after expiry/refund) get
+        // distinct downstream keys.
+        String upgradeIntentId = stableUpgradeKey(userId, pro.getPriceCents(), claimed.getId());
 
-        auditLogger.log(sub.getId(), "PlanChanged", "USER", userId.toString(), "upgrade FREE→PRO", sub);
-        outboxWriter.write("PlatformSubscriptionActivated", "subscription.platform.activated", getMyPlan(userId));
-        outboxWriter.write("PlanChanged", "subscription.plan.changed", getMyPlan(userId));
+        ChargeResponse charge;
+        try {
+            charge = paymentServiceClient.charge(upgradeIntentId,
+                    ChargeRequest.builder()
+                            .userId(userId)
+                            .amountCents(pro.getPriceCents())
+                            .currency(pro.getCurrency())
+                            .paymentMethodToken(req.getPaymentMethodToken())
+                            .description("Upgrade to PRO")
+                            .callerReference("platform-sub:" + userId)
+                            .build());
+        } catch (RuntimeException ex) {
+            persister.releasePending(claimed.getId());
+            throw ex;
+        }
+        if (charge == null) {
+            persister.releasePending(claimed.getId());
+            throw new BusinessRuleViolationException("Payment failed");
+        }
 
-        return getMyPlan(userId);
+        String chargeStatus = charge.getStatus();
+        if ("Succeeded".equalsIgnoreCase(chargeStatus)) {
+            return persister.activate(claimed.getId(), charge.getProviderRef(), pro);
+        }
+        if ("Pending".equalsIgnoreCase(chargeStatus)) {
+            return persister.markPending(claimed.getId(), charge.getProviderRef());
+        }
+        persister.releasePending(claimed.getId());
+        throw new BusinessRuleViolationException("Payment failed");
     }
 
     /**
@@ -214,30 +187,6 @@ public class PlatformPlanService {
         outboxWriter.write("PlanChanged", "subscription.plan.changed", getMyPlan(userId));
     }
 
-    private PaymentMethodType resolvePaymentMethodType(String raw) {
-        if (raw == null || raw.isBlank()) {
-            // Default to OTHER so the renewal path emits a prompt rather than
-            // silently auto-charging an unknown method.
-            return PaymentMethodType.OTHER;
-        }
-        try {
-            return PaymentMethodType.valueOf(raw.toUpperCase());
-        } catch (IllegalArgumentException ex) {
-            return PaymentMethodType.OTHER;
-        }
-    }
-
-    static String stableUpgradeKey(UUID userId, long amountCents) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            String material = "platform-pro|" + userId + "|" + amountCents;
-            byte[] hash = digest.digest(material.getBytes(StandardCharsets.UTF_8));
-            return "pro-" + HexFormat.of().formatHex(hash, 0, 16);
-        } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("SHA-256 unavailable", ex);
-        }
-    }
-
     @Transactional
     public MyPlanResponse cancelPro(UUID userId) {
         PlatformSubscription sub = repository.findByUserId(userId)
@@ -252,5 +201,31 @@ public class PlatformPlanService {
         auditLogger.log(sub.getId(), "Cancelled", "USER", userId.toString(),
                 "downgrade scheduled at period end", null);
         return getMyPlan(userId);
+    }
+
+    private PaymentMethodType resolvePaymentMethodType(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return PaymentMethodType.OTHER;
+        }
+        try {
+            return PaymentMethodType.valueOf(raw.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            return PaymentMethodType.OTHER;
+        }
+    }
+
+    /**
+     * bug_003 / bug_003-run2 — salt with subId so distinct intents (re-buy
+     * after FREE→PRO→FREE→PRO again) get distinct keys.
+     */
+    static String stableUpgradeKey(UUID userId, long amountCents, UUID subId) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            String material = "platform-pro|" + userId + "|" + amountCents + "|" + subId;
+            byte[] hash = digest.digest(material.getBytes(StandardCharsets.UTF_8));
+            return "pro-" + HexFormat.of().formatHex(hash, 0, 16);
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 unavailable", ex);
+        }
     }
 }

@@ -5,8 +5,10 @@ import com.example.DumbleSubscription.domain.EscrowEntry;
 import com.example.DumbleSubscription.domain.PlatformSubscription;
 import com.example.DumbleSubscription.domain.enums.EscrowStatus;
 import com.example.DumbleSubscription.domain.enums.SubscriptionStatus;
+import com.example.DumbleSubscription.domain.InboundListenerEvent;
 import com.example.DumbleSubscription.repository.BundleSubscriptionRepository;
 import com.example.DumbleSubscription.repository.EscrowEntryRepository;
+import com.example.DumbleSubscription.repository.InboundListenerEventRepository;
 import com.example.DumbleSubscription.repository.PlatformSubscriptionRepository;
 import com.example.DumbleSubscription.service.AuditLogger;
 import com.example.DumbleSubscription.service.BundleSubscriptionService;
@@ -46,6 +48,7 @@ public class PaymentEventListener {
     private final EscrowEntryRepository escrowEntryRepository;
     private final BundleSubscriptionRepository bundleSubscriptionRepository;
     private final PlatformSubscriptionRepository platformSubscriptionRepository;
+    private final InboundListenerEventRepository inboundListenerEventRepository;
     private final ObjectMapper objectMapper;
     private final AuditLogger auditLogger;
     private final OutboxWriter outboxWriter;
@@ -55,6 +58,7 @@ public class PaymentEventListener {
     public PaymentEventListener(EscrowEntryRepository escrowEntryRepository,
                                 BundleSubscriptionRepository bundleSubscriptionRepository,
                                 PlatformSubscriptionRepository platformSubscriptionRepository,
+                                InboundListenerEventRepository inboundListenerEventRepository,
                                 ObjectMapper objectMapper,
                                 AuditLogger auditLogger,
                                 OutboxWriter outboxWriter,
@@ -63,6 +67,7 @@ public class PaymentEventListener {
         this.escrowEntryRepository = escrowEntryRepository;
         this.bundleSubscriptionRepository = bundleSubscriptionRepository;
         this.platformSubscriptionRepository = platformSubscriptionRepository;
+        this.inboundListenerEventRepository = inboundListenerEventRepository;
         this.objectMapper = objectMapper;
         this.auditLogger = auditLogger;
         this.outboxWriter = outboxWriter;
@@ -207,15 +212,25 @@ public class PaymentEventListener {
      * already been credited externally. We need to lock related escrow and
      * mark the sub as refunded so cohort payouts don't fire to the seller.
      *
-     * Expects payload: { "subscriptionId": "...", "amountCents": 12345 }
+     * Expects payload: { "chargebackId": "...", "subscriptionId": "...", "amountCents": 12345 }
      *
-     * bug_015 — read amountCents and branch partial vs full. Card networks
-     * support partial dispute amounts (Visa Reason Code 13.x), so a
-     * single-month chargeback on a 12-month sub must NOT lock all 11 remaining
-     * tranches and invalidate the participant's whole sub.
+     * Three correctness fixes here (merged_bug_011 run-2):
+     *   bug 1 — when a partial chargeback's remaining amount is smaller than
+     *     the next tranche, split that tranche so we lock exactly what the
+     *     bank pulled rather than the whole tranche (the old loop overlocked
+     *     by up to (tranche_amount - 1) cents).
+     *   bug 2 — the @RabbitListener path had no idempotency table; a redelivered
+     *     message would re-enter the partial branch (which leaves status
+     *     unchanged) and lock another chargebackCents worth of tranches each
+     *     time. Persist the chargebackId in inbound_listener_events first.
+     *   bug 3 — full-vs-partial threshold compared chargebackCents to
+     *     "unreleased" rather than "pricePaidCents", so once enough tranches
+     *     paid out, a partial dispute crossing the shrinking unreleased
+     *     threshold flipped the sub to REFUNDED. Compare to pricePaidCents.
      */
     private void handleChargebackFiled(JsonNode node) {
-        String subId = node.path("subscriptionId").asText();
+        String chargebackId = node.path("chargebackId").asText("");
+        String subId = node.path("subscriptionId").asText("");
         if (subId.isEmpty()) {
             log.warn("Chargeback event missing subscriptionId");
             return;
@@ -228,13 +243,34 @@ public class PaymentEventListener {
             return;
         }
 
+        // bug_011-bug2 — listener idempotency. Persist the dedup row up-front
+        // (PK serializes concurrent redeliveries) so a re-played message
+        // can't re-lock another chargebackCents worth of escrow. Fall back to
+        // a synthetic key when chargebackId isn't supplied — better than
+        // silently allowing duplicate processing.
+        String dedupKey = chargebackId.isBlank()
+                ? "chargeback:" + subId + ":" + node.path("amountCents").asLong(0)
+                : "chargeback:" + chargebackId;
+        try {
+            InboundListenerEvent dedup = new InboundListenerEvent();
+            dedup.setEventId(dedupKey);
+            dedup.setRoutingKey("payment.chargeback.filed");
+            dedup.setReceivedAt(Instant.now());
+            dedup.setPayloadSummary(node.toString().length() > 1900
+                    ? node.toString().substring(0, 1900) : node.toString());
+            inboundListenerEventRepository.saveAndFlush(dedup);
+        } catch (org.springframework.dao.DataIntegrityViolationException dup) {
+            log.debug("Chargeback {} already processed — skipping", dedupKey);
+            return;
+        }
+
         BundleSubscription sub = bundleSubscriptionRepository.findById(subscriptionId).orElse(null);
         if (sub == null) {
             log.warn("Chargeback event references unknown subscription {}", subscriptionId);
             return;
         }
         if (sub.getStatus() == SubscriptionStatus.REFUNDED) {
-            return;     // already handled (idempotent against retried webhooks)
+            return;     // already handled
         }
 
         // Negative payload values are nonsense; <=0 means "unspecified".
@@ -248,35 +284,18 @@ public class PaymentEventListener {
                 .mapToLong(EscrowEntry::getAmountCents)
                 .sum();
 
-        boolean isFullChargeback = chargebackCents <= 0 || chargebackCents >= unreleased;
-        long lockedCents = 0;
+        // bug_011-bug3 — compare to pricePaidCents. "Covers everything paid"
+        // means full chargeback; "covers all currently-unreleased" does NOT
+        // — that's a partial dispute that happened to land late in the cycle.
+        boolean isFullChargeback = chargebackCents <= 0 || chargebackCents >= sub.getPricePaidCents();
+        long lockedCents;
 
         if (isFullChargeback) {
-            for (EscrowEntry entry : entries) {
-                if (entry.getStatus() == EscrowStatus.HELD || entry.getStatus() == EscrowStatus.AVAILABLE) {
-                    entry.setStatus(EscrowStatus.REFUNDED);
-                    entry.setUpdatedAt(now);
-                    lockedCents += entry.getAmountCents();
-                }
-            }
+            lockedCents = lockAllUnreleased(entries, now);
             sub.setStatus(SubscriptionStatus.REFUNDED);
             sub.setCancelledAt(now);
         } else {
-            // Partial: lock oldest HELD/AVAILABLE entries first (matches how
-            // banks reconcile disputes by transaction date) until we cover the
-            // chargeback amount. Leave the remainder + the sub itself active.
-            List<EscrowEntry> lockable = entries.stream()
-                    .filter(e -> e.getStatus() == EscrowStatus.HELD || e.getStatus() == EscrowStatus.AVAILABLE)
-                    .sorted(Comparator.comparing(EscrowEntry::getOriginalScheduledAt))
-                    .toList();
-            long remaining = chargebackCents;
-            for (EscrowEntry entry : lockable) {
-                if (remaining <= 0) break;
-                entry.setStatus(EscrowStatus.REFUNDED);
-                entry.setUpdatedAt(now);
-                lockedCents += entry.getAmountCents();
-                remaining -= entry.getAmountCents();
-            }
+            lockedCents = lockPartialOldestFirst(sub, entries, chargebackCents, unreleased, now);
             // Sub stays in its prior status — partial dispute does not
             // invalidate the participant's remaining service period.
         }
@@ -287,6 +306,7 @@ public class PaymentEventListener {
                 Map.of("lockedCents", lockedCents,
                        "chargebackCents", chargebackCents,
                        "unreleasedCents", unreleased,
+                       "pricePaidCents", sub.getPricePaidCents(),
                        "partial", !isFullChargeback));
         outboxWriter.write("ChargebackProcessed", "subscription.chargeback.processed",
                 Map.of("subscriptionId", sub.getId(),
@@ -294,6 +314,89 @@ public class PaymentEventListener {
                         "lockedCents", lockedCents,
                         "chargebackCents", chargebackCents,
                         "partial", !isFullChargeback));
+    }
+
+    private long lockAllUnreleased(List<EscrowEntry> entries, Instant now) {
+        long locked = 0;
+        for (EscrowEntry entry : entries) {
+            if (entry.getStatus() == EscrowStatus.HELD || entry.getStatus() == EscrowStatus.AVAILABLE) {
+                entry.setStatus(EscrowStatus.REFUNDED);
+                entry.setUpdatedAt(now);
+                locked += entry.getAmountCents();
+            }
+        }
+        return locked;
+    }
+
+    /**
+     * bug_011-bug1 — partial chargeback split-tranche. Lock entries oldest
+     * first until the disputed amount is covered; if the boundary tranche is
+     * larger than what's left, split it: shrink the original entry to the
+     * portion the seller still earns, mint a new REFUNDED entry for the
+     * disputed slice. Truncate {@code sub.endsAt} when the chargeback
+     * exceeds {@code unreleased} (would otherwise leave the sub
+     * "phantom-active" for months with no escrow backing).
+     */
+    private long lockPartialOldestFirst(BundleSubscription sub,
+                                        List<EscrowEntry> entries,
+                                        long chargebackCents,
+                                        long unreleased,
+                                        Instant now) {
+        List<EscrowEntry> lockable = entries.stream()
+                .filter(e -> e.getStatus() == EscrowStatus.HELD || e.getStatus() == EscrowStatus.AVAILABLE)
+                .sorted(Comparator.comparing(EscrowEntry::getOriginalScheduledAt))
+                .toList();
+
+        long target = Math.min(chargebackCents, unreleased);
+        long remaining = target;
+        long locked = 0;
+        for (EscrowEntry entry : lockable) {
+            if (remaining <= 0) break;
+            if (entry.getAmountCents() <= remaining) {
+                entry.setStatus(EscrowStatus.REFUNDED);
+                entry.setUpdatedAt(now);
+                locked += entry.getAmountCents();
+                remaining -= entry.getAmountCents();
+            } else {
+                // Split: the seller keeps (amount - remaining), the bank takes
+                // remaining. The original row carries the remainder so its
+                // payoutRef/cohort lineage stays intact; a new sibling row
+                // records the refunded slice.
+                long refundSlice = remaining;
+                long sellerSlice = entry.getAmountCents() - refundSlice;
+
+                EscrowEntry refunded = new EscrowEntry();
+                refunded.setBundleSubscriptionId(entry.getBundleSubscriptionId());
+                refunded.setSellerId(entry.getSellerId());
+                refunded.setAmountCents(refundSlice);
+                refunded.setCurrency(entry.getCurrency());
+                refunded.setStatus(EscrowStatus.REFUNDED);
+                refunded.setCohortKey(entry.getCohortKey());
+                refunded.setOriginalScheduledAt(entry.getOriginalScheduledAt());
+                refunded.setDeferredCount(0);
+                refunded.setCreatedAt(now);
+                refunded.setUpdatedAt(now);
+                escrowEntryRepository.save(refunded);
+
+                entry.setAmountCents(sellerSlice);
+                entry.setUpdatedAt(now);
+
+                locked += refundSlice;
+                remaining = 0;
+            }
+        }
+
+        // When the chargeback exceeds what's left in escrow, every future
+        // service period has been locked — the sub has nothing backing it.
+        // End it now (autoRenew off) rather than leaving a phantom-active
+        // sub the participant could keep using.
+        if (chargebackCents > unreleased) {
+            if (sub.getEndsAt() == null || sub.getEndsAt().isAfter(now)) {
+                sub.setEndsAt(now);
+            }
+            sub.setAutoRenew(false);
+        }
+        return locked;
     }
 
     private UUID parseUuid(String raw, String label) {

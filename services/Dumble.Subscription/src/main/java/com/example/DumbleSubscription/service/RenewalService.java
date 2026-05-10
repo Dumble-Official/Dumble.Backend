@@ -257,6 +257,10 @@ public class RenewalService {
         Plan pro = planRepository.findByCode(PlatformPlanCode.PRO).orElseThrow();
         Instant now = Instant.now();
 
+        // Reused below after wallet/no-token guards. bug_016 — built deterministically
+        // per (sub, attempt), so a job restart that re-issues the same logical
+        // attempt collapses at Payment instead of double-charging the user.
+
         // bug_011 — Decision 7.2: wallet-funded PRO upgrades cannot be silently
         // re-charged. Mirror the bundle-renewal guard here.
         if (sub.getPaymentMethodType() == com.example.DumbleSubscription.domain.enums.PaymentMethodType.WALLET) {
@@ -290,7 +294,7 @@ public class RenewalService {
             return;
         }
 
-        String idempotencyKey = "platform-renewal-" + sub.getId() + "-" + sub.getRetryAttempts() + "-" + now.toEpochMilli();
+        String idempotencyKey = "platform-renewal-" + sub.getId() + "-" + sub.getRetryAttempts();
 
         try {
             ChargeResponse response = paymentServiceClient.charge(idempotencyKey,

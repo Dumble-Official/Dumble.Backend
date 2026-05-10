@@ -32,19 +32,33 @@ public class StartupGuard {
         this.dbUrl = dbUrl;
     }
 
+    /**
+     * bug_006 — the previous "isProd = profiles contains 'prod'/'production'"
+     * check let any other naming convention (staging, qa, integration,
+     * prod-eu, ...) silently accept the committed dev key. Flip the check:
+     * a dev-shaped secret is only OK when an explicit dev/test profile is
+     * active. Everything else (no profile, staging, qa, prod, ...) refuses
+     * to start.
+     */
+    private static final java.util.Set<String> DEV_TEST_PROFILES = java.util.Set.of("dev", "test", "local");
+
     @PostConstruct
     public void verify() {
-        boolean isProd = Arrays.asList(environment.getActiveProfiles()).contains("prod")
-                || Arrays.asList(environment.getActiveProfiles()).contains("production");
+        java.util.List<String> active = Arrays.asList(environment.getActiveProfiles());
+        boolean isExplicitDevOrTest = active.stream().anyMatch(DEV_TEST_PROFILES::contains);
+        boolean isProd = active.contains("prod") || active.contains("production");
+
         boolean looksLikeDevSecret = serviceJwtKey == null
                 || serviceJwtKey.isBlank()
                 || serviceJwtKey.contains("dev-only")
                 || serviceJwtKey.contains("test")
-                || serviceJwtKey.length() < 16;
+                || serviceJwtKey.length() < 32;
 
-        if (isProd && looksLikeDevSecret) {
+        if (looksLikeDevSecret && !isExplicitDevOrTest) {
             throw new IllegalStateException(
-                    "Refusing to start: SERVICE_JWT_SIGNING_KEY looks like a dev/test value in a prod profile");
+                    "Refusing to start: SERVICE_JWT_SIGNING_KEY looks like a dev/test value but no dev/test profile is active. "
+                            + "Set spring.profiles.active=dev|test|local for local development, "
+                            + "or provide a real >= 32-byte SERVICE_JWT_SIGNING_KEY for any other environment.");
         }
 
         if (!isProd && dbUrl != null && dbUrl.toLowerCase().contains("prod")) {
@@ -52,6 +66,6 @@ public class StartupGuard {
                     "Refusing to start: non-prod profile is pointed at a database URL containing 'prod'");
         }
 
-        log.info("StartupGuard ✓ active profiles={}", Arrays.toString(environment.getActiveProfiles()));
+        log.info("StartupGuard ✓ active profiles={}", active);
     }
 }

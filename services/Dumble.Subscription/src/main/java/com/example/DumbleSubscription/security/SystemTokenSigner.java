@@ -1,8 +1,6 @@
 package com.example.DumbleSubscription.security;
 
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.io.Decoders;
-import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -26,19 +24,10 @@ public class SystemTokenSigner {
     public SystemTokenSigner(@Value("${service-jwt.signing-key}") String secret,
                              @Value("${service-jwt.issuer}") String issuer,
                              @Value("${service-jwt.ttl-seconds:60}") long ttlSeconds) {
-        // Accept either base64 or raw — pad to 32 bytes if too short for HS256
-        byte[] keyBytes;
-        try {
-            keyBytes = Decoders.BASE64.decode(secret);
-        } catch (Exception ex) {
-            keyBytes = secret.getBytes();
-        }
-        if (keyBytes.length < 32) {
-            byte[] padded = new byte[32];
-            System.arraycopy(keyBytes, 0, padded, 0, keyBytes.length);
-            keyBytes = padded;
-        }
-        this.signingKey = Keys.hmacShaKeyFor(keyBytes);
+        // bug_006 — accept base64 or raw; refuse anything < 32 bytes rather
+        // than silently zero-padding (the old behaviour produced a publicly
+        // predictable HMAC key).
+        this.signingKey = SystemSigningKey.resolve(secret);
         this.issuer = issuer;
         this.ttlSeconds = ttlSeconds;
     }

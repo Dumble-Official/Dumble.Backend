@@ -29,6 +29,26 @@ public interface BundleSubscriptionRepository extends JpaRepository<BundleSubscr
     /** Active dup check — supports the unique constraint enforcement at app level. */
     Optional<BundleSubscription> findByParticipantIdAndBundleIdAndStatus(UUID participantId, UUID bundleId, SubscriptionStatus status);
 
+    /**
+     * bug_029-run2 — the partial unique index now covers ACTIVE OR PENDING,
+     * so the application-level dup check must too. Otherwise a retried
+     * checkout under a fresh controller-level Idempotency-Key can land a
+     * second PENDING row pointing at the same providerRef and poison the
+     * webhook resolution path.
+     */
+    @org.springframework.data.jpa.repository.Query("""
+        SELECT s FROM BundleSubscription s
+        WHERE s.participantId = :participantId
+          AND s.bundleId = :bundleId
+          AND s.status IN (
+              com.example.DumbleSubscription.domain.enums.SubscriptionStatus.ACTIVE,
+              com.example.DumbleSubscription.domain.enums.SubscriptionStatus.PENDING
+          )
+        """)
+    Optional<BundleSubscription> findActiveOrPending(
+            @org.springframework.data.repository.query.Param("participantId") UUID participantId,
+            @org.springframework.data.repository.query.Param("bundleId") UUID bundleId);
+
     /** Auto-renewal scheduler — Decision 7.1. */
     @Query("""
         SELECT s FROM BundleSubscription s

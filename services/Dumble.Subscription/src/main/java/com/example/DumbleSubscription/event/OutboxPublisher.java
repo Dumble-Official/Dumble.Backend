@@ -7,6 +7,10 @@ import com.example.DumbleSubscription.repository.OutboxEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.AmqpException;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageBuilder;
+import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.core.MessagePropertiesBuilder;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.PageRequest;
@@ -14,6 +18,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 
@@ -47,10 +52,24 @@ public class OutboxPublisher {
                 OutboxStatus.PENDING, PageRequest.of(0, BATCH_SIZE));
         for (OutboxEvent event : batch) {
             try {
-                rabbitTemplate.convertAndSend(
+                // bug_018 — payloadJson is already a serialized JSON object
+                // (OutboxWriter.toJson). Going through convertAndSend hits the
+                // Jackson2JsonMessageConverter wired in RabbitMQConfig, which
+                // would JSON-encode the String *again* — landing on the wire
+                // as a quoted/escaped string literal that breaks every
+                // downstream consumer. Send raw bytes with an explicit JSON
+                // content-type so the converter is bypassed.
+                Message msg = MessageBuilder
+                        .withBody(event.getPayloadJson().getBytes(StandardCharsets.UTF_8))
+                        .andProperties(MessagePropertiesBuilder.newInstance()
+                                .setContentType(MessageProperties.CONTENT_TYPE_JSON)
+                                .setContentEncoding(StandardCharsets.UTF_8.name())
+                                .build())
+                        .build();
+                rabbitTemplate.send(
                         RabbitMQConfig.DUMBLE_EVENTS_EXCHANGE,
                         event.getRoutingKey(),
-                        event.getPayloadJson());
+                        msg);
                 event.setStatus(OutboxStatus.PUBLISHED);
                 event.setPublishedAt(Instant.now());
             } catch (AmqpException ex) {

@@ -17,7 +17,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -112,7 +116,12 @@ public class CohortPayoutJob {
 
             long total = entries.stream().mapToLong(EscrowEntry::getAmountCents).sum();
             String currency = entries.get(0).getCurrency();
-            String batchRef = "cohort-" + sellerId + "-" + cohortKey + "-" + now.toEpochMilli();
+            // bug_016 — hash the sorted entry IDs into the batch ref instead
+            // of now.toEpochMilli(). Same set of tranches → same key (so a
+            // post-Payment commit failure recovers cleanly on the next run
+            // without double-paying the seller); membership change (a
+            // previously-deferred tranche rejoins) → fresh key.
+            String batchRef = "cohort-" + sellerId + "-" + cohortKey + "-" + entriesHash(entries);
 
             try {
                 PayoutResponse response = paymentServiceClient.payout(batchRef, PayoutRequest.builder()
@@ -152,4 +161,25 @@ public class CohortPayoutJob {
 
     /** Composite grouping key — one payout batch per (seller, cohort). */
     private record CohortBucket(UUID sellerId, String cohortKey) {}
+
+    /**
+     * bug_016 — short SHA-256 of the sorted entry IDs. Same membership →
+     * same key (Payment dedupes a re-issued payout after a post-charge
+     * commit failure). Membership change (deferred tranche rejoins, new
+     * cycle adds tranches) → fresh key.
+     */
+    private static String entriesHash(List<EscrowEntry> entries) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            String material = entries.stream()
+                    .map(EscrowEntry::getId)
+                    .map(UUID::toString)
+                    .sorted()
+                    .collect(Collectors.joining("|"));
+            byte[] hash = digest.digest(material.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash, 0, 12);   // 24 hex chars
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 unavailable", ex);
+        }
+    }
 }

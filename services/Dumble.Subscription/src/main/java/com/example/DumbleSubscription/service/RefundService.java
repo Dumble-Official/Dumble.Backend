@@ -1,22 +1,13 @@
 package com.example.DumbleSubscription.service;
 
-import com.example.DumbleSubscription.client.WalletServiceClient;
-import com.example.DumbleSubscription.client.dto.WalletCreditRequest;
 import com.example.DumbleSubscription.domain.BundleSubscription;
-import com.example.DumbleSubscription.domain.EscrowEntry;
-import com.example.DumbleSubscription.domain.enums.EscrowStatus;
 import com.example.DumbleSubscription.domain.enums.SubscriptionStatus;
-import com.example.DumbleSubscription.event.OutboxWriter;
 import com.example.DumbleSubscription.repository.BundleSubscriptionRepository;
-import com.example.DumbleSubscription.repository.EscrowEntryRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -25,29 +16,18 @@ import java.util.UUID;
  * unreleased escrow is refunded to the affected participants' wallets,
  * computed PER affected subscription so each participant gets their own
  * unreleased portion (not a lump sum).
+ *
+ * bug_015-run2 — each per-sub refund runs in its own REQUIRES_NEW transaction
+ * (see {@link SingleSubRefundExecutor}). A transient WalletServiceClient
+ * failure on sub N can't roll back the already-applied credits + escrow
+ * flips for subs 1..N-1. Wallet's idempotency-key dedupe protects re-credits
+ * on retry; this method protects the local state from divergence with
+ * Wallet's ledger.
  */
 @Service
 public class RefundService {
 
     private static final Logger log = LoggerFactory.getLogger(RefundService.class);
-
-    private final BundleSubscriptionRepository bundleSubscriptionRepository;
-    private final EscrowEntryRepository escrowEntryRepository;
-    private final WalletServiceClient walletServiceClient;
-    private final OutboxWriter outboxWriter;
-    private final AuditLogger auditLogger;
-
-    public RefundService(BundleSubscriptionRepository bundleSubscriptionRepository,
-                         EscrowEntryRepository escrowEntryRepository,
-                         WalletServiceClient walletServiceClient,
-                         OutboxWriter outboxWriter,
-                         AuditLogger auditLogger) {
-        this.bundleSubscriptionRepository = bundleSubscriptionRepository;
-        this.escrowEntryRepository = escrowEntryRepository;
-        this.walletServiceClient = walletServiceClient;
-        this.outboxWriter = outboxWriter;
-        this.auditLogger = auditLogger;
-    }
 
     /** Statuses whose escrow may still be unreleased and therefore must be inspected on ban. */
     private static final Set<SubscriptionStatus> REFUNDABLE_STATUSES = Set.of(
@@ -58,64 +38,46 @@ public class RefundService {
             SubscriptionStatus.PENDING
     );
 
-    @Transactional
+    private final BundleSubscriptionRepository bundleSubscriptionRepository;
+    private final SingleSubRefundExecutor singleRefundExecutor;
+
+    public RefundService(BundleSubscriptionRepository bundleSubscriptionRepository,
+                         SingleSubRefundExecutor singleRefundExecutor) {
+        this.bundleSubscriptionRepository = bundleSubscriptionRepository;
+        this.singleRefundExecutor = singleRefundExecutor;
+    }
+
+    /**
+     * Top-level loop is intentionally NOT @Transactional — each iteration
+     * commits independently via SingleSubRefundExecutor. A failure on sub N
+     * leaves subs 1..N-1 durably refunded in BOTH Wallet and our DB.
+     */
     public void refundOnSellerBan(UUID sellerId, String reason) {
-        Instant now = Instant.now();
         // bug_031 — Decision 16.3 says "all unreleased escrow" must be
         // refunded on ban. The previous query only matched ACTIVE subs, so
         // PAST_DUE / CANCELLED / EXPIRED / PENDING subs with HELD or AVAILABLE
-        // escrow had their funds stranded forever (CohortPayoutJob is also
-        // blocked once the seller is BANNED, so there was no compensating
-        // path).
-        List<BundleSubscription> subs = bundleSubscriptionRepository
-                .findBySellerIdAndStatusIn(sellerId, REFUNDABLE_STATUSES);
+        // escrow had their funds stranded forever.
+        List<UUID> subIds = bundleSubscriptionRepository
+                .findBySellerIdAndStatusIn(sellerId, REFUNDABLE_STATUSES)
+                .stream()
+                .filter(s -> s.getStatus() != SubscriptionStatus.REFUNDED)
+                .map(BundleSubscription::getId)
+                .toList();
 
-        log.info("Ban refund flow: seller={} affected_subs={} reason={}", sellerId, subs.size(), reason);
+        log.info("Ban refund flow: seller={} affected_subs={} reason={}", sellerId, subIds.size(), reason);
 
-        for (BundleSubscription sub : subs) {
-            // Skip subs already refunded — defends against double-fire of the
-            // ban webhook (Decision 8.4 idempotency at the application layer).
-            if (sub.getStatus() == SubscriptionStatus.REFUNDED) {
-                log.debug("Subscription {} already refunded — skipping", sub.getId());
-                continue;
+        int failed = 0;
+        for (UUID subId : subIds) {
+            try {
+                singleRefundExecutor.refundOne(subId, reason);
+            } catch (RuntimeException ex) {
+                failed++;
+                log.error("Ban refund for sub {} failed; other subs unaffected", subId, ex);
             }
-
-            List<EscrowEntry> entries = escrowEntryRepository.findByBundleSubscriptionId(sub.getId());
-            long unreleased = entries.stream()
-                    .filter(e -> e.getStatus() == EscrowStatus.HELD || e.getStatus() == EscrowStatus.AVAILABLE)
-                    .mapToLong(EscrowEntry::getAmountCents)
-                    .sum();
-
-            if (unreleased > 0) {
-                // Idempotency-Key uses sub.id so a retried ban call doesn't double-credit.
-                walletServiceClient.credit(
-                        "ban-refund-" + sub.getId(),
-                        WalletCreditRequest.builder()
-                                .userId(sub.getParticipantId())
-                                .amountCents(unreleased)
-                                .source("BanRefund")
-                                .externalRef(sub.getId().toString())
-                                .memo("Refund — seller suspended/banned")
-                                .build());
-            }
-
-            for (EscrowEntry entry : entries) {
-                if (entry.getStatus() == EscrowStatus.HELD || entry.getStatus() == EscrowStatus.AVAILABLE) {
-                    entry.setStatus(EscrowStatus.REFUNDED);
-                    entry.setUpdatedAt(now);
-                }
-            }
-
-            sub.setStatus(SubscriptionStatus.REFUNDED);
-            sub.setCancelledAt(now);
-            sub.setUpdatedAt(now);
-
-            auditLogger.log(sub.getId(), "RefundIssued", "SYSTEM", "ban-refund-flow",
-                    reason, Map.of("unreleasedCents", unreleased));
-            outboxWriter.write("RefundIssued", "subscription.refund.issued",
-                    Map.of("subscriptionId", sub.getId(),
-                           "participantId", sub.getParticipantId(),
-                           "amountCents", unreleased));
+        }
+        if (failed > 0) {
+            log.warn("Ban refund flow: seller={} {}/{} subs failed and need manual reconciliation",
+                    sellerId, failed, subIds.size());
         }
     }
 }
