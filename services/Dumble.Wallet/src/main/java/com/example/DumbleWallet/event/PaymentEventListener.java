@@ -1,7 +1,6 @@
 package com.example.DumbleWallet.event;
 
-import com.example.DumbleWallet.domain.InboundListenerEvent;
-import com.example.DumbleWallet.repository.InboundListenerEventRepository;
+import com.example.DumbleWallet.repository.WithdrawalRequestRepository;
 import com.example.DumbleWallet.service.WithdrawalService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -9,12 +8,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -26,9 +22,18 @@ import java.util.UUID;
  *   payment.withdrawal.failed      → reverse the wallet movement, log
  *                                    WITHDRAWAL_REVERSED credit, notify user
  *
- * AMQP-side dedup uses {@code inbound_listener_events} (PK on event id).
- * Without it, a redelivered message could double-decrement Pending or
- * double-credit on a reversal.
+ * AMQP-side dedup uses {@code inbound_listener_events} (PK on event id) via
+ * {@link InboundListenerEventRecorder} — the INSERT must run in a separate
+ * tx (REQUIRES_NEW) or a duplicate redelivery would mark the outer session
+ * rollback-only and trigger an infinite NACK/redeliver loop on the queue.
+ *
+ * <p>Payload contract (matches what {@code PayoutPersister.markCompleted} /
+ * {@code markFailed} actually write to the outbox):
+ * <pre>
+ *   { payoutId, type, subjectId, amountCents, callerReference, providerRef? , reason? }
+ * </pre>
+ * {@code callerReference} is the local Wallet withdrawal id Wallet handed
+ * Payment on creation, so it's the canonical lookup key on the consumer side.
  */
 @Component
 public class PaymentEventListener {
@@ -36,19 +41,21 @@ public class PaymentEventListener {
     private static final Logger log = LoggerFactory.getLogger(PaymentEventListener.class);
 
     private final ObjectMapper objectMapper;
-    private final InboundListenerEventRepository inboundListenerEventRepository;
+    private final InboundListenerEventRecorder recorder;
+    private final WithdrawalRequestRepository withdrawalRequestRepository;
     private final WithdrawalService withdrawalService;
 
     public PaymentEventListener(ObjectMapper objectMapper,
-                                InboundListenerEventRepository inboundListenerEventRepository,
+                                InboundListenerEventRecorder recorder,
+                                WithdrawalRequestRepository withdrawalRequestRepository,
                                 @Lazy WithdrawalService withdrawalService) {
         this.objectMapper = objectMapper;
-        this.inboundListenerEventRepository = inboundListenerEventRepository;
+        this.recorder = recorder;
+        this.withdrawalRequestRepository = withdrawalRequestRepository;
         this.withdrawalService = withdrawalService;
     }
 
     @RabbitListener(queues = "wallet.inbound")
-    @Transactional
     public void onMessage(String body,
                           @Header(name = "amqp_receivedRoutingKey", required = false) String routingKey) {
         try {
@@ -69,48 +76,70 @@ public class PaymentEventListener {
         if (!claimDedup(node, "payment.withdrawal.completed")) {
             return;
         }
-        UUID withdrawalId = parseUuid(node.path("withdrawalId").asText(""));
-        String paymentRef = node.path("paymentRef").asText("");
-        if (paymentRef.isBlank()) paymentRef = node.path("withdrawalId").asText("");
-        withdrawalService.onWithdrawalCompleted(withdrawalId, paymentRef);
+        UUID localId = resolveLocalWithdrawalId(node);
+        String providerRef = nonBlank(node.path("providerRef").asText(""));
+        if (localId == null) {
+            log.warn("WithdrawalCompleted missing usable callerReference/payoutId — dropping");
+            return;
+        }
+        withdrawalService.onWithdrawalCompleted(localId, providerRef);
     }
 
     private void handleFailed(JsonNode node) {
         if (!claimDedup(node, "payment.withdrawal.failed")) {
             return;
         }
-        UUID withdrawalId = parseUuid(node.path("withdrawalId").asText(""));
-        String paymentRef = node.path("paymentRef").asText("");
+        UUID localId = resolveLocalWithdrawalId(node);
+        String providerRef = nonBlank(node.path("providerRef").asText(""));
         String reason = node.path("reason").asText("payment_failed");
-        withdrawalService.onWithdrawalFailed(withdrawalId, paymentRef, reason);
+        if (localId == null) {
+            log.warn("WithdrawalFailed missing usable callerReference/payoutId — dropping");
+            return;
+        }
+        withdrawalService.onWithdrawalFailed(localId, providerRef, reason);
+    }
+
+    /**
+     * Resolves the local Wallet withdrawal id from Payment's payload.
+     * Preference order:
+     *   1. {@code callerReference} — Wallet's local id passed to Payment on creation
+     *   2. {@code payoutId} → Payment's row id, stored as {@code paymentRef} on Wallet's row
+     */
+    private UUID resolveLocalWithdrawalId(JsonNode node) {
+        String callerRef = nonBlank(node.path("callerReference").asText(""));
+        if (callerRef != null) {
+            UUID parsed = parseUuid(callerRef);
+            if (parsed != null) return parsed;
+        }
+        String payoutId = nonBlank(node.path("payoutId").asText(""));
+        if (payoutId != null) {
+            return withdrawalRequestRepository.findByPaymentRef(payoutId)
+                    .map(w -> w.getId())
+                    .orElse(null);
+        }
+        return null;
     }
 
     private boolean claimDedup(JsonNode node, String routingKey) {
         String eventId = node.path("eventId").asText("");
         if (eventId.isBlank()) {
-            // Synthesize a key from (withdrawalId | paymentRef) so a redelivery
+            // Synthesize a key from (callerReference | payoutId) so a redelivery
             // of the same logical event still dedupes.
-            String fallback = node.path("withdrawalId").asText("");
-            if (fallback.isBlank()) fallback = node.path("paymentRef").asText("");
+            String fallback = node.path("callerReference").asText("");
+            if (fallback.isBlank()) fallback = node.path("payoutId").asText("");
             if (fallback.isBlank()) {
-                log.warn("Inbound {} missing eventId / withdrawalId / paymentRef — refusing to process", routingKey);
+                log.warn("Inbound {} missing eventId / callerReference / payoutId — refusing to process", routingKey);
                 return false;
             }
             eventId = routingKey + ":" + fallback;
         }
-        try {
-            InboundListenerEvent dedup = new InboundListenerEvent();
-            dedup.setEventId(eventId);
-            dedup.setRoutingKey(routingKey);
-            dedup.setReceivedAt(Instant.now());
-            String summary = node.toString();
-            dedup.setPayloadSummary(summary.length() > 1900 ? summary.substring(0, 1900) : summary);
-            inboundListenerEventRepository.saveAndFlush(dedup);
-            return true;
-        } catch (DataIntegrityViolationException dup) {
-            log.debug("Inbound {} {} already processed — skipping", routingKey, eventId);
-            return false;
-        }
+        String summary = node.toString();
+        if (summary.length() > 1900) summary = summary.substring(0, 1900);
+        return recorder.tryRecord(eventId, routingKey, summary);
+    }
+
+    private static String nonBlank(String s) {
+        return (s == null || s.isBlank()) ? null : s;
     }
 
     private UUID parseUuid(String raw) {

@@ -23,9 +23,13 @@ public class PaymentMethodController {
 
     /**
      * Decision 10.1 — frontend (or Subscription) registers an already-
-     * tokenised handle. Whitelisted in {@code SecurityConfig} since the
-     * frontend doesn't carry a system JWT and the value persisted is
-     * already opaque to us.
+     * tokenised handle. Now gated by ROLE_SERVICE in {@link
+     * com.example.DumblePayment.config.SecurityConfig}: the userId/token
+     * binding is the security-relevant claim, so frontends must call through
+     * a gateway that mints a system JWT vouching for the userId. Without this
+     * gate, an unauthenticated attacker could re-bind their own Paymob token
+     * to any victim's userId (auto-renewal then bills the attacker's card
+     * while granting service to the victim's account).
      */
     @PostMapping("/tokenize")
     public ResponseEntity<TokenizeResponse> tokenize(@Valid @RequestBody TokenizeRequest req) {

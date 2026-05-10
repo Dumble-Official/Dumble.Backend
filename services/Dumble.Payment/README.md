@@ -37,7 +37,7 @@ The Paymob impl has two modes gated by `paymob.enabled`:
 
 [`Decision 4.1 / 4.2 / 4.3`](../../../../Payment-Service-Decisions.pdf): verify, dedup, persist.
 
-1. **Verify** — HMAC-SHA512 with constant-time compare in [`PaymobProvider.verifyWebhookSignature`](src/main/java/com/example/DumblePayment/provider/PaymobProvider.java).
+1. **Verify** — HMAC-SHA512 with constant-time compare in [`PaymobProvider.verifyWebhookSignature`](src/main/java/com/example/DumblePayment/provider/PaymobProvider.java). The current implementation HMACs the raw body — Paymob's documented scheme HMACs an ordered concatenation of `obj.*` fields. The field-concatenation rule is **intentionally elided** in v1 (matching the elided charge / refund / payout HTTP paths) and must be filled in before `paymob.enabled=true` ships; see the inline `TODO(paymob)` marker.
 2. **Dedup** — Paymob event id is the PK on `webhook_events`. A duplicate insert is caught and treated as success (so Paymob stops retrying) without re-running side effects.
 3. **Two-phase ACK** — Phase 1 ([`WebhookService.receive`](src/main/java/com/example/DumblePayment/service/WebhookService.java)) verifies + dedups + ACKs in milliseconds. Phase 2 ([`WebhookProcessingJob`](src/main/java/com/example/DumblePayment/scheduler/WebhookProcessingJob.java)) drains pending rows and applies state changes + emits domain events.
 
@@ -74,3 +74,4 @@ Single migration so far ([`V1__initial_schema.sql`](src/main/resources/db/migrat
 - Multi-currency support (v1 = EGP only)
 - Provider failover (Paymob down → Kashier?)
 - Tax handling on refunds (coupled with Subscription's deferred VAT decision)
+- **Paymob webhook HMAC field-concatenation rule** — current impl HMACs the raw body as a placeholder; the documented `obj.*` ordered-field concat scheme is required before real-mode ships

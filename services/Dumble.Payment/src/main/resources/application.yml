@@ -31,6 +31,11 @@ spring:
     username: ${RABBITMQ_USERNAME:guest}
     password: ${RABBITMQ_PASSWORD:guest}
     virtual-host: ${RABBITMQ_VHOST:/}
+    # Publisher confirms (correlated) + returns — outbox publisher relies on
+    # the ConfirmCallback / ReturnsCallback to flip PUBLISHED only on broker
+    # ack, otherwise send() lies about delivery (see bug_023).
+    publisher-confirm-type: correlated
+    publisher-returns: true
 
 server:
   port: 8183
@@ -70,6 +75,7 @@ payment:
     enabled: true
   outbox:
     publish-delay-ms: 2000
+    in-flight-grace-seconds: 60        # IN_FLIGHT rows older than this reset to PENDING
   scheduling:
     enabled: true                       # set false in test profile to suppress @Scheduled jobs
 

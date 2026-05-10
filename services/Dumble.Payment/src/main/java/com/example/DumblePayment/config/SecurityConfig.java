@@ -35,10 +35,10 @@ public class SecurityConfig {
                         // Paymob webhooks — Decision 4.1: HMAC-verified inside the controller,
                         // exempt from system JWT (Paymob doesn't carry our keys).
                         .requestMatchers("/payment/webhooks/paymob").permitAll()
-                        // Frontend tokenization — frontend itself doesn't have a system JWT,
-                        // and the value being persisted is already an opaque token (Decision 10.1).
-                        .requestMatchers("/payment/payment-methods/tokenize").permitAll()
-                        // Everything else needs ROLE_SERVICE (system JWT)
+                        // Everything else (including /payment/payment-methods/tokenize)
+                        // needs ROLE_SERVICE — frontends must call through a gateway
+                        // that mints a system JWT, so the userId/token binding can't
+                        // be forged by an unauthenticated caller.
                         .anyRequest().hasRole("SERVICE")
                 )
                 .exceptionHandling(e -> e

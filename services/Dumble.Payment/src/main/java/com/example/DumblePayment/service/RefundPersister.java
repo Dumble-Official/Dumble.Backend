@@ -44,14 +44,27 @@ public class RefundPersister {
     @Transactional
     public Refund persistPending(UUID chargeId, long amountCents, RefundDestination destination,
                                  String reason, String actor) {
-        Charge charge = chargeRepository.findById(chargeId)
+        // Lock the parent charge for the duration of the validation so two
+        // concurrent POSTs with distinct Idempotency-Keys can't each pass the
+        // per-row check independently and end up over-refunding the wallet
+        // (Decision 5.2 WALLET path skips Paymob, so there's no provider-side
+        // dedup to catch the over-refund).
+        Charge charge = chargeRepository.findByIdForUpdate(chargeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Charge not found"));
         if (charge.getStatus() != ChargeStatus.SUCCEEDED && charge.getStatus() != ChargeStatus.REVERSED) {
             throw new BusinessRuleViolationException(
                     "Cannot refund a charge in status " + charge.getStatus());
         }
-        if (amountCents > charge.getAmountCents()) {
-            throw new BusinessRuleViolationException("Refund exceeds charge amount");
+        if (amountCents <= 0) {
+            throw new BusinessRuleViolationException("Refund amount must be positive");
+        }
+        long alreadyRefunded = refundRepository.findByChargeId(charge.getId()).stream()
+                .filter(r -> r.getStatus() != RefundStatus.FAILED)
+                .mapToLong(Refund::getAmountCents)
+                .sum();
+        if (alreadyRefunded + amountCents > charge.getAmountCents()) {
+            throw new BusinessRuleViolationException(
+                    "Refund exceeds remaining refundable amount");
         }
 
         Instant now = Instant.now();

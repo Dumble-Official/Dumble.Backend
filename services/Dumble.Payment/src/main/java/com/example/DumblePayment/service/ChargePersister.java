@@ -66,14 +66,18 @@ public class ChargePersister {
         c.setProviderRef(providerRef);
         c.setUpdatedAt(now);
         chargeRepository.save(c);
+        // Map.of throws NPE on null values. Webhook envelopes can resolve a
+        // Charge via merchant_order_id with no usable top-level "id", so
+        // providerRef may legitimately arrive as null on the success path.
+        String safeProviderRef = providerRef == null ? "" : providerRef;
         auditLogger.log("CHARGE", c.getId().toString(), "ChargeSucceeded",
                 "PROVIDER", providerRef, null,
-                Map.of("amountCents", c.getAmountCents(), "providerRef", providerRef));
+                Map.of("amountCents", c.getAmountCents(), "providerRef", safeProviderRef));
         outboxWriter.write("ChargeSucceeded", "payment.charge.succeeded",
                 Map.of("chargeId", c.getId(),
                         "userId", c.getUserId(),
                         "amountCents", c.getAmountCents(),
-                        "providerRef", providerRef,
+                        "providerRef", safeProviderRef,
                         "callerReference", c.getCallerReference() == null ? "" : c.getCallerReference()));
         return c;
     }

@@ -29,7 +29,10 @@ public class ChargeController {
                                                  @Valid @RequestBody ChargeRequest req,
                                                  Authentication auth) {
         String actor = auth == null ? "unknown" : String.valueOf(auth.getPrincipal());
-        var cached = idempotencyService.executeOrFetch(
+        // Orchestrated — persistPending commits a Charge row BEFORE the Paymob
+        // HTTP call. Releasing the dedup claim on a non-ProviderException would
+        // let a retry dispatch a SECOND charge to Paymob.
+        var cached = idempotencyService.executeOrchestrated(
                 idempotencyKey,
                 "POST /payment/charges",
                 req.getUserId(),

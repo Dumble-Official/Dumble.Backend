@@ -106,7 +106,11 @@ public class PayoutPersister {
     @Transactional
     public Payout markCompleted(UUID id, String providerRef) {
         Payout p = lock(id);
-        if (p.getStatus() == PayoutStatus.COMPLETED) return p;
+        // Terminal states are absorbing on both transitions — mirrors markFailed.
+        // Without this, an out-of-order Paymob webhook (failed first, completed
+        // second) would flip a row already-FAILED → COMPLETED, diverging from
+        // Wallet which has already reversed locally on the failed event.
+        if (p.getStatus() != PayoutStatus.PENDING && p.getStatus() != PayoutStatus.SENT) return p;
         Instant now = Instant.now();
         p.setStatus(PayoutStatus.COMPLETED);
         if (providerRef != null && !providerRef.isBlank()) {

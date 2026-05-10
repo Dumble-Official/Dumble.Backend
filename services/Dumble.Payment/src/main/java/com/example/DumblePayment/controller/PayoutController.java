@@ -35,7 +35,10 @@ public class PayoutController {
                                                  @Valid @RequestBody PayoutRequest req,
                                                  Authentication auth) {
         String actor = auth == null ? "subscription" : String.valueOf(auth.getPrincipal());
-        var cached = idempotencyService.executeOrFetch(
+        // Orchestrated — persistPending commits a Payout row BEFORE the
+        // Paymob call. Releasing on non-ProviderException would let a retry
+        // dispatch a SECOND cohort payout.
+        var cached = idempotencyService.executeOrchestrated(
                 idempotencyKey,
                 "POST /payment/payouts",
                 req.getSellerId(),

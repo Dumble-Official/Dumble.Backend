@@ -14,8 +14,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.util.List;
 import java.util.UUID;
@@ -88,6 +90,17 @@ public class WithdrawalService {
         }
 
         // Phase 2 — HTTP to Payment outside any tx.
+        //
+        // Failure-mode taxonomy:
+        //   1. Definitive failure (Payment rejected): WebClientResponseException 4xx,
+        //      or a Payment 200 body with status="Failed". Safe to reverse locally.
+        //   2. Indeterminate (Payment may have processed): 5xx, read timeout, mid-
+        //      response RST, generic RuntimeException. We DO NOT reverse — Payment
+        //      may have queued the payout and a Paymob webhook will arrive later.
+        //      Leaving the row in SUBMITTING lets WithdrawalReaperJob resolve via
+        //      Payment's authoritative /by-caller-ref lookup after the grace
+        //      window. Eagerly reversing here risks double-pay (wallet credited
+        //      back AND Paymob also pays out the bank).
         try {
             PaymentWithdrawalResponse paymentResponse = paymentServiceClient.requestWithdrawal(
                     idempotencyKey != null && !idempotencyKey.isBlank()
@@ -101,7 +114,10 @@ public class WithdrawalService {
                             .callerReference(claimed.getId().toString())
                             .build());
             if (paymentResponse == null) {
-                return WithdrawalResponse.from(persister.reverseAndFail(claimed.getId(), "payment_no_response"));
+                // Empty body on a 2xx — treat as indeterminate; the row stays
+                // SUBMITTING for the reaper to resolve.
+                log.warn("Payment.requestWithdrawal returned null body for {} — leaving SUBMITTING", claimed.getId());
+                return WithdrawalResponse.from(reload(claimed.getId()));
             }
             String status = paymentResponse.getStatus();
             if ("Failed".equalsIgnoreCase(status)) {
@@ -110,10 +126,36 @@ public class WithdrawalService {
                 return WithdrawalResponse.from(persister.reverseAndFail(claimed.getId(), reason));
             }
             return WithdrawalResponse.from(persister.markSent(claimed.getId(), paymentResponse.getWithdrawalId()));
+        } catch (WebClientResponseException ex) {
+            HttpStatusCode code = ex.getStatusCode();
+            if (code != null && code.is4xxClientError()) {
+                // Payment definitively rejected (validation error, auth failure,
+                // missing token, etc.) — reverse the wallet movement.
+                log.warn("Payment.requestWithdrawal returned {} for {} (definitive): {}",
+                        code, claimed.getId(), truncate(ex.getResponseBodyAsString()));
+                return WithdrawalResponse.from(persister.reverseAndFail(claimed.getId(), "payment_rejected"));
+            }
+            // 5xx — Payment may or may not have queued it. Indeterminate.
+            log.warn("Payment.requestWithdrawal returned {} for {} (indeterminate) — leaving SUBMITTING for reaper",
+                    code, claimed.getId());
+            return WithdrawalResponse.from(reload(claimed.getId()));
         } catch (RuntimeException ex) {
-            log.error("Payment.requestWithdrawal threw for withdrawal {}", claimed.getId(), ex);
-            return WithdrawalResponse.from(persister.reverseAndFail(claimed.getId(), "payment_error"));
+            // Connect-phase / timeout / unknown. We can't tell from here whether
+            // Payment received the request body, so the safe move is to leave
+            // SUBMITTING and let the reaper consult Payment's authoritative state.
+            log.warn("Payment.requestWithdrawal threw for {} (indeterminate) — leaving SUBMITTING for reaper: {}",
+                    claimed.getId(), ex.toString());
+            return WithdrawalResponse.from(reload(claimed.getId()));
         }
+    }
+
+    private WithdrawalRequest reload(UUID id) {
+        return withdrawalRequestRepository.findById(id).orElseThrow();
+    }
+
+    private static String truncate(String s) {
+        if (s == null) return "";
+        return s.length() <= 200 ? s : s.substring(0, 200);
     }
 
     public WithdrawalResponse cancel(UUID userId, UUID withdrawalId) {

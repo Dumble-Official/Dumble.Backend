@@ -38,10 +38,15 @@ import java.util.UUID;
  *       provider events.
  * </ul>
  *
- * Webhook signature verification (Decision 4.1) uses HMAC-SHA512 (Paymob's
- * documented scheme) with constant-time comparison. The {@code paymob.enabled}
- * flag does NOT relax this — even in stub mode the HMAC path is exercised when
- * the signature header is present, so misconfigured tests fail loudly.
+ * Webhook signature verification (Decision 4.1) uses HMAC-SHA512 with
+ * constant-time comparison. The current implementation HMACs the raw HTTP
+ * request body — Paymob's real scheme HMACs a documented field-concatenation
+ * of {@code obj.*} fields, so this path is INTENTIONALLY ELIDED in v1
+ * (matching the elided charge / refund / payout HTTP paths) and must be
+ * filled in before {@code paymob.enabled=true} ships to any environment that
+ * sees real Paymob traffic. The {@code paymob.enabled} flag does NOT relax
+ * the HMAC path — even in stub mode the comparison is exercised when the
+ * signature header is present, so misconfigured tests fail loudly.
  */
 @Component
 public class PaymobProvider implements IPaymentProvider {
@@ -147,6 +152,13 @@ public class PaymobProvider implements IPaymentProvider {
             return parseEvent(rawBody, true, null);
         }
 
+        // TODO(paymob): Real Paymob webhook HMAC is computed over a documented
+        // ordered concatenation of obj.* fields (amount_cents + created_at +
+        // currency + ... + success), NOT the raw HTTP body. This raw-body
+        // implementation is INTENTIONALLY ELIDED — every real Paymob webhook
+        // will fail signature verification the moment paymob.enabled=true.
+        // Implement the field-concatenation rule per the Paymob docs before
+        // flipping the flag in any environment that sees real webhooks.
         String expected = hmacSha512Hex(rawBody, hmacSecret);
         if (!constantTimeEquals(expected, signatureHeader)) {
             return ProviderWebhookVerification.builder()

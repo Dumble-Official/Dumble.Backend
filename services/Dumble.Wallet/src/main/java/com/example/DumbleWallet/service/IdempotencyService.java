@@ -36,12 +36,45 @@ public class IdempotencyService {
         this.ttlHours = ttlHours;
     }
 
+    /**
+     * Atomic-action variant: the wrapped action is a single
+     * {@code @Transactional} method whose rollback on {@code RuntimeException}
+     * is total (no committed side effects). Releases the dedup claim on
+     * failure so the user can retry under the same key.
+     */
     public <T> CachedResult<T> executeOrFetch(String key,
                                               String endpoint,
                                               UUID userId,
                                               int httpStatus,
                                               Class<T> resultType,
                                               Supplier<T> action) {
+        return run(key, endpoint, userId, httpStatus, resultType, action, true);
+    }
+
+    /**
+     * Orchestrated-action variant: the wrapped action commits one or more
+     * sibling transactions (a Phase-1 row, a money debit) BEFORE its failure
+     * window. On {@code RuntimeException} we keep the dedup row PENDING — a
+     * concurrent retry with the same key gets {@link IdempotencyConflictException}
+     * (409 in-flight) and the TTL job reaps the row at expiry. Releasing the
+     * claim here would let a retry bypass dedup and re-debit / re-dispatch.
+     */
+    public <T> CachedResult<T> executeOrchestrated(String key,
+                                                   String endpoint,
+                                                   UUID userId,
+                                                   int httpStatus,
+                                                   Class<T> resultType,
+                                                   Supplier<T> action) {
+        return run(key, endpoint, userId, httpStatus, resultType, action, false);
+    }
+
+    private <T> CachedResult<T> run(String key,
+                                    String endpoint,
+                                    UUID userId,
+                                    int httpStatus,
+                                    Class<T> resultType,
+                                    Supplier<T> action,
+                                    boolean releaseOnFailure) {
         if (key == null || key.isBlank()) {
             throw new IllegalArgumentException("Idempotency-Key header required");
         }
@@ -54,17 +87,19 @@ public class IdempotencyService {
         }
 
         if (!claimed) {
-            return resolveExisting(key, endpoint, userId, httpStatus, resultType, action);
+            return resolveExisting(key, endpoint, userId, httpStatus, resultType, action, releaseOnFailure);
         }
 
         T result;
         try {
             result = action.get();
         } catch (RuntimeException ex) {
-            try {
-                store.releaseClaim(key);
-            } catch (RuntimeException ignored) {
-                // Best-effort cleanup; the row will be reaped by the TTL job.
+            if (releaseOnFailure) {
+                try {
+                    store.releaseClaim(key);
+                } catch (RuntimeException ignored) {
+                    // Best-effort cleanup; the row will be reaped by the TTL job.
+                }
             }
             throw ex;
         }
@@ -77,7 +112,8 @@ public class IdempotencyService {
                                                 UUID userId,
                                                 int httpStatus,
                                                 Class<T> resultType,
-                                                Supplier<T> action) {
+                                                Supplier<T> action,
+                                                boolean releaseOnFailure) {
         Optional<IdempotencyKey> rowOpt = store.find(key);
         if (rowOpt.isEmpty()) {
             try {
@@ -86,7 +122,9 @@ public class IdempotencyService {
                     try {
                         result = action.get();
                     } catch (RuntimeException ex) {
-                        try { store.releaseClaim(key); } catch (RuntimeException ignored) {}
+                        if (releaseOnFailure) {
+                            try { store.releaseClaim(key); } catch (RuntimeException ignored) {}
+                        }
                         throw ex;
                     }
                     store.completeClaim(key, serialize(result), httpStatus);

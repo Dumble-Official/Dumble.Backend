@@ -27,7 +27,11 @@ public class RefundController {
                                                  @Valid @RequestBody RefundRequest req,
                                                  Authentication auth) {
         String actor = auth == null ? "unknown" : String.valueOf(auth.getPrincipal());
-        var cached = idempotencyService.executeOrFetch(
+        // Orchestrated — persistPending commits a Refund row BEFORE the
+        // ORIGINAL_METHOD provider call. Don't release the dedup claim on
+        // non-ProviderException failure, otherwise a retry creates a second
+        // refund row.
+        var cached = idempotencyService.executeOrchestrated(
                 idempotencyKey,
                 "POST /payment/refunds",
                 null,

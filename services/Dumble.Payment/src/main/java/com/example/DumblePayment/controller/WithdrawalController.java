@@ -29,7 +29,10 @@ public class WithdrawalController {
                                                    @Valid @RequestBody WithdrawalRequest req,
                                                    Authentication auth) {
         String actor = auth == null ? "wallet" : String.valueOf(auth.getPrincipal());
-        var cached = idempotencyService.executeOrFetch(
+        // Orchestrated — persistPending commits a Payout row BEFORE the Paymob
+        // call. Releasing on non-ProviderException would let a retry dispatch
+        // a SECOND payout to Paymob.
+        var cached = idempotencyService.executeOrchestrated(
                 idempotencyKey,
                 "POST /payment/withdrawals",
                 req.getUserId(),

@@ -111,7 +111,7 @@ CREATE TABLE outbox_events (
     event_type        VARCHAR(100) NOT NULL,       -- WalletCredited | WalletDebited | WithdrawalRequested | etc.
     routing_key       VARCHAR(120) NOT NULL,
     payload_json      TEXT NOT NULL,
-    status            VARCHAR(20) NOT NULL DEFAULT 'PENDING',     -- PENDING | PUBLISHED | FAILED
+    status            VARCHAR(20) NOT NULL DEFAULT 'PENDING',     -- PENDING | IN_FLIGHT | PUBLISHED | FAILED
     attempts          INTEGER NOT NULL DEFAULT 0,
     last_error        VARCHAR(2000),
     created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),

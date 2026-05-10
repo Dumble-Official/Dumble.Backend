@@ -35,7 +35,11 @@ public class WithdrawalController {
             @AuthenticationPrincipal CurrentUser user,
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody WithdrawalRequestBody body) {
-        var cached = idempotencyService.executeOrFetch(
+        // Orchestrated flow — Phase 1 commits a wallet debit + WithdrawalRequest
+        // PENDING row BEFORE the Payment HTTP call. A failure after that point
+        // must NOT release the idempotency claim, otherwise a retry under the
+        // same key would re-debit the user.
+        var cached = idempotencyService.executeOrchestrated(
                 idempotencyKey,
                 "POST /wallet/me/withdrawals",
                 user.getId(),
