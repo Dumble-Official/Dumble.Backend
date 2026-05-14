@@ -156,7 +156,9 @@ services:
     expose:
       - "5134"
     environment:
+      ASPNETCORE_URLS: http://+:5134
       ConnectionStrings__PostDb: Host=post-db;Port=5432;Database=dumble_posts;Username=dumble;Password=${POST_DB_PASSWORD:?POST_DB_PASSWORD must be set in release/.env}
+      Cloudinary__Url: ${CLOUDINARY_URL:-cloudinary://placeholder:placeholder@placeholder}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
       RabbitMQ__Host: rabbitmq
       ASPNETCORE_ENVIRONMENT: Production
@@ -173,6 +175,7 @@ services:
     expose:
       - "5021"
     environment:
+      ASPNETCORE_URLS: http://+:5021
       ConnectionStrings__PostgreSql: Host=social-db;Port=5432;Database=dumble_social;Username=dumble;Password=${SOCIAL_DB_PASSWORD:?SOCIAL_DB_PASSWORD must be set in release/.env}
       ConnectionStrings__Redis: redis:6379
       Services__PostService: http://post-service:5134
@@ -194,6 +197,7 @@ services:
     expose:
       - "5022"
     environment:
+      ASPNETCORE_URLS: http://+:5022
       ConnectionStrings__MongoDb: mongodb://admin:${MONGO_PASSWORD:?MONGO_PASSWORD must be set in release/.env}@mongo:27017
       ConnectionStrings__Redis: redis:6379
       MongoDb__DatabaseName: dumble_chat
@@ -215,6 +219,7 @@ services:
     expose:
       - "5023"
     environment:
+      ASPNETCORE_URLS: http://+:5023
       ConnectionStrings__MongoDb: mongodb://admin:${MONGO_PASSWORD:?MONGO_PASSWORD must be set in release/.env}@mongo:27017
       ConnectionStrings__Redis: redis:6379
       MongoDb__DatabaseName: dumble_notifications
@@ -236,6 +241,8 @@ services:
     expose:
       - "5012"
     environment:
+      ASPNETCORE_URLS: http://+:5012
+      Cloudinary__Url: ${CLOUDINARY_URL:-cloudinary://placeholder:placeholder@placeholder}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
       ASPNETCORE_ENVIRONMENT: Production
     depends_on:
