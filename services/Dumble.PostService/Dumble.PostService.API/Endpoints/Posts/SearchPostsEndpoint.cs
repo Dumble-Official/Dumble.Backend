@@ -1,4 +1,4 @@
-using FastEndpoints;
+﻿using FastEndpoints;
 using MediatR;
 using Dumble.PostService.Application.Features.Posts.Queries.SearchPosts;
 using Dumble.PostService.Contracts.Common;
@@ -25,7 +25,7 @@ public class SearchPostsEndpoint : EndpointWithoutRequest<CursorPagedResponse<Po
     {
         var query = Query<string>("q") ?? "";
         var cursor = Query<string?>("cursor", isRequired: false);
-        var limit = Query<int?>("limit", isRequired: false) ?? 20;
+        var limit = Math.Clamp(Query<int?>("limit", isRequired: false) ?? 20, 1, 100);
 
         var result = await _mediator.Send(new SearchPostsQuery(query, cursor, limit), ct);
         await SendAsync(result, cancellation: ct);

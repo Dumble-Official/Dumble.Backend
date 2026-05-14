@@ -1,4 +1,4 @@
-using FastEndpoints;
+﻿using FastEndpoints;
 using MediatR;
 using Dumble.PostService.Application.Features.Posts.Queries.GetPostsByGym;
 using Dumble.PostService.Contracts.Common;
@@ -25,7 +25,7 @@ public class GetPostsByGymEndpoint : EndpointWithoutRequest<CursorPagedResponse<
     {
         var gymId = Route<string>("gymId")!;
         var cursor = Query<string?>("cursor", isRequired: false);
-        var limit = Query<int?>("limit", isRequired: false) ?? 20;
+        var limit = Math.Clamp(Query<int?>("limit", isRequired: false) ?? 20, 1, 100);
 
         var result = await _mediator.Send(new GetPostsByGymQuery(gymId, cursor, limit), ct);
         await SendAsync(result, cancellation: ct);

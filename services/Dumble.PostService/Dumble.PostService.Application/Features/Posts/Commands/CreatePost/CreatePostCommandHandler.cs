@@ -55,7 +55,12 @@ public class CreatePostCommandHandler : IRequestHandler<CreatePostCommand, PostR
             for (var i = 0; i < request.Images.Count; i++)
             {
                 var image = request.Images[i];
-                var (url, publicId) = await _fileService.UploadAsync(image.Content, image.FileName, image.ContentType, ct);
+                // Dispose the upload stream as soon as we're done with it.
+                // Without this a client disconnecting mid-upload leaves the
+                // ASP.NET buffer pinned until GC; under load that exhausts
+                // file descriptors and the request pool.
+                await using var content = image.Content;
+                var (url, publicId) = await _fileService.UploadAsync(content, image.FileName, image.ContentType, ct);
 
                 post.Images.Add(new PostImage
                 {

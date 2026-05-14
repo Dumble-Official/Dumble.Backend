@@ -1,4 +1,4 @@
-using FastEndpoints;
+﻿using FastEndpoints;
 using MediatR;
 using Dumble.PostService.Application.Features.Comments.Queries.GetComments;
 using Dumble.PostService.Contracts.Comments;
@@ -25,7 +25,7 @@ public class GetCommentsEndpoint : EndpointWithoutRequest<CursorPagedResponse<Co
     {
         var postId = Route<Guid>("postId");
         var cursor = Query<string?>("cursor", isRequired: false);
-        var limit = Query<int?>("limit", isRequired: false) ?? 20;
+        var limit = Math.Clamp(Query<int?>("limit", isRequired: false) ?? 20, 1, 100);
 
         var result = await _mediator.Send(new GetCommentsQuery(postId, cursor, limit), ct);
         await SendAsync(result, cancellation: ct);
