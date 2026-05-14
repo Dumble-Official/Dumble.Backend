@@ -4,6 +4,8 @@ import com.example.DumbleAuthentication.domain.RefreshToken;
 import com.example.DumbleAuthentication.domain.User;
 import com.example.DumbleAuthentication.exception.TokenRefreshException;
 import com.example.DumbleAuthentication.repository.RefreshTokenRepository;
+import com.example.DumbleAuthentication.repository.UserRepository;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -28,6 +30,7 @@ import java.util.function.Function;
 public class JwtService {
 
     private final RefreshTokenRepository refreshTokenRepository;
+    private final UserRepository userRepository;
 
     @Value("${jwt.secret}")
     private String secretKey;
@@ -41,8 +44,10 @@ public class JwtService {
     @Value("${jwt.hub-token-expiration}")
     private long hubTokenExpiration;
 
-    public JwtService(RefreshTokenRepository refreshTokenRepository) {
+    public JwtService(RefreshTokenRepository refreshTokenRepository,
+                      UserRepository userRepository) {
         this.refreshTokenRepository = refreshTokenRepository;
+        this.userRepository = userRepository;
     }
 
     // ── Access Token Operations ──────────────────────────────────────────
@@ -95,11 +100,20 @@ public class JwtService {
 
     @Transactional
     public RefreshToken generateRefreshToken(User user) {
-        // Remove any existing refresh tokens for this user
-        refreshTokenRepository.deleteByUser(user);
+        // Pessimistic-write lock on the user row serializes concurrent refresh-token
+        // generation for the same user. Without it two parallel callers each see
+        // an empty token table after their respective deletes and both `save` a
+        // new row, leaving two live refresh tokens for the same user — a real
+        // identity-leak window if one is later exfiltrated while the other is
+        // still in active use.
+        User locked = userRepository.findByIdForUpdate(user.getId())
+                .orElseThrow(() -> new UsernameNotFoundException(
+                        "User vanished mid-refresh: " + user.getId()));
+
+        refreshTokenRepository.deleteByUser(locked);
 
         RefreshToken refreshToken = new RefreshToken();
-        refreshToken.setUser(user);
+        refreshToken.setUser(locked);
         refreshToken.setToken(UUID.randomUUID().toString());
         refreshToken.setExpiryDate(Instant.now().plusMillis(refreshTokenExpiration));
 

@@ -61,15 +61,22 @@ public class BanService {
             throw new IllegalStateException("User is already banned");
         }
 
-        // Update DB
-        user.setActive(false);
-        userRepository.save(user);
+        // Order matters: protection must precede persistence so we never have a
+        // window where the DB row is flipped but the gateway hasn't been told.
+        //
+        // 1) Revoke refresh tokens so the user can't mint a new access token via
+        //    /api/auth/refresh.
+        jwtService.deleteAllUserRefreshTokens(user);
 
-        // Sync to Redis — Gateway checks this set
+        // 2) Update Redis (gateway's source of truth for the ban check). If this
+        //    throws, the @Transactional rollback reverts the DB-side state below.
+        //    If the DB write later throws, Redis stays marked — that's fail-closed,
+        //    and PostConstruct.syncBannedUsersToRedis reconciles on next restart.
         redisTemplate.opsForSet().add(BANNED_USERS_KEY, userId.toString());
 
-        // Invalidate all refresh tokens so banned user can't get new access tokens
-        jwtService.deleteAllUserRefreshTokens(user);
+        // 3) Persist the ban in the DB last.
+        user.setActive(false);
+        userRepository.save(user);
 
         log.info("Banned user: {} ({})", user.getEmail(), userId);
     }
@@ -83,11 +90,13 @@ public class BanService {
             throw new IllegalStateException("User is not banned");
         }
 
-        // Update DB
+        // Unban order is reversed from ban: persist DB first so the source of
+        // truth is updated before we relax the protection. If Redis remove later
+        // throws, the user is "active in DB, banned in Redis" — fail-closed,
+        // reconciled at next syncBannedUsersToRedis.
         user.setActive(true);
         userRepository.save(user);
 
-        // Remove from Redis
         redisTemplate.opsForSet().remove(BANNED_USERS_KEY, userId.toString());
 
         log.info("Unbanned user: {} ({})", user.getEmail(), userId);
