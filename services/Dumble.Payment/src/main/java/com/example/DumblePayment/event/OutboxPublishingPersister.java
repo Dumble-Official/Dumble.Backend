@@ -35,7 +35,12 @@ public class OutboxPublishingPersister {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<OutboxEvent> claim(UUID id) {
-        OutboxEvent e = repository.findById(id).orElse(null);
+        // Pessimistic-write lock serialises concurrent claim() calls for the
+        // same id across replicas. Without it, two dispatcher ticks reading
+        // the same PENDING row both flip it to IN_FLIGHT in memory and both
+        // publish to RabbitMQ — consumer dedup catches the duplicate but the
+        // duplicate publish is the bug we don't want to depend on luck for.
+        OutboxEvent e = repository.findByIdForUpdate(id).orElse(null);
         if (e == null || e.getStatus() != OutboxStatus.PENDING) return Optional.empty();
         e.setStatus(OutboxStatus.IN_FLIGHT);
         e.setAttempts(e.getAttempts() + 1);

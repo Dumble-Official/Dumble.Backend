@@ -35,6 +35,11 @@ public class SecurityConfig {
                         // Paymob webhooks — Decision 4.1: HMAC-verified inside the controller,
                         // exempt from system JWT (Paymob doesn't carry our keys).
                         .requestMatchers("/payment/webhooks/paymob").permitAll()
+                        // Admin observability surface — must require ADMIN, not just
+                        // any system token. Without this, every sibling service
+                        // (Subscription, Wallet, …) with a SERVICE JWT can read the
+                        // recon dashboard's failure patterns and run windows.
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
                         // Everything else (including /payment/payment-methods/tokenize)
                         // needs ROLE_SERVICE — frontends must call through a gateway
                         // that mints a system JWT, so the userId/token binding can't

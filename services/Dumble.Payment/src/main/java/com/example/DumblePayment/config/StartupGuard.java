@@ -34,17 +34,20 @@ public class StartupGuard {
 
     private final Environment environment;
     private final String serviceJwtKey;
+    private final String userJwtSecret;
     private final String paymobApiKey;
     private final String paymobProdPrefix;
     private final String dbUrl;
 
     public StartupGuard(Environment environment,
                         @Value("${service-jwt.signing-key}") String serviceJwtKey,
+                        @Value("${jwt.secret:}") String userJwtSecret,
                         @Value("${paymob.api-key}") String paymobApiKey,
                         @Value("${paymob.prod-key-prefix:live_}") String paymobProdPrefix,
                         @Value("${spring.datasource.url}") String dbUrl) {
         this.environment = environment;
         this.serviceJwtKey = serviceJwtKey;
+        this.userJwtSecret = userJwtSecret;
         this.paymobApiKey = paymobApiKey;
         this.paymobProdPrefix = paymobProdPrefix;
         this.dbUrl = dbUrl;
@@ -69,6 +72,23 @@ public class StartupGuard {
                             + "or provide a real >= 32-byte SERVICE_JWT_SIGNING_KEY for any other environment.");
         }
 
+        // Same protection for the user-JWT secret. A misconfigured jwt.secret
+        // (empty, dev placeholder, < 32 bytes after Base64 decode) silently
+        // rejects every legit user JWT at request time — or worse, if a
+        // committed placeholder happens to decode to >= 32 bytes, any holder
+        // of that placeholder mints tokens that validate.
+        boolean looksLikeDevUserKey = userJwtSecret == null
+                || userJwtSecret.isBlank()
+                || userJwtSecret.contains("dev-only")
+                || userJwtSecret.contains("test")
+                || decodedLength(userJwtSecret) < 32;
+        if (looksLikeDevUserKey && !isDevOrTest) {
+            throw new IllegalStateException(
+                    "Refusing to start: JWT_SECRET (user-token signing key) looks like a dev/test value "
+                            + "but no dev/test profile is active. Provide a real >= 32-byte JWT_SECRET, "
+                            + "matched to what the Auth service signs tokens with.");
+        }
+
         // Decision 10.3 — non-prod must NOT use a production Paymob key.
         if (paymobApiKey != null && !paymobApiKey.isBlank()
                 && paymobApiKey.startsWith(paymobProdPrefix)
@@ -85,5 +105,15 @@ public class StartupGuard {
         }
 
         log.info("StartupGuard ✓ active profiles={}", active);
+    }
+
+    private static int decodedLength(String base64Secret) {
+        try {
+            return java.util.Base64.getDecoder().decode(base64Secret).length;
+        } catch (IllegalArgumentException ex) {
+            // Not Base64 — count the raw byte length; the TokenExtractor
+            // applies hmacShaKeyFor() which insists on >= 32 raw bytes.
+            return base64Secret.getBytes().length;
+        }
     }
 }

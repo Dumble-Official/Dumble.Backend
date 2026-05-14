@@ -142,7 +142,11 @@ public class WithdrawalPersister {
 
     @Transactional
     public WithdrawalRequest markSent(UUID withdrawalId, String paymentRef) {
-        WithdrawalRequest w = withdrawalRequestRepository.findById(withdrawalId)
+        // Pessimistic lock — when the reaper running on two replicas both
+        // hit the same stuck SUBMITTING row, both call markSent. Without
+        // the lock, the optimistic @Version blocks the second update but
+        // the duplicate Payment lookup HTTP call already happened.
+        WithdrawalRequest w = withdrawalRequestRepository.findByIdForUpdate(withdrawalId)
                 .orElseThrow(() -> new ResourceNotFoundException("Withdrawal not found"));
         // Accept either PENDING (no markSubmitting yet — defensive) or
         // SUBMITTING (the normal path). Anything else is already terminal.
@@ -164,7 +168,12 @@ public class WithdrawalPersister {
      */
     @Transactional
     public WithdrawalRequest reverseAndFail(UUID withdrawalId, String reason) {
-        WithdrawalRequest w = withdrawalRequestRepository.findById(withdrawalId)
+        // Pessimistic lock for the same reason as markSent — the reaper can
+        // call this concurrently across replicas. Locking the withdrawal row
+        // first prevents two parallel reverseAndFail calls from both crediting
+        // the wallet, which would otherwise leak the locked wallet behind the
+        // optimistic-version check.
+        WithdrawalRequest w = withdrawalRequestRepository.findByIdForUpdate(withdrawalId)
                 .orElseThrow(() -> new ResourceNotFoundException("Withdrawal not found"));
         if (w.getStatus() == WithdrawalStatus.FAILED || w.getStatus() == WithdrawalStatus.CANCELLED) {
             return w;

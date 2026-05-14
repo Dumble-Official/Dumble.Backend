@@ -40,7 +40,10 @@ public class OutboxPublishingPersister {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<OutboxEvent> claim(UUID id) {
-        OutboxEvent e = repository.findById(id).orElse(null);
+        // Pessimistic-write lock serialises concurrent claim() calls for the
+        // same id across replicas. Without it, two dispatcher ticks can both
+        // read the same PENDING row and both publish to RabbitMQ.
+        OutboxEvent e = repository.findByIdForUpdate(id).orElse(null);
         if (e == null || e.getStatus() != OutboxStatus.PENDING) return Optional.empty();
         e.setStatus(OutboxStatus.IN_FLIGHT);
         e.setAttempts(e.getAttempts() + 1);

@@ -78,6 +78,17 @@ public class IdempotencyService {
         if (key == null || key.isBlank()) {
             throw new IllegalArgumentException("Idempotency-Key header required");
         }
+        // The dedup column is VARCHAR(128). Without an explicit length cap two
+        // distinct keys that differ only past char 128 collide silently after
+        // Postgres truncation, bypassing dedup. Charset restriction prevents
+        // a multi-MB header from being shoved into our log lines / DB column.
+        if (key.length() > 128) {
+            throw new IllegalArgumentException("Idempotency-Key must be at most 128 characters");
+        }
+        if (!key.matches("^[A-Za-z0-9._:\\-]+$")) {
+            throw new IllegalArgumentException(
+                    "Idempotency-Key may only contain letters, digits, '.', '_', ':', '-'");
+        }
 
         boolean claimed;
         try {
