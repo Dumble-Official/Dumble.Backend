@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
+using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -53,8 +54,32 @@ builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.Configure<ForwardedHeadersOptions>(opt =>
 {
     opt.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    opt.KnownNetworks.Clear();
-    opt.KnownProxies.Clear();
+    // Only honour X-Forwarded-* from explicitly-listed proxies. Clearing
+    // both lists without populating them tells ASP.NET to trust the headers
+    // from anyone, so a direct hit to this service can spoof
+    // X-Forwarded-Proto: https and trick the app into thinking an HTTP
+    // request was secure. Provide the gateway's IPs/CIDR via
+    // GATEWAY_TRUSTED_PROXIES (comma-separated) or fall back to the
+    // dev-only loopback for local docker-compose.
+    var configuredProxies = builder.Configuration["GATEWAY_TRUSTED_PROXIES"];
+    if (string.IsNullOrWhiteSpace(configuredProxies))
+    {
+        opt.KnownNetworks.Add(new IPNetwork(IPAddress.Loopback, 8));
+        opt.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+        opt.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("192.168.0.0"), 16));
+        opt.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("10.0.0.0"), 8));
+    }
+    else
+    {
+        foreach (var raw in configuredProxies.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var entry = raw.Trim();
+            if (IPAddress.TryParse(entry, out var ip))
+            {
+                opt.KnownProxies.Add(ip);
+            }
+        }
+    }
 });
 
 builder.Services.AddHealthChecks()
@@ -69,8 +94,6 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
 }
-
-app.UseAuthentication();
 
 app.UseAuthentication();
 app.UseAuthorization();
