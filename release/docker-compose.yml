@@ -16,7 +16,7 @@ services:
     environment:
       POSTGRES_DB: dumble_project
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: root
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD must be set in release/.env}
     expose:
       - "5432"
     volumes:
@@ -32,7 +32,7 @@ services:
     environment:
       POSTGRES_DB: dumble_social
       POSTGRES_USER: dumble
-      POSTGRES_PASSWORD: dumble123
+      POSTGRES_PASSWORD: ${SOCIAL_DB_PASSWORD:?SOCIAL_DB_PASSWORD must be set in release/.env}
     expose:
       - "5432"
     volumes:
@@ -48,7 +48,7 @@ services:
     environment:
       POSTGRES_DB: dumble_posts
       POSTGRES_USER: dumble
-      POSTGRES_PASSWORD: dumble123
+      POSTGRES_PASSWORD: ${POST_DB_PASSWORD:?POST_DB_PASSWORD must be set in release/.env}
     expose:
       - "5432"
     volumes:
@@ -63,7 +63,7 @@ services:
     image: mongo:7
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?MONGO_PASSWORD must be set in release/.env}
     expose:
       - "27017"
     volumes:
@@ -88,7 +88,7 @@ services:
     image: mysql:8.0
     environment:
       MYSQL_DATABASE: gym_service_db
-      MYSQL_ROOT_PASSWORD: root123!
+      MYSQL_ROOT_PASSWORD: ${GYM_DB_PASSWORD:?GYM_DB_PASSWORD must be set in release/.env}
     expose:
       - "3306"
     volumes:
@@ -108,9 +108,9 @@ services:
     expose:
       - "8081"
     environment:
-      DATABASEPASS: root
-      JWT_SECRET: dGhpcyBpcyBhIHZlcnkgc2VjdXJlIHNlY3JldCBrZXkgZm9yIGp3dCB0b2tlbiBnZW5lcmF0aW9u
-      GOOGLE_CLIENT_ID: 489462519676-ke7eteiom3rv52jufga8b2tgvfjj8850.apps.googleusercontent.com
+      DATABASEPASS: ${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD must be set in release/.env}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID must be set in release/.env}
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/dumble_project
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -127,7 +127,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      JWT_SECRET: dGhpcyBpcyBhIHZlcnkgc2VjdXJlIHNlY3JldCBrZXkgZm9yIGp3dCB0b2tlbiBnZW5lcmF0aW9u
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       AUTH_SERVICE_URL: http://authentication:8081
@@ -137,6 +137,12 @@ services:
       NOTIFICATION_SERVICE_URL: http://notification-service:5023
       BUNDLE_SERVICE_URL: http://bundle-service:5012
       GYM_SERVICE_URL: http://gym-service:8181
+      # Comma-separated list of allowed CORS origins (no wildcard in production)
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS must be set in release/.env}
+      # Comma-separated CIDR list of trusted reverse-proxy hops that may set X-Forwarded-*
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      # Rate-limit fail mode when Redis is unreachable: open | closed
+      RATELIMIT_FAIL_MODE: ${RATELIMIT_FAIL_MODE:-open}
     depends_on:
       redis:
         condition: service_healthy
@@ -150,8 +156,8 @@ services:
     expose:
       - "5134"
     environment:
-      ConnectionStrings__PostDb: Host=post-db;Port=5432;Database=dumble_posts;Username=dumble;Password=dumble123
-      JWT_SECRET: dGhpcyBpcyBhIHZlcnkgc2VjdXJlIHNlY3JldCBrZXkgZm9yIGp3dCB0b2tlbiBnZW5lcmF0aW9u
+      ConnectionStrings__PostDb: Host=post-db;Port=5432;Database=dumble_posts;Username=dumble;Password=${POST_DB_PASSWORD:?POST_DB_PASSWORD must be set in release/.env}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
       RabbitMQ__Host: rabbitmq
       ASPNETCORE_ENVIRONMENT: Production
     depends_on:
@@ -167,10 +173,10 @@ services:
     expose:
       - "5021"
     environment:
-      ConnectionStrings__PostgreSql: Host=social-db;Port=5432;Database=dumble_social;Username=dumble;Password=dumble123
+      ConnectionStrings__PostgreSql: Host=social-db;Port=5432;Database=dumble_social;Username=dumble;Password=${SOCIAL_DB_PASSWORD:?SOCIAL_DB_PASSWORD must be set in release/.env}
       ConnectionStrings__Redis: redis:6379
       Services__PostService: http://post-service:5134
-      JWT_SECRET: dGhpcyBpcyBhIHZlcnkgc2VjdXJlIHNlY3JldCBrZXkgZm9yIGp3dCB0b2tlbiBnZW5lcmF0aW9u
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
       RabbitMQ__Host: rabbitmq
       ASPNETCORE_ENVIRONMENT: Production
     depends_on:
@@ -188,10 +194,10 @@ services:
     expose:
       - "5022"
     environment:
-      ConnectionStrings__MongoDb: mongodb://admin:admin123@mongo:27017
+      ConnectionStrings__MongoDb: mongodb://admin:${MONGO_PASSWORD:?MONGO_PASSWORD must be set in release/.env}@mongo:27017
       ConnectionStrings__Redis: redis:6379
       MongoDb__DatabaseName: dumble_chat
-      JWT_SECRET: dGhpcyBpcyBhIHZlcnkgc2VjdXJlIHNlY3JldCBrZXkgZm9yIGp3dCB0b2tlbiBnZW5lcmF0aW9u
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
       RabbitMQ__Host: rabbitmq
       ASPNETCORE_ENVIRONMENT: Production
     depends_on:
@@ -209,10 +215,10 @@ services:
     expose:
       - "5023"
     environment:
-      ConnectionStrings__MongoDb: mongodb://admin:admin123@mongo:27017
+      ConnectionStrings__MongoDb: mongodb://admin:${MONGO_PASSWORD:?MONGO_PASSWORD must be set in release/.env}@mongo:27017
       ConnectionStrings__Redis: redis:6379
       MongoDb__DatabaseName: dumble_notifications
-      JWT_SECRET: dGhpcyBpcyBhIHZlcnkgc2VjdXJlIHNlY3JldCBrZXkgZm9yIGp3dCB0b2tlbiBnZW5lcmF0aW9u
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
       RabbitMQ__Host: rabbitmq
       ASPNETCORE_ENVIRONMENT: Production
     depends_on:
@@ -230,7 +236,7 @@ services:
     expose:
       - "5012"
     environment:
-      JWT_SECRET: dGhpcyBpcyBhIHZlcnkgc2VjdXJlIHNlY3JldCBrZXkgZm9yIGp3dCB0b2tlbiBnZW5lcmF0aW9u
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
       ASPNETCORE_ENVIRONMENT: Production
     depends_on:
       redis:
@@ -245,9 +251,9 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://gym-db:3306/gym_service_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root123!
+      SPRING_DATASOURCE_PASSWORD: ${GYM_DB_PASSWORD:?GYM_DB_PASSWORD must be set in release/.env}
       SERVICES_AUTH_URL: http://authentication:8081
-      JWT_SECRET: dGhpcyBpcyBhIHZlcnkgc2VjdXJlIHNlY3JldCBrZXkgZm9yIGp3dCB0b2tlbiBnZW5lcmF0aW9u
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
     depends_on:
       gym-db:
         condition: service_healthy

@@ -28,6 +28,9 @@ Thumbs.db
 ## Build results
 [Dd]ebug/
 [Rr]elease/
+# Keep the project's release/ folder (docker-compose + env.example) tracked.
+!release/
+!release/**
 x64/
 x86/
 [Ww][Ii][Nn]32/
