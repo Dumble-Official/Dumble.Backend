@@ -1,4 +1,4 @@
-using FastEndpoints;
+﻿using FastEndpoints;
 using MediatR;
 using Dumble.NotificationService.Application.Features.Notifications.Queries.GetNotifications;
 using Dumble.NotificationService.Contracts.Common;
@@ -25,7 +25,7 @@ public class GetNotificationsEndpoint : EndpointWithoutRequest<CursorPagedRespon
     {
         var userId = User.FindFirst("userId")!.Value;
         var cursor = Query<string?>("cursor", isRequired: false);
-        var limit = Query<int?>("limit", isRequired: false) ?? 20;
+        var limit = Math.Clamp(Query<int?>("limit", isRequired: false) ?? 20, 1, 100);
 
         var result = await _mediator.Send(new GetNotificationsQuery(userId, cursor, limit), ct);
         await SendAsync(result, cancellation: ct);

@@ -1,4 +1,4 @@
-using FastEndpoints;
+﻿using FastEndpoints;
 using MediatR;
 using Dumble.ChatService.Application.Features.Messages.Queries.GetMessages;
 using Dumble.ChatService.Contracts.Common;
@@ -26,7 +26,7 @@ public class GetMessagesEndpoint : EndpointWithoutRequest<CursorPagedResponse<Me
         var conversationId = Route<string>("id")!;
         var userId = User.FindFirst("userId")!.Value;
         var cursor = Query<string?>("cursor");
-        var limit = Query<int?>("limit") ?? 20;
+        var limit = Math.Clamp(Query<int?>("limit") ?? 20, 1, 100);
 
         var result = await _mediator.Send(new GetMessagesQuery(conversationId, userId, cursor, limit), ct);
         await SendAsync(result, cancellation: ct);
