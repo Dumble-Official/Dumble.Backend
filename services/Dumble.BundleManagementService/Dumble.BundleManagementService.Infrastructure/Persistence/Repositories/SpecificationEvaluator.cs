@@ -15,7 +15,7 @@ public static class SpecificationEvaluator
             query = query.Where(specs.Criteria);
 
         if (specs.Includes is not null)
-            query = specs.Includes.Aggregate(query, (prev, exp) => query.Include(exp));
+            query = specs.Includes.Aggregate(query, (current, exp) => current.Include(exp));
         
         if (specs.IsPaginationEnabled)
             query = query.Skip(specs.Skip).Take(specs.Take);

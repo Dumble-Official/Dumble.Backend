@@ -47,9 +47,4 @@ internal sealed class GenericRepository<TEntity,TKey>(BundleManagementDbContext 
     {
         return await context.SaveChangesAsync();
     }
-
-    public async ValueTask DisposeAsync()
-    {
-        await context.DisposeAsync();
-    }
 }

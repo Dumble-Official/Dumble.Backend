@@ -1,25 +1,24 @@
 using Dumble.BundleManagementService.API.Authentication;
+using Dumble.BundleManagementService.API.Errors;
 using Dumble.BundleManagementService.Application;
 using Dumble.BundleManagementService.Infrastructure;
+using Dumble.BundleManagementService.Infrastructure.Persistence.Data;
 using FastEndpoints;
 using FastEndpoints.Swagger;
+using FluentValidation;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
+using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.WebHost.ConfigureKestrel(opt =>
-{
-    opt.AddServerHeader = false;
-});
+builder.WebHost.ConfigureKestrel(opt => opt.AddServerHeader = false);
 
 builder.Services.AddApplication().AddInfrastructure(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
 
-// JWT bearer auth — validates the same HS256 signature the Auth service issues.
-// Defense in depth: the gateway is the primary entry point but we don't want a
-// lateral attacker inside the cluster to forge a token by hitting us directly.
 var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? builder.Configuration["JWT_SECRET"]
     ?? throw new InvalidOperationException("JWT_SECRET env var is required");
@@ -37,7 +36,6 @@ builder.Services.AddAuthentication(opt =>
     opt.MapInboundClaims = false;
     opt.TokenValidationParameters = new TokenValidationParameters
     {
-        // Auth service does not set issuer/audience — only validate what's set.
         ValidateIssuer = false,
         ValidateAudience = false,
         ValidateLifetime = true,
@@ -51,14 +49,60 @@ builder.Services.AddAuthorization();
 builder.Services.AddTransient<IClaimsTransformation, RolesClaimsTransformation>();
 
 builder.Services.AddFastEndpoints().SwaggerDocument();
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+
+builder.Services.Configure<ForwardedHeadersOptions>(opt =>
+{
+    opt.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Only honour X-Forwarded-* from explicitly-listed proxies. Clearing
+    // both lists without populating them tells ASP.NET to trust the headers
+    // from anyone, so a direct hit to this service can spoof
+    // X-Forwarded-Proto: https and trick the app into thinking an HTTP
+    // request was secure. Provide the gateway's IPs/CIDR via
+    // GATEWAY_TRUSTED_PROXIES (comma-separated) or fall back to the
+    // dev-only loopback for local docker-compose.
+    var configuredProxies = builder.Configuration["GATEWAY_TRUSTED_PROXIES"];
+    if (string.IsNullOrWhiteSpace(configuredProxies))
+    {
+        opt.KnownNetworks.Add(new IPNetwork(IPAddress.Loopback, 8));
+        opt.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+        opt.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("192.168.0.0"), 16));
+        opt.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("10.0.0.0"), 8));
+    }
+    else
+    {
+        foreach (var raw in configuredProxies.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var entry = raw.Trim();
+            if (IPAddress.TryParse(entry, out var ip))
+            {
+                opt.KnownProxies.Add(ip);
+            }
+        }
+    }
+});
+
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<BundleManagementDbContext>(name: "database");
 
 var app = builder.Build();
 
-app.UseHttpsRedirection();
+app.UseForwardedHeaders();
+app.UseExceptionMapping();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.MapHealthChecks("/health/live");
+app.MapHealthChecks("/health/ready");
+
 app.UseFastEndpoints().UseSwaggerGen();
 
 app.Run();
+
+public partial class Program;

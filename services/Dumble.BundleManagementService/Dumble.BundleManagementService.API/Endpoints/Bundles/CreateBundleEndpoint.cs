@@ -1,39 +1,41 @@
-﻿using Dumble.BundleManagementService.Application.Contracts.Repositories;
+using Dumble.BundleManagementService.Application.Contracts;
 using Dumble.BundleManagementService.Application.Features.Bundles.Commands.CreateBundle;
 using Dumble.BundleManagementService.Contracts.Bundles.CreateBundle;
 using FastEndpoints;
 using MediatR;
-using Microsoft.AspNetCore.Http.HttpResults;
-using Void = FastEndpoints.Void;
 
 namespace Dumble.BundleManagementService.API.Endpoints.Bundles;
 
-internal sealed class CreateBundleEndpoint(ISender mediator) : Endpoint<CreateBundleRequest>
+internal sealed class CreateBundleEndpoint(ISender mediator) : Endpoint<CreateBundleRequest, CreateBundleResponse>
 {
     public override void Configure()
     {
         Post("/api/bundles");
-        // Authenticated by default. CreateBundleCommandHandler also enforces
-        // that only GymOwner / Trainer can author a bundle (subscription quota
-        // logic lives there).
+        Roles("GYM_OWNER", "GYM", "TRAINER");
         Options(x => x.WithTags("Bundles")
             .Accepts<CreateBundleRequest>("multipart/form-data"));
     }
 
-    public override async Task<object?> ExecuteAsync(CreateBundleRequest req, CancellationToken ct)
+    public override async Task HandleAsync(CreateBundleRequest req, CancellationToken ct)
     {
-        var createBundleCommand = new CreateBundleCommand(
-            req.Images,
+        var images = req.Images?.Select(f => new UploadedImage(
+                f.OpenReadStream(),
+                f.FileName,
+                f.ContentType))
+            .ToList();
+
+        var bundleId = await mediator.Send(new CreateBundleCommand(
+            images,
             req.Name,
             req.Description,
             req.Price,
             req.Status,
             req.ExpiresOn,
-            req.CategoryId
-        );
+            req.CategoryId), ct);
 
-        await mediator.Send(createBundleCommand, ct);
-        
-        return await Send.ResponseAsync(new Void(), 201, ct);
+        await Send.CreatedAtAsync<GetBundleByIdEndpoint>(
+            new { id = bundleId.Value },
+            new CreateBundleResponse(bundleId.Value),
+            cancellation: ct);
     }
 }

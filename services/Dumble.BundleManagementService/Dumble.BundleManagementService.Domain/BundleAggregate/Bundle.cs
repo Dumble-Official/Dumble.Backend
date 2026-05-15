@@ -110,4 +110,34 @@ public sealed class Bundle : AggregateRoot<BundleId>
         return true;
     }
 
+    public void AssertOwnedBy(AccountId accountId)
+    {
+        if (!OwnerId.Equals(accountId))
+            throw new UnauthorizedAccessException("Caller is not the owner of this bundle");
+    }
+
+    public void Modify(
+        AccountId modifier,
+        Name? name = null,
+        Description? description = null,
+        Price? price = null,
+        Status? status = null,
+        DateTime? expiresOn = null,
+        CategoryId? categoryId = null)
+    {
+        ArgumentNullException.ThrowIfNull(modifier);
+
+        var changed = false;
+        if (name is not null && !Name.Equals(name)) { Name = name; changed = true; }
+        if (description is not null && !Description.Equals(description)) { Description = description; changed = true; }
+        if (price is not null && !Price.Equals(price)) { Price = price; changed = true; }
+        if (status is not null && !Status.Equals(status.Value)) { Status = status.Value; changed = true; }
+        if (expiresOn is not null && ExpiresOn != expiresOn.Value) { ExpiresOn = expiresOn.Value; changed = true; }
+        if (categoryId is not null && !CategoryId.Equals(categoryId)) { CategoryId = categoryId; changed = true; }
+
+        if (!changed) return;
+
+        LastModifiedOn = DateTime.UtcNow;
+        LastModifiedBy = modifier;
+    }
 }

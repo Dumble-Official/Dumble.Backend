@@ -1,5 +1,4 @@
-﻿using Dumble.BundleManagementService.Application.Features.Categories.Commands.CreateCategoryCommand;
-using Dumble.BundleManagementService.Contracts.Bundles.CreateBundle;
+using Dumble.BundleManagementService.Application.Features.Categories.Commands.CreateCategoryCommand;
 using Dumble.BundleManagementService.Contracts.Categories.CreateCategory;
 using FastEndpoints;
 using MediatR;
@@ -12,18 +11,13 @@ internal sealed class CreateCategoryEndpoint(ISender mediator) : Endpoint<Create
     public override void Configure()
     {
         Post("/api/categories");
-        Claims("userId");
+        Roles("ADMIN");
         Options(x => x.WithTags("Categories"));
     }
 
     public override async Task<object?> ExecuteAsync(CreateCategoryRequest req, CancellationToken ct)
     {
-        var command = new CreateCategoryCommand(
-            req.Name
-        );
-
-        await mediator.Send(command, ct);
-        
+        await mediator.Send(new CreateCategoryCommand(req.Name), ct);
         return await Send.ResponseAsync(new Void(), 201, ct);
     }
 }

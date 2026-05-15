@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj": {}
+    "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj": {}
   },
   "projects": {
-    "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj": {
+    "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj",
+        "projectUniqueName": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj",
         "projectName": "Dumble.BundleManagementService.Contracts",
-        "projectPath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj",
+        "projectPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\Dumble.BundleManagementService.Contracts.csproj",
         "packagesPath": "C:\\Users\\youss\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\obj\\",
+        "outputPath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Contracts\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -44,7 +44,7 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "9.0.100"
+        "SdkAnalysisLevel": "10.0.200"
       },
       "frameworks": {
         "net9.0": {
@@ -66,12 +66,26 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            },
+            {
+              "name": "Microsoft.WindowsDesktop.App.Ref",
+              "version": "[9.0.14, 9.0.14]"
+            }
+          ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.101/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.201/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

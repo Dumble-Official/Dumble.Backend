@@ -1,8 +1,12 @@
 {
   "version": 2,
-  "dgSpecHash": "Nwa/wNxAF4g=",
+  "dgSpecHash": "vPMyEYew+pU=",
   "success": true,
-  "projectFilePath": "C:\\Users\\youss\\OneDrive\\Desktop\\Dumble\\src\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Domain\\Dumble.BundleManagementService.Domain.csproj",
-  "expectedPackageFiles": [],
+  "projectFilePath": "C:\\Users\\youss\\Desktop\\Dumble.Backend\\services\\Dumble.BundleManagementService\\Dumble.BundleManagementService.Domain\\Dumble.BundleManagementService.Domain.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\youss\\.nuget\\packages\\microsoft.netcore.app.ref\\9.0.14\\microsoft.netcore.app.ref.9.0.14.nupkg.sha512",
+    "C:\\Users\\youss\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\9.0.14\\microsoft.windowsdesktop.app.ref.9.0.14.nupkg.sha512",
+    "C:\\Users\\youss\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\9.0.14\\microsoft.aspnetcore.app.ref.9.0.14.nupkg.sha512"
+  ],
   "logs": []
 }

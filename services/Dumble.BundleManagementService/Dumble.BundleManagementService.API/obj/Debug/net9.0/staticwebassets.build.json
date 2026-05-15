@@ -1,12 +1,1 @@
-{
-  "Version": 1,
-  "Hash": "fxolCNXWFWyX/04u8sVy+3JuytV6TRtuB3D+MbZBelc=",
-  "Source": "Dumble.BundleManagementService.API",
-  "BasePath": "_content/Dumble.BundleManagementService.API",
-  "Mode": "Default",
-  "ManifestType": "Build",
-  "ReferencedProjectsConfiguration": [],
-  "DiscoveryPatterns": [],
-  "Assets": [],
-  "Endpoints": []
-}
+{"Version":1,"Hash":"Pj3Z+5k4ztaUiSa1D8vArCf1dXLoOnwLwdN7NWVEKb8=","Source":"Dumble.BundleManagementService.API","BasePath":"/","Mode":"Root","ManifestType":"Build","ReferencedProjectsConfiguration":[],"DiscoveryPatterns":[],"Assets":[],"Endpoints":[]}

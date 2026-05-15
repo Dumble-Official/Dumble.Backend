@@ -1,7 +1,6 @@
 ﻿using Dumble.BundleManagementService.Domain.CategoryAggregate;
 using Dumble.BundleManagementService.Domain.CategoryAggregate.ValueObjects;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Dumble.BundleManagementService.Infrastructure.Persistence.Data.Configurations;

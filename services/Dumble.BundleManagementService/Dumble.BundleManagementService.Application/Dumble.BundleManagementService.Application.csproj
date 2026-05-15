@@ -18,6 +18,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Dumble.BundleManagementService.Domain\Dumble.BundleManagementService.Domain.csproj" />
+      <ProjectReference Include="..\..\Dumble.SharedKernel\Dumble.SharedKernel\Dumble.SharedKernel.csproj" />
     </ItemGroup>
 
 </Project>
