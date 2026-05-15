@@ -4,5 +4,6 @@ namespace Dumble.ChatService.Application.Features.Conversations.Commands.AddPart
 
 public sealed record AddParticipantsCommand(
     string ConversationId,
+    string CallerId,
     List<string> UserIds
 ) : IRequest;

@@ -5,6 +5,7 @@ namespace Dumble.ChatService.Application.Features.Conversations.Commands.UpdateC
 
 public sealed record UpdateConversationCommand(
     string ConversationId,
+    string CallerId,
     string? Name,
     string? ImageUrl
 ) : IRequest<ConversationResponse>;

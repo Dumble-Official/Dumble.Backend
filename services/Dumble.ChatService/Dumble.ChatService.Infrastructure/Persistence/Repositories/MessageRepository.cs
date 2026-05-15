@@ -20,7 +20,12 @@ public class MessageRepository : IMessageRepository
 
     public async Task<List<Message>> GetByConversationIdAsync(string conversationId, DateTime? cursor, int limit, CancellationToken ct = default)
     {
-        var filter = Builders<Message>.Filter.Eq(m => m.ConversationId, conversationId);
+        // Exclude soft-deleted messages — SoftDeleteAsync flips IsDeleted=true
+        // and rewrites Content; without this filter the deleted row keeps
+        // surfacing in conversation history until pagination scrolls past it.
+        var filter = Builders<Message>.Filter.And(
+            Builders<Message>.Filter.Eq(m => m.ConversationId, conversationId),
+            Builders<Message>.Filter.Eq(m => m.IsDeleted, false));
 
         if (cursor.HasValue)
             filter = Builders<Message>.Filter.And(filter,

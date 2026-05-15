@@ -1,20 +1,26 @@
-using FastEndpoints;
-using FastEndpoints.Swagger;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.SignalR;
-using Microsoft.IdentityModel.Tokens;
+using System.Net;
+using Dumble.NotificationService.API.Authentication;
+using Dumble.NotificationService.API.Errors;
+using Dumble.NotificationService.API.Hubs;
 using Dumble.NotificationService.Application;
 using Dumble.NotificationService.Application.Contracts;
-using Dumble.NotificationService.API.Hubs;
 using Dumble.NotificationService.Infrastructure;
+using FastEndpoints;
+using FastEndpoints.Swagger;
+using FluentValidation;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Application + Infrastructure DI
+builder.WebHost.ConfigureKestrel(opt => opt.AddServerHeader = false);
+
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// SignalR + Redis backplane
 var signalR = builder.Services.AddSignalR();
 var redisConnection = builder.Configuration.GetConnectionString("Redis");
 if (!string.IsNullOrEmpty(redisConnection))
@@ -23,18 +29,21 @@ if (!string.IsNullOrEmpty(redisConnection))
 builder.Services.AddSingleton<IUserIdProvider, NameUserIdProvider>();
 builder.Services.AddScoped<INotificationHubService, NotificationHubService>();
 
-// FastEndpoints
 builder.Services.AddFastEndpoints();
-builder.Services.SwaggerDocument(o =>
-{
-    o.DocumentSettings = s =>
-    {
-        s.Title = "Dumble Notification Service API";
-        s.Version = "v1";
-    };
-});
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-// JWT Authentication — validates HS256 signature using the shared secret.
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.SwaggerDocument(o =>
+    {
+        o.DocumentSettings = s =>
+        {
+            s.Title = "Dumble Notification Service API";
+            s.Version = "v1";
+        };
+    });
+}
+
 var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? builder.Configuration["JWT_SECRET"]
     ?? throw new InvalidOperationException("JWT_SECRET env var is required");
@@ -43,8 +52,7 @@ var signingKey = new SymmetricSecurityKey(Convert.FromBase64String(jwtSecret));
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        // Keep claim names as-issued by the JWT (sub, userId, displayName, etc.)
-        // instead of remapping sub → ClaimTypes.NameIdentifier.
+        options.RequireHttpsMetadata = builder.Environment.IsProduction();
         options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
@@ -57,7 +65,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew = TimeSpan.FromSeconds(30)
         };
 
-        // SignalR token via query string — see AuthRateLimitFilter doc on the gateway.
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = context =>
@@ -66,27 +73,53 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var path = context.HttpContext.Request.Path;
                 if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
                     context.Token = accessToken;
-
                 return Task.CompletedTask;
             }
         };
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddTransient<IClaimsTransformation, RolesClaimsTransformation>();
+
+// ForwardedHeaders trusted-proxy gating — see ChatService for the rationale.
+builder.Services.Configure<ForwardedHeadersOptions>(opt =>
+{
+    opt.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    var trustedProxiesCsv = builder.Configuration["Gateway:TrustedProxies"];
+    if (!string.IsNullOrWhiteSpace(trustedProxiesCsv))
+    {
+        opt.KnownProxies.Clear();
+        opt.KnownNetworks.Clear();
+        foreach (var raw in trustedProxiesCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (IPAddress.TryParse(raw, out var ip))
+                opt.KnownProxies.Add(ip);
+        }
+    }
+});
+
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
-// Middleware
+app.UseForwardedHeaders();
+app.UseExceptionMapping();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.UseFastEndpoints(c =>
-{
-    c.Errors.UseProblemDetails();
-});
+app.MapHealthChecks("/health/live");
+app.MapHealthChecks("/health/ready");
 
-app.UseSwaggerGen();
+app.UseFastEndpoints(c => c.Errors.UseProblemDetails());
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwaggerGen();
+}
 
 app.MapHub<NotificationHub>("/hubs/notifications");
 
 app.Run();
+
+public partial class Program;

@@ -6,6 +6,7 @@ namespace Dumble.ChatService.Application.Features.Messages.Queries.GetMessages;
 
 public sealed record GetMessagesQuery(
     string ConversationId,
+    string CallerId,
     string? Cursor,
     int Limit
 ) : IRequest<CursorPagedResponse<MessageResponse>>;

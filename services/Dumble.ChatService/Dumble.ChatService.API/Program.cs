@@ -1,20 +1,26 @@
-using FastEndpoints;
-using FastEndpoints.Swagger;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.SignalR;
-using Microsoft.IdentityModel.Tokens;
+using System.Net;
+using Dumble.ChatService.API.Authentication;
+using Dumble.ChatService.API.Errors;
+using Dumble.ChatService.API.Hubs;
 using Dumble.ChatService.Application;
 using Dumble.ChatService.Application.Contracts;
-using Dumble.ChatService.API.Hubs;
 using Dumble.ChatService.Infrastructure;
+using FastEndpoints;
+using FastEndpoints.Swagger;
+using FluentValidation;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Application + Infrastructure DI
+builder.WebHost.ConfigureKestrel(opt => opt.AddServerHeader = false);
+
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// SignalR + Redis backplane
 var signalR = builder.Services.AddSignalR();
 var redisConnection = builder.Configuration.GetConnectionString("Redis");
 if (!string.IsNullOrEmpty(redisConnection))
@@ -23,18 +29,21 @@ if (!string.IsNullOrEmpty(redisConnection))
 builder.Services.AddSingleton<IUserIdProvider, NameUserIdProvider>();
 builder.Services.AddScoped<IChatHubService, ChatHubService>();
 
-// FastEndpoints
 builder.Services.AddFastEndpoints();
-builder.Services.SwaggerDocument(o =>
-{
-    o.DocumentSettings = s =>
-    {
-        s.Title = "Dumble Chat Service API";
-        s.Version = "v1";
-    };
-});
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-// JWT Authentication — validates HS256 signature using the shared secret.
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.SwaggerDocument(o =>
+    {
+        o.DocumentSettings = s =>
+        {
+            s.Title = "Dumble Chat Service API";
+            s.Version = "v1";
+        };
+    });
+}
+
 var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? builder.Configuration["JWT_SECRET"]
     ?? throw new InvalidOperationException("JWT_SECRET env var is required");
@@ -43,8 +52,7 @@ var signingKey = new SymmetricSecurityKey(Convert.FromBase64String(jwtSecret));
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        // Keep claim names as-issued by the JWT (sub, userId, displayName, etc.)
-        // instead of remapping sub → ClaimTypes.NameIdentifier.
+        options.RequireHttpsMetadata = builder.Environment.IsProduction();
         options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
@@ -69,27 +77,56 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var path = context.HttpContext.Request.Path;
                 if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
                     context.Token = accessToken;
-
                 return Task.CompletedTask;
             }
         };
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddTransient<IClaimsTransformation, RolesClaimsTransformation>();
+
+// ForwardedHeaders only honours X-Forwarded-* when the immediate peer is in
+// Gateway:TrustedProxies (CSV of IPs). Empty / unset → keep the ASP.NET
+// loopback default. Clearing both lists unconditionally lets any client spoof
+// the headers and breaks every downstream IP-based control.
+builder.Services.Configure<ForwardedHeadersOptions>(opt =>
+{
+    opt.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    var trustedProxiesCsv = builder.Configuration["Gateway:TrustedProxies"];
+    if (!string.IsNullOrWhiteSpace(trustedProxiesCsv))
+    {
+        opt.KnownProxies.Clear();
+        opt.KnownNetworks.Clear();
+        foreach (var raw in trustedProxiesCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (IPAddress.TryParse(raw, out var ip))
+                opt.KnownProxies.Add(ip);
+        }
+    }
+});
+
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
-// Middleware
+app.UseForwardedHeaders();
+app.UseExceptionMapping();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.UseFastEndpoints(c =>
-{
-    c.Errors.UseProblemDetails();
-});
+app.MapHealthChecks("/health/live");
+app.MapHealthChecks("/health/ready");
 
-app.UseSwaggerGen();
+app.UseFastEndpoints(c => c.Errors.UseProblemDetails());
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwaggerGen();
+}
 
 app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();
+
+public partial class Program;

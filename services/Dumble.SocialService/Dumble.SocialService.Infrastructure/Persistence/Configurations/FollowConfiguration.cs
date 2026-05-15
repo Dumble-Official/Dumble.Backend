@@ -11,6 +11,8 @@ public class FollowConfiguration : IEntityTypeConfiguration<Follow>
         builder.HasKey(f => f.Id);
 
         builder.Property(f => f.FollowerId).IsRequired().HasMaxLength(128);
+        builder.Property(f => f.FollowerName).HasMaxLength(200);
+        builder.Property(f => f.FollowerImage).HasMaxLength(500);
         builder.Property(f => f.FolloweeId).IsRequired().HasMaxLength(128);
         builder.Property(f => f.FolloweeType).IsRequired().HasMaxLength(50);
 

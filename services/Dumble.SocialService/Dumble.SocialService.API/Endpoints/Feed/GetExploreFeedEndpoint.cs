@@ -1,4 +1,4 @@
-using FastEndpoints;
+﻿using FastEndpoints;
 using MediatR;
 using Dumble.SocialService.Application.Features.Feed.Queries.GetExploreFeed;
 using Dumble.SocialService.Contracts.Common;
@@ -24,7 +24,7 @@ public class GetExploreFeedEndpoint : EndpointWithoutRequest<CursorPagedResponse
     public override async Task HandleAsync(CancellationToken ct)
     {
         var cursor = Query<string?>("cursor", isRequired: false);
-        var limit = Query<int?>("limit", isRequired: false) ?? 20;
+        var limit = Math.Clamp(Query<int?>("limit", isRequired: false) ?? 20, 1, 100);
 
         var result = await _mediator.Send(new GetExploreFeedQuery(cursor, limit), ct);
         await SendAsync(result, cancellation: ct);

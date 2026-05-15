@@ -22,9 +22,10 @@ public class RemoveParticipantEndpoint : EndpointWithoutRequest
     public override async Task HandleAsync(CancellationToken ct)
     {
         var conversationId = Route<string>("id")!;
-        var userId = Route<string>("userId")!;
+        var targetUserId = Route<string>("userId")!;
+        var callerId = User.FindFirst("userId")!.Value;
 
-        await _mediator.Send(new RemoveParticipantCommand(conversationId, userId), ct);
+        await _mediator.Send(new RemoveParticipantCommand(conversationId, callerId, targetUserId), ct);
         await SendNoContentAsync(ct);
     }
 }

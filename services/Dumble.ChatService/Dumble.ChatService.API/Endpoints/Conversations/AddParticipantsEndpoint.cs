@@ -23,7 +23,8 @@ public class AddParticipantsEndpoint : Endpoint<AddParticipantsRequest>
     public override async Task HandleAsync(AddParticipantsRequest req, CancellationToken ct)
     {
         var id = Route<string>("id")!;
-        await _mediator.Send(new AddParticipantsCommand(id, req.UserIds), ct);
+        var userId = User.FindFirst("userId")!.Value;
+        await _mediator.Send(new AddParticipantsCommand(id, userId, req.UserIds), ct);
         await SendNoContentAsync(ct);
     }
 }

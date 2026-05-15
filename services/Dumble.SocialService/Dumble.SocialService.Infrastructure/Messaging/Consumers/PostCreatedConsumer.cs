@@ -18,14 +18,6 @@ public class PostCreatedConsumer : IConsumer<PostCreatedEvent>
     public async Task Consume(ConsumeContext<PostCreatedEvent> context)
     {
         var evt = context.Message;
-        var followerIds = await _followRepository.GetFolloweeIdsAsync(evt.AuthorId, context.CancellationToken);
-
-        // Invalidate feed caches for all followers of the post author
-        // Note: GetFolloweeIdsAsync returns who the author follows, we need who follows the author
-        // Actually we need followers OF the author, so we need a different query
-        // Let's use the followRepository to get the followers list
-        // followerIds here are people the author follows. We actually need people who follow the author.
-        // Fix: get followers of the author
         var followers = await GetFollowerIdsOfAuthor(evt.AuthorId, context.CancellationToken);
         if (followers.Count > 0)
             await _feedCache.InvalidateFeedsForFollowersAsync(evt.AuthorId, followers, context.CancellationToken);

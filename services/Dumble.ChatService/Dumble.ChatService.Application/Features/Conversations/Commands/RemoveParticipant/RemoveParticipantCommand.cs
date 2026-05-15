@@ -4,5 +4,6 @@ namespace Dumble.ChatService.Application.Features.Conversations.Commands.RemoveP
 
 public sealed record RemoveParticipantCommand(
     string ConversationId,
-    string UserId
+    string CallerId,
+    string TargetUserId
 ) : IRequest;

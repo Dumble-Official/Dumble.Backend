@@ -39,4 +39,11 @@ public class DeviceTokenRepository : IDeviceTokenRepository
     {
         await _context.DeviceTokens.DeleteOneAsync(d => d.Token == token, ct);
     }
+
+    public async Task<bool> DeleteOwnedByTokenAsync(string token, string userId, CancellationToken ct)
+    {
+        var result = await _context.DeviceTokens.DeleteOneAsync(
+            d => d.Token == token && d.UserId == userId, ct);
+        return result.DeletedCount > 0;
+    }
 }

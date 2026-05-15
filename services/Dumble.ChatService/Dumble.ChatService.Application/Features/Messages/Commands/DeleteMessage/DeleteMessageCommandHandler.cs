@@ -13,6 +13,9 @@ public class DeleteMessageCommandHandler(
         var message = await messageRepository.GetByIdAsync(request.MessageId, cancellationToken)
             ?? throw new KeyNotFoundException($"Message '{request.MessageId}' not found.");
 
+        if (message.SenderId != request.CallerId)
+            throw new UnauthorizedAccessException("You can only delete your own messages");
+
         await messageRepository.SoftDeleteAsync(request.MessageId, cancellationToken);
 
         await chatHubService.NotifyMessageDeletedAsync(

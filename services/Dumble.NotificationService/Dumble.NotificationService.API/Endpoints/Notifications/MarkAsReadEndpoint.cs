@@ -22,7 +22,8 @@ public class MarkAsReadEndpoint : EndpointWithoutRequest
     public override async Task HandleAsync(CancellationToken ct)
     {
         var id = Route<string>("id")!;
-        await _mediator.Send(new MarkAsReadCommand(id), ct);
+        var userId = User.FindFirst("userId")!.Value;
+        await _mediator.Send(new MarkAsReadCommand(id, userId), ct);
         await SendNoContentAsync(ct);
     }
 }

@@ -1,4 +1,4 @@
-using FastEndpoints;
+﻿using FastEndpoints;
 using MediatR;
 using Dumble.SocialService.Application.Features.Follows.Queries.GetFollowing;
 using Dumble.SocialService.Contracts.Common;
@@ -25,7 +25,7 @@ public class GetFollowingEndpoint : EndpointWithoutRequest<CursorPagedResponse<F
     {
         var userId = Route<string>("userId")!;
         var cursor = Query<string?>("cursor", isRequired: false);
-        var limit = Query<int?>("limit", isRequired: false) ?? 20;
+        var limit = Math.Clamp(Query<int?>("limit", isRequired: false) ?? 20, 1, 100);
 
         var result = await _mediator.Send(new GetFollowingQuery(userId, cursor, limit), ct);
         await SendAsync(result, cancellation: ct);
