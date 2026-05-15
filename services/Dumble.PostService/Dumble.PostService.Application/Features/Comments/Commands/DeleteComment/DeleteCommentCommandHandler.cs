@@ -28,7 +28,7 @@ public class DeleteCommentCommandHandler : IRequestHandler<DeleteCommentCommand>
 
     public async Task Handle(DeleteCommentCommand request, CancellationToken ct)
     {
-        var currentUser = await _userService.GetCurrentUserAsync(ct);
+        var currentUser = _userService.GetCurrentUser();
         var comment = await _commentRepository.GetByIdAsync(request.CommentId, ct)
             ?? throw new KeyNotFoundException($"Comment {request.CommentId} not found");
 
@@ -48,7 +48,9 @@ public class DeleteCommentCommandHandler : IRequestHandler<DeleteCommentCommand>
 
         await _publishEndpoint.Publish(new CommentDeletedEvent(
             comment.Id.ToString(),
-            comment.PostId.ToString()
+            comment.PostId.ToString(),
+            post?.AuthorId ?? string.Empty,
+            comment.AuthorId
         ), ct);
     }
 }

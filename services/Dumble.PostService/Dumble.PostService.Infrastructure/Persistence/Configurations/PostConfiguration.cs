@@ -14,6 +14,8 @@ public class PostConfiguration : IEntityTypeConfiguration<Post>
         builder.Property(p => p.AuthorId).IsRequired().HasMaxLength(100);
         builder.Property(p => p.AuthorDisplayName).IsRequired().HasMaxLength(200);
         builder.Property(p => p.AuthorProfileImage).HasMaxLength(500);
+        builder.Property(p => p.AuthorType).HasConversion<string>().HasMaxLength(50);
+        builder.Property(p => p.Status).HasConversion<string>().HasMaxLength(50);
         builder.Property(p => p.Content).HasMaxLength(5000);
         builder.Property(p => p.GymId).HasMaxLength(100);
 

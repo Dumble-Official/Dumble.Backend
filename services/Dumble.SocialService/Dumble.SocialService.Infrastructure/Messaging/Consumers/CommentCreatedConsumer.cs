@@ -24,7 +24,7 @@ public class CommentCreatedConsumer : IConsumer<CommentCreatedEvent>
             UserId = evt.CommentAuthorId,
             PostId = evt.PostId,
             EventType = BehaviorEventType.Comment,
-            CreatedAt = evt.CreatedAt
+            CreatedAt = evt.CreatedAt.UtcDateTime
         }, context.CancellationToken);
     }
 }

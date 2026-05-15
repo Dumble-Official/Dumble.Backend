@@ -1,15 +1,10 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
+using Dumble.SharedKernel.Authentication;
 using Dumble.SharedKernel.Contracts;
-using Dumble.SharedKernel.Enums;
 
 namespace Dumble.SocialService.Infrastructure.Authentication;
 
-/// <summary>
-/// Reads the current user out of the validated JWT claims already on
-/// HttpContext.User — no extra HTTP call to Auth per request. Auth's JwtService
-/// puts userId / roles / displayName / profileImage / userType in the token.
-/// </summary>
 public sealed class LoggedInUserService : ILoggedInUserService
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
@@ -19,7 +14,7 @@ public sealed class LoggedInUserService : ILoggedInUserService
         _httpContextAccessor = httpContextAccessor;
     }
 
-    public Task<CurrentUser> GetCurrentUserAsync(CancellationToken cancellationToken = default)
+    public CurrentUser GetCurrentUser()
     {
         var principal = _httpContextAccessor.HttpContext?.User
             ?? throw new UnauthorizedAccessException("No HttpContext.User available");
@@ -30,24 +25,16 @@ public sealed class LoggedInUserService : ILoggedInUserService
         var email = principal.FindFirst(ClaimTypes.Email)?.Value
             ?? principal.FindFirst("sub")?.Value
             ?? principal.FindFirst(ClaimTypes.Name)?.Value
-            ?? "";
+            ?? string.Empty;
 
         var displayName = principal.FindFirst("displayName")?.Value ?? email;
         var profileImage = principal.FindFirst("profileImage")?.Value;
+        var userType = JwtUserTypeParser.Parse(principal.FindFirst("userType")?.Value);
 
-        // Auth (Java) ships userType as the enum constant name in UPPER_SNAKE
-        // (e.g. "GYM_OWNER"); the .NET enum is PascalCase ("GymOwner"). Strip
-        // underscores so case-insensitive parse matches both shapes.
-        var userTypeStr = principal.FindFirst("userType")?.Value ?? nameof(UserType.Participant);
-        var normalised = userTypeStr.Replace("_", "");
-        var userType = Enum.TryParse<UserType>(normalised, true, out var parsed) ? parsed : UserType.Participant;
+        var roles = principal.FindAll(ClaimTypes.Role).Select(r => r.Value).ToList();
+        if (roles.Count == 0)
+            roles = principal.FindAll("roles").Select(r => r.Value).ToList();
 
-        return Task.FromResult(new CurrentUser(
-            Id: userId,
-            Email: email,
-            DisplayName: displayName,
-            ProfileImage: profileImage,
-            UserType: userType
-        ));
+        return new CurrentUser(userId, email, displayName, profileImage, userType, roles);
     }
 }

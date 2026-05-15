@@ -30,7 +30,7 @@ public class AddReactionCommandHandler : IRequestHandler<AddReactionCommand, Rea
 
     public async Task<ReactionResponse> Handle(AddReactionCommand request, CancellationToken ct)
     {
-        var currentUser = await _userService.GetCurrentUserAsync(ct);
+        var currentUser = _userService.GetCurrentUser();
         var post = await _postRepository.GetByIdAsync(request.PostId, ct)
             ?? throw new KeyNotFoundException($"Post {request.PostId} not found");
 
@@ -64,8 +64,9 @@ public class AddReactionCommandHandler : IRequestHandler<AddReactionCommand, Rea
             post.AuthorId,
             currentUser.Id,
             currentUser.DisplayName,
-            reactionType.ToString(),
-            reaction.CreatedAt
+            currentUser.ProfileImage,
+            reactionType,
+            new DateTimeOffset(reaction.CreatedAt, TimeSpan.Zero)
         ), ct);
 
         return new ReactionResponse(reaction.Id, reaction.UserId, reaction.Type.ToString(), reaction.CreatedAt);

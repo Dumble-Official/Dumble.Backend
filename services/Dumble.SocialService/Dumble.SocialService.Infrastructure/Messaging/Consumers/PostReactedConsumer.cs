@@ -24,8 +24,8 @@ public class PostReactedConsumer : IConsumer<PostReactedEvent>
             UserId = evt.ReactorId,
             PostId = evt.PostId,
             EventType = BehaviorEventType.Reaction,
-            EventData = evt.ReactionType,
-            CreatedAt = evt.CreatedAt
+            EventData = evt.ReactionType.ToString(),
+            CreatedAt = evt.CreatedAt.UtcDateTime
         }, context.CancellationToken);
     }
 }

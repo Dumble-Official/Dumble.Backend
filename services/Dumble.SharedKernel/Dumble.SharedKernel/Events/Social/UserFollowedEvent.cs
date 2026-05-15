@@ -1,3 +1,5 @@
+using Dumble.SharedKernel.Common;
+
 namespace Dumble.SharedKernel.Events.Social;
 
 public record UserFollowedEvent(
@@ -5,5 +7,5 @@ public record UserFollowedEvent(
     string FollowerName,
     string? FollowerImage,
     string FolloweeId,
-    DateTime CreatedAt
-);
+    DateTimeOffset CreatedAt
+) : IntegrationEvent;

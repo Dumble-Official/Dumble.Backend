@@ -28,7 +28,7 @@ public class DeletePostCommandHandler : IRequestHandler<DeletePostCommand>
 
     public async Task Handle(DeletePostCommand request, CancellationToken ct)
     {
-        var currentUser = await _userService.GetCurrentUserAsync(ct);
+        var currentUser = _userService.GetCurrentUser();
         var post = await _postRepository.GetByIdWithDetailsAsync(request.PostId, ct)
             ?? throw new KeyNotFoundException($"Post {request.PostId} not found");
 

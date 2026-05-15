@@ -44,7 +44,7 @@ public class PostReactedConsumer : IConsumer<PostReactedEvent>
                 ["postId"] = evt.PostId,
                 ["reactorId"] = evt.ReactorId,
                 ["reactorName"] = evt.ReactorName,
-                ["reactionType"] = evt.ReactionType
+                ["reactionType"] = evt.ReactionType.ToString()
             },
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(30)

@@ -38,6 +38,6 @@ public class FollowUserCommandHandler : IRequestHandler<FollowUserCommand>
             request.FollowerName,
             request.FollowerImage,
             request.FolloweeId,
-            follow.CreatedAt), ct);
+            new DateTimeOffset(follow.CreatedAt, TimeSpan.Zero)), ct);
     }
 }
