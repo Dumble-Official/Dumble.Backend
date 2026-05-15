@@ -1,4 +1,4 @@
-using FastEndpoints;
+﻿using FastEndpoints;
 using MediatR;
 using Dumble.PostService.Application.Features.Hashtags.Queries.SearchHashtags;
 using Dumble.PostService.Contracts.Hashtags;
@@ -23,7 +23,7 @@ public class SearchHashtagsEndpoint : EndpointWithoutRequest<List<HashtagRespons
     public override async Task HandleAsync(CancellationToken ct)
     {
         var query = Query<string>("q") ?? "";
-        var limit = Query<int?>("limit", isRequired: false) ?? 20;
+        var limit = Math.Clamp(Query<int?>("limit", isRequired: false) ?? 20, 1, 100);
         var result = await _mediator.Send(new SearchHashtagsQuery(query, limit), ct);
         await SendAsync(result, cancellation: ct);
     }

@@ -42,6 +42,16 @@ public class AddReactionCommandHandler : IRequestHandler<AddReactionCommand, Rea
             existing.Type = reactionType;
             await _reactionRepository.UpdateAsync(existing, ct);
 
+            await _publishEndpoint.Publish(new PostReactedEvent(
+                post.Id.ToString(),
+                post.AuthorId,
+                currentUser.Id,
+                currentUser.DisplayName,
+                currentUser.ProfileImage,
+                reactionType,
+                new DateTimeOffset(existing.CreatedAt, TimeSpan.Zero)
+            ), ct);
+
             return new ReactionResponse(existing.Id, existing.UserId, existing.Type.ToString(), existing.CreatedAt);
         }
 
@@ -55,9 +65,7 @@ public class AddReactionCommandHandler : IRequestHandler<AddReactionCommand, Rea
         };
 
         await _reactionRepository.CreateAsync(reaction, ct);
-
-        post.ReactionsCount++;
-        await _postRepository.UpdateAsync(post, ct);
+        await _postRepository.IncrementReactionsAsync(post.Id, ct);
 
         await _publishEndpoint.Publish(new PostReactedEvent(
             post.Id.ToString(),

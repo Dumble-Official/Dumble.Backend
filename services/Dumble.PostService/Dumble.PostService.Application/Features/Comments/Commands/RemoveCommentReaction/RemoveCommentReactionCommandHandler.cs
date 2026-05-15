@@ -27,12 +27,6 @@ public class RemoveCommentReactionCommandHandler : IRequestHandler<RemoveComment
             ?? throw new KeyNotFoundException("Reaction not found");
 
         await _commentReactionRepository.DeleteAsync(reaction, ct);
-
-        var comment = await _commentRepository.GetByIdAsync(request.CommentId, ct);
-        if (comment is not null && comment.ReactionsCount > 0)
-        {
-            comment.ReactionsCount--;
-            await _commentRepository.UpdateAsync(comment, ct);
-        }
+        await _commentRepository.DecrementReactionsAsync(request.CommentId, ct);
     }
 }

@@ -3,6 +3,7 @@ using MassTransit;
 using Dumble.PostService.Application.Contracts;
 using Dumble.PostService.Domain.Enums;
 using Dumble.SharedKernel.Contracts;
+using Dumble.SharedKernel.Enums;
 using Dumble.SharedKernel.Events.Posts;
 
 namespace Dumble.PostService.Application.Features.Comments.Commands.DeleteComment;
@@ -32,19 +33,16 @@ public class DeleteCommentCommandHandler : IRequestHandler<DeleteCommentCommand>
         var comment = await _commentRepository.GetByIdAsync(request.CommentId, ct)
             ?? throw new KeyNotFoundException($"Comment {request.CommentId} not found");
 
-        if (comment.AuthorId != currentUser.Id)
+        var canModerate = currentUser.IsInAnyRole(UserType.Admin, UserType.Moderator);
+        if (comment.AuthorId != currentUser.Id && !canModerate)
             throw new UnauthorizedAccessException("You can only delete your own comments");
 
         comment.Status = CommentStatus.Deleted;
         comment.UpdatedAt = DateTime.UtcNow;
         await _commentRepository.UpdateAsync(comment, ct);
 
+        await _postRepository.DecrementCommentsAsync(comment.PostId, ct);
         var post = await _postRepository.GetByIdAsync(comment.PostId, ct);
-        if (post is not null && post.CommentsCount > 0)
-        {
-            post.CommentsCount--;
-            await _postRepository.UpdateAsync(post, ct);
-        }
 
         await _publishEndpoint.Publish(new CommentDeletedEvent(
             comment.Id.ToString(),

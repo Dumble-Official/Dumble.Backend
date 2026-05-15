@@ -57,9 +57,7 @@ public class CreateCommentCommandHandler : IRequestHandler<CreateCommentCommand,
         };
 
         await _commentRepository.CreateAsync(comment, ct);
-
-        post.CommentsCount++;
-        await _postRepository.UpdateAsync(post, ct);
+        await _postRepository.IncrementCommentsAsync(post.Id, ct);
 
         var preview = comment.Content.Length > 100
             ? comment.Content[..100] + "..."

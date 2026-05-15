@@ -16,31 +16,24 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        // PostgreSQL + EF Core
-        services.AddDbContext<PostDbContext>(options =>
-            options.UseNpgsql(configuration.GetConnectionString("PostDb")));
+        var connectionString = configuration.GetConnectionString("PostDb")
+            ?? throw new InvalidOperationException("ConnectionStrings:PostDb is required");
+        services.AddDbContext<PostDbContext>(options => options.UseNpgsql(connectionString));
 
-        // Repositories
         services.AddScoped<IPostRepository, PostRepository>();
         services.AddScoped<IReactionRepository, ReactionRepository>();
         services.AddScoped<ICommentRepository, CommentRepository>();
         services.AddScoped<ICommentReactionRepository, CommentReactionRepository>();
         services.AddScoped<IHashtagRepository, HashtagRepository>();
 
-        // Cloudinary
-        var cloudinaryUrl = configuration["Cloudinary:Url"];
-        if (!string.IsNullOrEmpty(cloudinaryUrl))
-        {
-            var cloudinary = new Cloudinary(cloudinaryUrl);
-            services.AddSingleton(cloudinary);
-        }
+        var cloudinaryUrl = configuration["Cloudinary:Url"]
+            ?? throw new InvalidOperationException("Cloudinary:Url is required");
+        services.AddSingleton(new Cloudinary(cloudinaryUrl));
         services.AddScoped<IFileService, CloudinaryFileService>();
 
-        // Current user is read from validated JWT claims — no extra HTTP call.
         services.AddHttpContextAccessor();
         services.AddScoped<ILoggedInUserService, LoggedInUserService>();
 
-        // MassTransit + RabbitMQ
         services.AddMassTransit(x =>
         {
             x.UsingRabbitMq((context, cfg) =>
@@ -50,7 +43,6 @@ public static class DependencyInjection
                     h.Username(configuration["RabbitMQ:Username"] ?? "guest");
                     h.Password(configuration["RabbitMQ:Password"] ?? "guest");
                 });
-
                 cfg.ConfigureEndpoints(context);
             });
         });

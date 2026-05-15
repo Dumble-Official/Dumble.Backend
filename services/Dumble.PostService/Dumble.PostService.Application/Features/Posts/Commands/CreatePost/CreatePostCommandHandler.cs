@@ -50,14 +50,27 @@ public class CreatePostCommandHandler : IRequestHandler<CreatePostCommand, PostR
             UpdatedAt = DateTime.UtcNow
         };
 
-        // Upload images
         if (request.Images is { Count: > 0 })
         {
-            for (int i = 0; i < request.Images.Count; i++)
+            // Per-file size cap. Each image must be ≤ 5 MB; the Kestrel /
+            // FormOptions caps in Program.cs cover the whole multipart request,
+            // but a single oversize file should be rejected before we open the
+            // stream and start streaming bytes to Cloudinary.
+            const long PerFileBytesCap = 5L * 1024 * 1024;
+            for (var i = 0; i < request.Images.Count; i++)
             {
-                var file = request.Images[i];
-                await using var stream = file.OpenReadStream();
-                var (url, publicId) = await _fileService.UploadAsync(stream, file.FileName, file.ContentType, ct);
+                var image = request.Images[i];
+                if (image.Length > PerFileBytesCap)
+                {
+                    throw new ArgumentException(
+                        $"Image '{image.FileName}' is {image.Length} bytes; per-file cap is {PerFileBytesCap}.");
+                }
+                // Dispose the upload stream as soon as we're done with it.
+                // Without this a client disconnecting mid-upload leaves the
+                // ASP.NET buffer pinned until GC; under load that exhausts
+                // file descriptors and the request pool.
+                await using var content = image.Content;
+                var (url, publicId) = await _fileService.UploadAsync(content, image.FileName, image.ContentType, ct);
 
                 post.Images.Add(new PostImage
                 {
@@ -70,13 +83,13 @@ public class CreatePostCommandHandler : IRequestHandler<CreatePostCommand, PostR
             }
         }
 
-        // Process hashtags
         var hashtagNames = new List<string>();
         if (request.Hashtags is { Count: > 0 })
         {
             hashtagNames = request.Hashtags
-                .Select(h => h.TrimStart('#').ToLowerInvariant().Trim())
-                .Where(h => !string.IsNullOrEmpty(h))
+                .Where(h => !string.IsNullOrWhiteSpace(h))
+                .Select(h => h.Trim().TrimStart('#').ToLowerInvariant())
+                .Where(h => h.Length > 0)
                 .Distinct()
                 .ToList();
 

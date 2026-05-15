@@ -2,6 +2,7 @@ using MediatR;
 using Dumble.PostService.Application.Contracts;
 using Dumble.PostService.Contracts.Comments;
 using Dumble.SharedKernel.Contracts;
+using Dumble.SharedKernel.Enums;
 
 namespace Dumble.PostService.Application.Features.Comments.Commands.UpdateComment;
 
@@ -24,7 +25,8 @@ public class UpdateCommentCommandHandler : IRequestHandler<UpdateCommentCommand,
         var comment = await _commentRepository.GetByIdAsync(request.CommentId, ct)
             ?? throw new KeyNotFoundException($"Comment {request.CommentId} not found");
 
-        if (comment.AuthorId != currentUser.Id)
+        var canModerate = currentUser.IsInAnyRole(UserType.Admin, UserType.Moderator);
+        if (comment.AuthorId != currentUser.Id && !canModerate)
             throw new UnauthorizedAccessException("You can only edit your own comments");
 
         comment.Content = request.Content;

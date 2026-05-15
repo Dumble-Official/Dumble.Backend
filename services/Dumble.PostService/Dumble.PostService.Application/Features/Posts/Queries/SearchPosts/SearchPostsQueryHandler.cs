@@ -1,5 +1,6 @@
 using MediatR;
 using Dumble.PostService.Application.Contracts;
+using Dumble.PostService.Application.Features.Common;
 using Dumble.PostService.Contracts.Common;
 using Dumble.PostService.Contracts.Posts;
 
@@ -16,7 +17,7 @@ public class SearchPostsQueryHandler : IRequestHandler<SearchPostsQuery, CursorP
 
     public async Task<CursorPagedResponse<PostResponse>> Handle(SearchPostsQuery request, CancellationToken ct)
     {
-        DateTime? cursor = request.Cursor is not null ? DateTime.Parse(request.Cursor) : null;
+        var cursor = CursorParsing.ParseUtcCursor(request.Cursor);
 
         var posts = await _postRepository.SearchAsync(request.Query, cursor, request.Limit + 1, ct);
         var hasMore = posts.Count > request.Limit;
@@ -32,7 +33,7 @@ public class SearchPostsQueryHandler : IRequestHandler<SearchPostsQuery, CursorP
         )).ToList();
 
         var nextCursor = hasMore && items.Count > 0
-            ? items.Last().CreatedAt.ToString("O")
+            ? CursorParsing.FormatCursor(items.Last().CreatedAt)
             : null;
 
         return new CursorPagedResponse<PostResponse>(items, nextCursor, hasMore);

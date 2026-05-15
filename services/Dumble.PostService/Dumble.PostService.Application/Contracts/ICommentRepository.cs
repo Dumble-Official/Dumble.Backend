@@ -11,4 +11,8 @@ public interface ICommentRepository
     Task<Comment> CreateAsync(Comment comment, CancellationToken ct = default);
     Task UpdateAsync(Comment comment, CancellationToken ct = default);
     Task DeleteAsync(Comment comment, CancellationToken ct = default);
+
+    Task IncrementReactionsAsync(Guid commentId, CancellationToken ct = default);
+    Task DecrementReactionsAsync(Guid commentId, CancellationToken ct = default);
+    Task<Dictionary<Guid, int>> GetRepliesCountForManyAsync(IReadOnlyList<Guid> parentIds, CancellationToken ct = default);
 }
