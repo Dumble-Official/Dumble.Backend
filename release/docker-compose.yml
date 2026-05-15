@@ -99,6 +99,54 @@ services:
       timeout: 5s
       retries: 10
 
+  wallet-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dumble_wallet
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${WALLET_DB_PASSWORD:?WALLET_DB_PASSWORD must be set in release/.env}
+    expose:
+      - "5432"
+    volumes:
+      - walletdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  payment-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dumble_payment
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD must be set in release/.env}
+    expose:
+      - "5432"
+    volumes:
+      - paymentdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  subscription-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dumble_subscription
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${SUBSCRIPTION_DB_PASSWORD:?SUBSCRIPTION_DB_PASSWORD must be set in release/.env}
+    expose:
+      - "5432"
+    volumes:
+      - subscriptiondata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   # ── Application Services ───────────────────────────────────────────
 
   authentication:
@@ -137,6 +185,9 @@ services:
       NOTIFICATION_SERVICE_URL: http://notification-service:5023
       BUNDLE_SERVICE_URL: http://bundle-service:5012
       GYM_SERVICE_URL: http://gym-service:8181
+      WALLET_SERVICE_URL: http://wallet:8184
+      PAYMENT_SERVICE_URL: http://payment:8183
+      SUBSCRIPTION_SERVICE_URL: http://subscription:8182
       # Comma-separated list of allowed CORS origins (no wildcard in production)
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS must be set in release/.env}
       # Comma-separated CIDR list of trusted reverse-proxy hops that may set X-Forwarded-*
@@ -265,6 +316,83 @@ services:
       gym-db:
         condition: service_healthy
 
+  payment:
+    build:
+      context: ../services/Dumble.Payment
+      dockerfile: Dockerfile
+    expose:
+      - "8183"
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
+      SERVICE_JWT_SIGNING_KEY: ${SERVICE_JWT_SIGNING_KEY:?SERVICE_JWT_SIGNING_KEY must be set in release/.env}
+      PAYMENT_DB_URL: jdbc:postgresql://payment-db:5432/dumble_payment
+      PAYMENT_DB_USERNAME: postgres
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD must be set in release/.env}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      # Paymob is disabled in dev so the stub provider runs. Flip to true only
+      # AFTER bug_4 (real HMAC verification) lands per review-pr5.md.
+      PAYMOB_ENABLED: ${PAYMOB_ENABLED:-false}
+      PAYMOB_API_KEY: ${PAYMOB_API_KEY:-dev-only-paymob-api-key}
+      PAYMOB_HMAC_SECRET: ${PAYMOB_HMAC_SECRET:-dev-only-paymob-hmac-secret}
+    depends_on:
+      payment-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  wallet:
+    build:
+      context: ../services/Dumble.Wallet
+      dockerfile: Dockerfile
+    expose:
+      - "8184"
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
+      SERVICE_JWT_SIGNING_KEY: ${SERVICE_JWT_SIGNING_KEY:?SERVICE_JWT_SIGNING_KEY must be set in release/.env}
+      WALLET_DB_URL: jdbc:postgresql://wallet-db:5432/dumble_wallet
+      WALLET_DB_USERNAME: postgres
+      WALLET_DB_PASSWORD: ${WALLET_DB_PASSWORD:?WALLET_DB_PASSWORD must be set in release/.env}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      PAYMENT_SERVICE_URL: http://payment:8183
+    depends_on:
+      wallet-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      payment:
+        condition: service_started
+
+  subscription:
+    build:
+      context: ../services/Dumble.Subscription
+      dockerfile: Dockerfile
+    expose:
+      - "8182"
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
+      SERVICE_JWT_SIGNING_KEY: ${SERVICE_JWT_SIGNING_KEY:?SERVICE_JWT_SIGNING_KEY must be set in release/.env}
+      SUBSCRIPTION_DB_URL: jdbc:postgresql://subscription-db:5432/dumble_subscription
+      SUBSCRIPTION_DB_USERNAME: postgres
+      SUBSCRIPTION_DB_PASSWORD: ${SUBSCRIPTION_DB_PASSWORD:?SUBSCRIPTION_DB_PASSWORD must be set in release/.env}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      PAYMENT_SERVICE_URL: http://payment:8183
+      WALLET_SERVICE_URL: http://wallet:8184
+      BUNDLE_MANAGEMENT_URL: http://bundle-service:5012
+      GYM_SERVICE_URL: http://gym-service:8181
+      AUTHENTICATION_URL: http://authentication:8081
+    depends_on:
+      subscription-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      payment:
+        condition: service_started
+      wallet:
+        condition: service_started
+
 volumes:
   redisdata:
   pgdata:
@@ -273,6 +401,9 @@ volumes:
   mongodata:
   gymdata:
   bundledata:
+  walletdata:
+  paymentdata:
+  subscriptiondata:
   postgres_social_data:
   mongodb_data:
   redis_data:
