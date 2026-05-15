@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Dumble.SharedKernel.Authentication;
 using Microsoft.AspNetCore.Authentication;
 
 namespace Dumble.BundleManagementService.API.Authentication;
@@ -13,10 +14,13 @@ internal sealed class RolesClaimsTransformation : IClaimsTransformation
         if (identity.HasClaim(c => c.Type == ClaimTypes.Role))
             return Task.FromResult(principal);
 
-        foreach (var raw in identity.FindAll("roles"))
+        foreach (var raw in identity.FindAll(AuthConstants.RolesClaim))
         {
-            var name = raw.Value.StartsWith("ROLE_", StringComparison.Ordinal)
-                ? raw.Value[5..]
+            // Match the case-insensitive strip used by CurrentUserExtensions so
+            // a token carrying "role_admin" lands as the same ClaimTypes.Role
+            // value as "ROLE_ADMIN".
+            var name = raw.Value.StartsWith(AuthConstants.RolePrefix, StringComparison.OrdinalIgnoreCase)
+                ? raw.Value[AuthConstants.RolePrefix.Length..]
                 : raw.Value;
             identity.AddClaim(new Claim(ClaimTypes.Role, name));
         }

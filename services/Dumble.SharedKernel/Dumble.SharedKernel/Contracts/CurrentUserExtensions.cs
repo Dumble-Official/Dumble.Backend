@@ -1,3 +1,4 @@
+using Dumble.SharedKernel.Authentication;
 using Dumble.SharedKernel.Enums;
 
 namespace Dumble.SharedKernel.Contracts;
@@ -7,14 +8,16 @@ public static class CurrentUserExtensions
     public static bool IsInRole(this CurrentUser user, UserType role)
     {
         if (user.UserType == role) return true;
+        if (user.Roles is null) return false;
 
         var roleName = role.ToString().ToUpperInvariant();
         var snakeName = ToUpperSnake(role.ToString());
 
         foreach (var raw in user.Roles)
         {
-            var stripped = raw.StartsWith("ROLE_", StringComparison.OrdinalIgnoreCase)
-                ? raw[5..]
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            var stripped = raw.StartsWith(AuthConstants.RolePrefix, StringComparison.OrdinalIgnoreCase)
+                ? raw[AuthConstants.RolePrefix.Length..]
                 : raw;
             if (stripped.Equals(roleName, StringComparison.OrdinalIgnoreCase)) return true;
             if (stripped.Equals(snakeName, StringComparison.OrdinalIgnoreCase)) return true;

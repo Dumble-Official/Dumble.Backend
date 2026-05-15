@@ -35,4 +35,35 @@ public class CurrentUserExtensionsTests
         Assert.True(user.IsInAnyRole(UserType.Admin, UserType.Trainer));
         Assert.False(user.IsInAnyRole(UserType.Admin, UserType.Moderator));
     }
+
+    [Fact]
+    public void IsInRole_returns_false_for_empty_roles_list_when_userType_does_not_match()
+    {
+        // Most-likely production state right after registration (UserType=Participant,
+        // no admin/moderator elevation yet) — extension must report 'not in role'
+        // rather than throw on the empty enumerable.
+        var user = With(UserType.Participant);
+        Assert.False(user.IsInRole(UserType.Admin));
+        Assert.False(user.IsInAnyRole(UserType.Admin, UserType.Moderator));
+    }
+
+    [Theory]
+    [InlineData("   ")]
+    [InlineData("")]
+    [InlineData("\t\n")]
+    public void IsInRole_ignores_whitespace_only_role_strings(string blank)
+    {
+        var user = With(UserType.Participant, blank);
+        Assert.False(user.IsInRole(UserType.Admin));
+    }
+
+    [Theory]
+    [InlineData("role_admin", UserType.Admin, true)]      // lowercase prefix accepted (case-insensitive strip)
+    [InlineData("Role_Admin", UserType.Admin, true)]      // mixed-case prefix
+    [InlineData("random-string", UserType.Admin, false)]  // non-canonical, no match
+    [InlineData("AdminBackup", UserType.Admin, false)]    // substring, no false-positive
+    public void IsInRole_handles_non_canonical_inputs(string role, UserType target, bool expected)
+    {
+        Assert.Equal(expected, With(UserType.Participant, role).IsInRole(target));
+    }
 }
