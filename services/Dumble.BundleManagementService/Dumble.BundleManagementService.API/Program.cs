@@ -1,8 +1,9 @@
-using System.Text;
+using Dumble.BundleManagementService.API.Authentication;
 using Dumble.BundleManagementService.Application;
 using Dumble.BundleManagementService.Infrastructure;
 using FastEndpoints;
 using FastEndpoints.Swagger;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 
@@ -47,12 +48,15 @@ builder.Services.AddAuthentication(opt =>
     };
 });
 builder.Services.AddAuthorization();
+builder.Services.AddTransient<IClaimsTransformation, RolesClaimsTransformation>();
+
 builder.Services.AddFastEndpoints().SwaggerDocument();
 
 var app = builder.Build();
 
-app.UseAuthentication();
+app.UseHttpsRedirection();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.UseFastEndpoints().UseSwaggerGen();
