@@ -9,6 +9,7 @@ internal static class ExceptionMapping
 {
     public static IApplicationBuilder UseExceptionMapping(this IApplicationBuilder app)
     {
+        var env = app.ApplicationServices.GetRequiredService<IHostEnvironment>();
         return app.UseExceptionHandler(handler =>
         {
             handler.Run(async ctx =>
@@ -28,11 +29,24 @@ internal static class ExceptionMapping
                 ctx.Response.StatusCode = (int)status;
                 ctx.Response.ContentType = "application/problem+json";
 
+                // Production: hide internals on 500 — no stack traces over the wire.
+                // Development: expose the exception so local debugging doesn't
+                // require attaching a debugger to see what blew up.
+                string? detail;
+                if (status == HttpStatusCode.InternalServerError)
+                {
+                    detail = env.IsDevelopment() ? ex?.ToString() : null;
+                }
+                else
+                {
+                    detail = ex?.Message;
+                }
+
                 var problem = new ProblemDetails
                 {
                     Status = (int)status,
                     Title = title,
-                    Detail = status == HttpStatusCode.InternalServerError ? null : ex?.Message
+                    Detail = detail
                 };
 
                 await ctx.Response.WriteAsJsonAsync(problem);

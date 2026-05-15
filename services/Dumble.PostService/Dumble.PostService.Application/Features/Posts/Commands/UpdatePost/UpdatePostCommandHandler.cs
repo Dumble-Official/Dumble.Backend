@@ -1,12 +1,10 @@
 using MediatR;
-using MassTransit;
 using Dumble.PostService.Application.Contracts;
 using Dumble.PostService.Contracts.Posts;
 using Dumble.PostService.Domain.Entities;
 using Dumble.PostService.Domain.Enums;
 using Dumble.SharedKernel.Contracts;
 using Dumble.SharedKernel.Enums;
-using Dumble.SharedKernel.Events.Posts;
 
 namespace Dumble.PostService.Application.Features.Posts.Commands.UpdatePost;
 
@@ -15,18 +13,15 @@ public class UpdatePostCommandHandler : IRequestHandler<UpdatePostCommand, PostR
     private readonly IPostRepository _postRepository;
     private readonly IHashtagRepository _hashtagRepository;
     private readonly ILoggedInUserService _userService;
-    private readonly IPublishEndpoint _publishEndpoint;
 
     public UpdatePostCommandHandler(
         IPostRepository postRepository,
         IHashtagRepository hashtagRepository,
-        ILoggedInUserService userService,
-        IPublishEndpoint publishEndpoint)
+        ILoggedInUserService userService)
     {
         _postRepository = postRepository;
         _hashtagRepository = hashtagRepository;
         _userService = userService;
-        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<PostResponse> Handle(UpdatePostCommand request, CancellationToken ct)
@@ -36,6 +31,12 @@ public class UpdatePostCommandHandler : IRequestHandler<UpdatePostCommand, PostR
 
         if (post is null || post.Status == PostStatus.Deleted)
             throw new KeyNotFoundException($"Post {request.PostId} not found");
+
+        // NOTE: race window — between this read and UpdateAsync below, a
+        // concurrent SoftDelete can flip Status to Deleted and our save would
+        // overwrite. Tracked as a follow-up: needs an EF rowversion concurrency
+        // token (schema change) OR a WHERE clause guard in UpdateAsync via
+        // ExecuteUpdateAsync. Out of scope for this PR.
 
         var canModerate = currentUser.IsInAnyRole(UserType.Admin, UserType.Moderator);
         if (post.AuthorId != currentUser.Id && !canModerate)
@@ -77,12 +78,11 @@ public class UpdatePostCommandHandler : IRequestHandler<UpdatePostCommand, PostR
             .Where(n => !string.IsNullOrEmpty(n))
             .ToList();
 
-        await _publishEndpoint.Publish(new PostUpdatedEvent(
-            post.Id.ToString(),
-            post.AuthorId,
-            currentHashtags,
-            new DateTimeOffset(post.UpdatedAt, TimeSpan.Zero)
-        ), ct);
+        // PostUpdatedEvent publish removed: no consumer exists yet (neither
+        // SocialService nor NotificationService binds to post.updated.*). A
+        // fire-and-forget publish to nothing is wasted I/O + a misleading
+        // audit trail. Re-add together with the consumer + outbox in a
+        // follow-up PR.
 
         return new PostResponse(
             post.Id, post.AuthorId, post.AuthorDisplayName, post.AuthorProfileImage,

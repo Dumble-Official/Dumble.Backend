@@ -19,7 +19,7 @@ public class CreatePostEndpoint(IMediator mediator) : Endpoint<CreatePostRequest
     {
         var images = Files.Count == 0
             ? null
-            : Files.Select(f => new UploadedImage(f.OpenReadStream(), f.FileName, f.ContentType)).ToList();
+            : Files.Select(f => new UploadedImage(f.OpenReadStream(), f.FileName, f.ContentType, f.Length)).ToList();
 
         var command = new CreatePostCommand(req.Content, req.GymId, req.Hashtags, images);
         var result = await mediator.Send(command, ct);

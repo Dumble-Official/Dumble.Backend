@@ -52,9 +52,19 @@ public class CreatePostCommandHandler : IRequestHandler<CreatePostCommand, PostR
 
         if (request.Images is { Count: > 0 })
         {
+            // Per-file size cap. Each image must be ≤ 5 MB; the Kestrel /
+            // FormOptions caps in Program.cs cover the whole multipart request,
+            // but a single oversize file should be rejected before we open the
+            // stream and start streaming bytes to Cloudinary.
+            const long PerFileBytesCap = 5L * 1024 * 1024;
             for (var i = 0; i < request.Images.Count; i++)
             {
                 var image = request.Images[i];
+                if (image.Length > PerFileBytesCap)
+                {
+                    throw new ArgumentException(
+                        $"Image '{image.FileName}' is {image.Length} bytes; per-file cap is {PerFileBytesCap}.");
+                }
                 // Dispose the upload stream as soon as we're done with it.
                 // Without this a client disconnecting mid-upload leaves the
                 // ASP.NET buffer pinned until GC; under load that exhausts
