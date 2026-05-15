@@ -1,0 +1,90 @@
+spring:
+  application:
+    name: payment-service
+  profiles:
+    active: dev
+
+  datasource:
+    url: ${PAYMENT_DB_URL:jdbc:postgresql://localhost:5432/dumble_payment}
+    username: ${PAYMENT_DB_USERNAME:postgres}
+    password: ${PAYMENT_DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    # Publisher confirms (correlated) + returns — outbox publisher relies on
+    # the ConfirmCallback / ReturnsCallback to flip PUBLISHED only on broker
+    # ack, otherwise send() lies about delivery (see bug_023).
+    publisher-confirm-type: correlated
+    publisher-returns: true
+
+server:
+  port: 8183
+  servlet:
+    context-path: /api
+
+# Service-to-service auth — Class B system JWT (Decision 9.3). Caller signs with
+# its own key; we validate against the configured key here. v1 uses one shared
+# key across the platform; the contract documents key-per-service so the future
+# rotation path is open.
+service-jwt:
+  signing-key: ${SERVICE_JWT_SIGNING_KEY:dev-only-replace-in-prod}
+  issuer: payment
+  ttl-seconds: 60
+
+# Paymob — Decision 2.1 + 10.2. Real keys live in env; the dev defaults are
+# obviously-fake stubs that the StartupGuard will refuse to boot with in any
+# non-dev/test/local profile.
+paymob:
+  enabled: ${PAYMOB_ENABLED:false}     # false → use stub provider for dev/test
+  api-key: ${PAYMOB_API_KEY:dev-only-paymob-api-key}
+  hmac-secret: ${PAYMOB_HMAC_SECRET:dev-only-paymob-hmac-secret}
+  base-url: ${PAYMOB_BASE_URL:https://accept.paymob.com/api}
+  # Boot-time guard refuses to start when a key starts with the production
+  # prefix and the active profile isn't "prod" (Decision 10.3).
+  prod-key-prefix: ${PAYMOB_PROD_KEY_PREFIX:live_}
+
+payment:
+  currency: EGP
+  idempotency:
+    ttl-hours: 24                       # Decision 3.2
+  webhook:
+    process-delay-ms: 1000              # Phase-2 worker tick (Decision 4.3)
+    max-attempts: 10
+  reconciliation:
+    cron: "0 30 3 * * *"                # 03:30 UTC daily — after Subscription's cohort job
+    enabled: true
+  outbox:
+    publish-delay-ms: 2000
+    in-flight-grace-seconds: 60        # IN_FLIGHT rows older than this reset to PENDING
+  scheduling:
+    enabled: true                       # set false in test profile to suppress @Scheduled jobs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true

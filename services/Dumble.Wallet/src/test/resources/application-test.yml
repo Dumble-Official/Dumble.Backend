@@ -1,0 +1,35 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:dumble_wallet_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+
+  flyway:
+    enabled: false
+
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+
+# Local-only — must be >= 32 bytes for SystemSigningKey to accept it.
+jwt:
+  secret: dGVzdC1qd3Qtc2VjcmV0LWZvci1sb2NhbC1ydW5zLW9ubHktMzItYnl0ZXM=
+service-jwt:
+  signing-key: dGVzdC1zZXJ2aWNlLWp3dC1zZWNyZXQtZm9yLWxvY2FsLXJ1bnMtb25seS0zMi1ieXRlcw==
+
+services:
+  payment:
+    base-url: http://localhost:8183
+
+wallet:
+  scheduling:
+    enabled: false
