@@ -15,6 +15,15 @@ builder.WebHost.ConfigureKestrel(opt =>
 
 builder.Services.AddApplication().AddInfrastructure(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
+
+// JWT bearer auth — validates the same HS256 signature the Auth service issues.
+// Defense in depth: the gateway is the primary entry point but we don't want a
+// lateral attacker inside the cluster to forge a token by hitting us directly.
+var jwtSecret = builder.Configuration["Jwt:Secret"]
+    ?? builder.Configuration["JWT_SECRET"]
+    ?? throw new InvalidOperationException("JWT_SECRET env var is required");
+var signingKey = new SymmetricSecurityKey(Convert.FromBase64String(jwtSecret));
+
 builder.Services.AddAuthentication(opt =>
 {
     opt.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -22,17 +31,19 @@ builder.Services.AddAuthentication(opt =>
 }).AddJwtBearer(opt =>
 {
     opt.RequireHttpsMetadata = builder.Environment.IsProduction();
+    // Keep claim names as-issued by the JWT (sub, userId, displayName, etc.)
+    // instead of remapping sub → ClaimTypes.NameIdentifier.
+    opt.MapInboundClaims = false;
     opt.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
+        // Auth service does not set issuer/audience — only validate what's set.
+        ValidateIssuer = false,
+        ValidateAudience = false,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-        ValidAudience = builder.Configuration["Jwt:Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"] ?? "this is a very secure secret key for jwt token generation")),
-        RoleClaimType = "roles"
+        RequireSignedTokens = true,
+        IssuerSigningKey = signingKey,
+        ClockSkew = TimeSpan.FromSeconds(30)
     };
 });
 builder.Services.AddAuthorization();

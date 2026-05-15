@@ -1,6 +1,6 @@
 package com.dumble.service.gym.service.impl;
 
-import com.dumble.service.gym.client.UserClient;
+import com.dumble.service.gym.util.TokenExtractor;
 import com.dumble.service.gym.domain.dto.*;
 import com.dumble.service.gym.domain.entity.Gym;
 import com.dumble.service.gym.domain.enumuration.GenderType;
@@ -33,16 +33,18 @@ public class GymServiceImpl implements GymService {
     private final GymMapper gymMapper;
     private final AmenityRepository amenityRepository;
     private final GymStaffService gymStaffService;
-    private final UserClient userClient;
+    private final TokenExtractor tokenExtractor;
 
     @Override
     @Transactional
     public GymResponse createGym(GymCreateRequest request, String token) {
 
-        UserResponse user = userClient.getCurrentUser(token);
+        UserResponse user = tokenExtractor.extractUser(token);
 
-        if (!"GYM".equals(user.getUserType())) {
-            throw new BadRequestException("User must have 'GYM' type to create a gym profile.");
+        // Only GYM_OWNER (the human who owns gyms) can create a gym profile.
+        // GYM is the role for the gym page itself, not for creating new ones.
+        if (!"GYM_OWNER".equals(user.getUserType())) {
+            throw new BadRequestException("Only users with the GYM_OWNER role can create a gym profile.");
         }
 
         Gym gym = gymMapper.toEntity(request);
@@ -50,7 +52,7 @@ public class GymServiceImpl implements GymService {
         gym.setStatus(GymStatus.PENDING);
         gym.setIsVerified(false);
 
-        if(request.getAmenityIds() != null || !request.getAmenityIds().isEmpty()) {
+        if (request.getAmenityIds() != null && !request.getAmenityIds().isEmpty()) {
             gym.setAmenities(new HashSet<>(amenityRepository.findAllById(request.getAmenityIds())));
         }
 
@@ -68,7 +70,7 @@ public class GymServiceImpl implements GymService {
     @Transactional
     public GymResponse updateGym(UUID gymId, GymUpdateRequest request, String token) {
 
-        UserResponse user = userClient.getCurrentUser(token);
+        UserResponse user = tokenExtractor.extractUser(token);
 
         Gym gym = gymRepository.findById(gymId)
                 .orElseThrow(() -> new ResourceNotFoundException("Gym not found with id: " + gymId));
@@ -76,7 +78,7 @@ public class GymServiceImpl implements GymService {
         boolean hasPermission = gymStaffService.isUserHasRole(gymId, user.getId(), StaffRole.GYM)
                 || gymStaffService.isUserHasRole(gymId, user.getId(), StaffRole.MODERATOR);
 
-        if(!hasPermission) {
+        if (!hasPermission) {
             throw new UnauthorizedAccessException("You do not have permission to update this gym.");
         }
 
@@ -88,7 +90,7 @@ public class GymServiceImpl implements GymService {
     @Transactional
     public void deleteGym(UUID gymId, String token) {
 
-        UserResponse user = userClient.getCurrentUser(token);
+        UserResponse user = tokenExtractor.extractUser(token);
 
         Gym gym = gymRepository.findById(gymId)
                 .orElseThrow(() -> new ResourceNotFoundException("Gym not found with id: " + gymId));
@@ -110,14 +112,15 @@ public class GymServiceImpl implements GymService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<GymResponse> getAllGyms(String name, GenderType genderType, Boolean verified, GymStatus status, Pageable pageable) {
+    public Page<GymResponse> getAllGyms(String name, GenderType genderType, Boolean verified, GymStatus status,
+            Pageable pageable) {
 
         Specification<Gym> spec = Specification.allOf(GymSpecifications.hasName(name))
                 .and(GymSpecifications.hasGender(genderType))
                 .and(GymSpecifications.isVerified(verified))
                 .and(GymSpecifications.hasStatus(status));
 
-        return gymRepository.findAll(spec,pageable).map(gymMapper::toDto);
+        return gymRepository.findAll(spec, pageable).map(gymMapper::toDto);
     }
 
     @Override

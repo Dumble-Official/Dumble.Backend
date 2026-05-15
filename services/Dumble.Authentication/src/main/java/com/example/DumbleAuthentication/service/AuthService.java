@@ -53,12 +53,30 @@ public class AuthService {
         this.userDetailsService = userDetailsService;
     }
 
+    /**
+     * Issues a 60s token for SignalR WebSocket negotiation. Caller must already
+     * be authenticated (regular access token in Authorization header).
+     */
+    public String issueHubToken(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        if (!user.isActive()) {
+            throw new IllegalStateException("Account is deactivated");
+        }
+        UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+        return jwtService.generateHubToken(userDetails, user);
+    }
+
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         String email = request.getEmail().trim().toLowerCase();
 
         if (userRepository.existsByEmail(email)) {
-            throw new IllegalArgumentException("Email is already registered");
+            // Generic message: same response shape regardless of whether the
+            // email is in use or merely fails some other validation. Prevents
+            // attacker enumeration of registered accounts by submitting candidate
+            // addresses and observing which path returns "already registered".
+            throw new IllegalArgumentException("Registration could not be completed. Try a different email or sign in.");
         }
 
         User user = new User();
@@ -95,6 +113,16 @@ public class AuthService {
     public AuthResponse refreshToken(String refreshTokenValue) {
         RefreshToken refreshToken = jwtService.validateRefreshToken(refreshTokenValue);
         User user = refreshToken.getUser();
+
+        // Defence-in-depth: /api/auth/refresh is in the gateway's PUBLIC_PATHS,
+        // which means the BannedUserFilter does NOT run on this path. BanService
+        // does delete refresh tokens at ban time, but a token landing in the
+        // narrow window between DB-write and refresh-revoke would otherwise
+        // mint a fresh access token. Re-check active status here.
+        if (!user.isActive()) {
+            jwtService.deleteRefreshToken(refreshTokenValue);
+            throw new IllegalStateException("Account is deactivated");
+        }
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
         String newAccessToken = jwtService.generateAccessToken(userDetails, user);

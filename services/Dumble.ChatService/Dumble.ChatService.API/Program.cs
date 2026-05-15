@@ -1,4 +1,3 @@
-using System.Text;
 using FastEndpoints;
 using FastEndpoints.Swagger;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -35,23 +34,33 @@ builder.Services.SwaggerDocument(o =>
     };
 });
 
-// JWT Authentication
+// JWT Authentication — validates HS256 signature using the shared secret.
+var jwtSecret = builder.Configuration["Jwt:Secret"]
+    ?? builder.Configuration["JWT_SECRET"]
+    ?? throw new InvalidOperationException("JWT_SECRET env var is required");
+var signingKey = new SymmetricSecurityKey(Convert.FromBase64String(jwtSecret));
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        // Keep claim names as-issued by the JWT (sub, userId, displayName, etc.)
+        // instead of remapping sub → ClaimTypes.NameIdentifier.
+        options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = true,
-            ValidateAudience = true,
+            ValidateIssuer = false,
+            ValidateAudience = false,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"] ?? throw new InvalidOperationException("Jwt:Secret configuration is required")))
+            RequireSignedTokens = true,
+            IssuerSigningKey = signingKey,
+            ClockSkew = TimeSpan.FromSeconds(30)
         };
 
-        // Allow SignalR to receive the token via query string
+        // SignalR negotiates over HTTP and upgrades to WebSocket; browsers
+        // disallow custom headers on the upgrade so the token is passed via
+        // query string. Clients should use a short-lived hub token issued by
+        // POST /api/auth/hub-token to bound the leakage window.
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = context =>

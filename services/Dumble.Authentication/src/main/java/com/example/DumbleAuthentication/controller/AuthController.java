@@ -69,4 +69,17 @@ public class AuthController {
         AuthResponse response = authService.googleLogin(request);
         return ResponseEntity.ok(response);
     }
+
+    /**
+     * Mints a short-lived (≈60s) token for SignalR WebSocket auth. Clients
+     * call this with their regular access token in the Authorization header,
+     * then pass the returned token in the `?access_token=` query string when
+     * opening the hub. Limits browser-history / Referer / proxy-log leakage
+     * to a 60-second blast radius.
+     */
+    @PostMapping("/hub-token")
+    public ResponseEntity<Map<String, String>> hubToken(Authentication authentication) {
+        String token = authService.issueHubToken(authentication.getName());
+        return ResponseEntity.ok(Map.of("token", token));
+    }
 }

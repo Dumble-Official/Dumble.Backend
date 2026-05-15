@@ -58,6 +58,11 @@ public class SecurityConfig {
                                 "/api/auth/google")
                         .permitAll()
                         .requestMatchers("/error").permitAll()
+                        // Ban management — ADMIN and MODERATOR only
+                        .requestMatchers(HttpMethod.POST, "/api/users/*/ban", "/api/users/*/unban")
+                        .hasAnyRole("ADMIN", "MODERATOR")
+                        .requestMatchers(HttpMethod.GET, "/api/users/banned")
+                        .hasAnyRole("ADMIN", "MODERATOR")
                         // Authenticated endpoints
                         .requestMatchers("/api/auth/logout", "/api/auth/change-password").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/users/me").authenticated()

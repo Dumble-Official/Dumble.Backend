@@ -32,22 +32,26 @@ public static class DependencyInjection
         services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnection));
         services.AddScoped<IFeedCacheService, RedisFeedCacheService>();
 
-        // HTTP clients
         services.AddHttpContextAccessor();
 
+        // Current user is read from validated JWT claims — no extra HTTP call.
+        services.AddScoped<ILoggedInUserService, LoggedInUserService>();
+
+        // PostService — fixed wrong default port (was 5020, Post listens on 5134).
         services.AddHttpClient<IPostServiceClient, PostServiceClient>(client =>
         {
-            client.BaseAddress = new Uri(configuration["Services:PostService"] ?? "http://localhost:5020");
+            client.BaseAddress = new Uri(configuration["Services:PostService"] ?? "http://localhost:5134");
+            client.Timeout = TimeSpan.FromSeconds(10);
         });
 
+        // RankingApi is optional — when not configured, RankingServiceClient
+        // detects the missing config and short-circuits to an empty result
+        // (logging a warning) instead of silently swallowing connection refused.
+        var rankingUrl = configuration["Services:RankingApi"];
         services.AddHttpClient<IRankingServiceClient, RankingServiceClient>(client =>
         {
-            client.BaseAddress = new Uri(configuration["Services:RankingApi"] ?? "http://localhost:8000");
-        });
-
-        services.AddHttpClient<ILoggedInUserService, LoggedInUserService>(client =>
-        {
-            client.BaseAddress = new Uri(configuration["Services:AuthService"] ?? "http://localhost:8081");
+            client.BaseAddress = new Uri(rankingUrl ?? "http://ranking-not-configured.invalid");
+            client.Timeout = TimeSpan.FromSeconds(5);
         });
 
         // MassTransit + RabbitMQ

@@ -1,6 +1,6 @@
 package com.dumble.service.gym.service.impl;
 
-import com.dumble.service.gym.client.UserClient;
+import com.dumble.service.gym.util.TokenExtractor;
 import com.dumble.service.gym.domain.dto.AddGymStaffRequest;
 import com.dumble.service.gym.domain.dto.StaffResponse;
 import com.dumble.service.gym.domain.dto.UserResponse;
@@ -31,13 +31,14 @@ public class GymStaffServiceImpl implements GymStaffService {
     private final GymStaffRepository gymStaffRepository;
     private final GymRepository gymRepository;
     private final StaffMapper staffMapper;
-    private final UserClient userClient;
+    private final TokenExtractor tokenExtractor;
+
 
     @Override
     @Transactional
     public StaffResponse addGymStaff(UUID gymId, AddGymStaffRequest request, String token) {
 
-        UserResponse currentUser = userClient.getCurrentUser(token);
+        UserResponse currentUser = tokenExtractor.extractUser(token);
         Gym gym = gymRepository.findById(gymId)
                 .orElseThrow(() -> new ResourceNotFoundException("Gym not found with id: " + gymId));
 
@@ -78,7 +79,7 @@ public class GymStaffServiceImpl implements GymStaffService {
     @Transactional
     public void removeGymStaff(UUID gymId, UUID userId,String token) {
 
-        UserResponse currentUser = userClient.getCurrentUser(token);
+        UserResponse currentUser = tokenExtractor.extractUser(token);
 
         Gym gym = gymRepository.findById(gymId)
                 .orElseThrow(() -> new ResourceNotFoundException("Gym not found"));

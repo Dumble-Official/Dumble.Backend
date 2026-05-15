@@ -4,6 +4,8 @@ import com.example.DumbleAuthentication.domain.RefreshToken;
 import com.example.DumbleAuthentication.domain.User;
 import com.example.DumbleAuthentication.exception.TokenRefreshException;
 import com.example.DumbleAuthentication.repository.RefreshTokenRepository;
+import com.example.DumbleAuthentication.repository.UserRepository;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -28,6 +30,7 @@ import java.util.function.Function;
 public class JwtService {
 
     private final RefreshTokenRepository refreshTokenRepository;
+    private final UserRepository userRepository;
 
     @Value("${jwt.secret}")
     private String secretKey;
@@ -38,27 +41,46 @@ public class JwtService {
     @Value("${jwt.refresh-token-expiration}")
     private long refreshTokenExpiration;
 
-    public JwtService(RefreshTokenRepository refreshTokenRepository) {
+    @Value("${jwt.hub-token-expiration}")
+    private long hubTokenExpiration;
+
+    public JwtService(RefreshTokenRepository refreshTokenRepository,
+                      UserRepository userRepository) {
         this.refreshTokenRepository = refreshTokenRepository;
+        this.userRepository = userRepository;
     }
 
     // ── Access Token Operations ──────────────────────────────────────────
 
     public String generateAccessToken(UserDetails userDetails, User user) {
+        return buildToken(baseClaims(userDetails, user), userDetails.getUsername(), accessTokenExpiration);
+    }
+
+    /**
+     * Short-lived token (≈60s) for SignalR WebSocket auth. Same signing key
+     * and claims as the regular access token — the gateway validates it the
+     * same way — but with a `purpose=hub` claim so logging/audit can tell
+     * them apart, and an aggressive expiration so browser-history /
+     * Referer-header leakage of the URL is bounded.
+     */
+    public String generateHubToken(UserDetails userDetails, User user) {
+        Map<String, Object> claims = baseClaims(userDetails, user);
+        claims.put("purpose", "hub");
+        return buildToken(claims, userDetails.getUsername(), hubTokenExpiration);
+    }
+
+    private Map<String, Object> baseClaims(UserDetails userDetails, User user) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("roles", userDetails.getAuthorities().stream()
                 .map(Object::toString)
                 .toList());
-        claims.put("userId", user.getId().toString());
-        claims.put("email", user.getEmail());
-        String displayName = user.getDisplayName() != null ? user.getDisplayName()
-                : (user.getFirstName() + " " + user.getLastName()).trim();
-        claims.put("displayName", displayName);
-        if (user.getPfp() != null) {
-            claims.put("profileImage", user.getPfp());
-        }
-        claims.put("userType", user.getUserType().name());
-        return buildToken(claims, userDetails.getUsername(), accessTokenExpiration);
+        claims.put("userId", user.getId());
+        // Identity claims so downstream services don't need an extra /api/users/me round-trip
+        // every request. Stale display names on cached tokens are acceptable until next refresh.
+        if (user.getDisplayName() != null) claims.put("displayName", user.getDisplayName());
+        if (user.getPfp() != null) claims.put("profileImage", user.getPfp());
+        if (user.getUserType() != null) claims.put("userType", user.getUserType().name());
+        return claims;
     }
 
     public String extractUsername(String token) {
@@ -78,11 +100,20 @@ public class JwtService {
 
     @Transactional
     public RefreshToken generateRefreshToken(User user) {
-        // Remove any existing refresh tokens for this user
-        refreshTokenRepository.deleteByUser(user);
+        // Pessimistic-write lock on the user row serializes concurrent refresh-token
+        // generation for the same user. Without it two parallel callers each see
+        // an empty token table after their respective deletes and both `save` a
+        // new row, leaving two live refresh tokens for the same user — a real
+        // identity-leak window if one is later exfiltrated while the other is
+        // still in active use.
+        User locked = userRepository.findByIdForUpdate(user.getId())
+                .orElseThrow(() -> new UsernameNotFoundException(
+                        "User vanished mid-refresh: " + user.getId()));
+
+        refreshTokenRepository.deleteByUser(locked);
 
         RefreshToken refreshToken = new RefreshToken();
-        refreshToken.setUser(user);
+        refreshToken.setUser(locked);
         refreshToken.setToken(UUID.randomUUID().toString());
         refreshToken.setExpiryDate(Instant.now().plusMillis(refreshTokenExpiration));
 

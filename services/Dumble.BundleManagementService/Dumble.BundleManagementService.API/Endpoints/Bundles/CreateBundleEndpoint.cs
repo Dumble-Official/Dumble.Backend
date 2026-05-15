@@ -13,7 +13,9 @@ internal sealed class CreateBundleEndpoint(ISender mediator) : Endpoint<CreateBu
     public override void Configure()
     {
         Post("/api/bundles");
-        Claims("userId");
+        // Authenticated by default. CreateBundleCommandHandler also enforces
+        // that only GymOwner / Trainer can author a bundle (subscription quota
+        // logic lives there).
         Options(x => x.WithTags("Bundles")
             .Accepts<CreateBundleRequest>("multipart/form-data"));
     }
