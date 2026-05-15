@@ -12,7 +12,7 @@ using Name = Dumble.BundleManagementService.Domain.BundleAggregate.ValueObjects.
 
 namespace Dumble.BundleManagementService.Application.Features.Bundles.Commands.CreateBundle;
 
-public class CreateBundleCommandHandler(
+internal sealed class CreateBundleCommandHandler(
     ILoggedInUserService loggedInUserService,
     IFileService fileService,
     IGenericRepository<Bundle, BundleId> bundlesRepository,

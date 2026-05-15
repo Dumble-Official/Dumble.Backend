@@ -2,7 +2,6 @@ using CloudinaryDotNet;
 using Dumble.BundleManagementService.Application.Contracts;
 using Dumble.BundleManagementService.Application.Contracts.Repositories;
 using Dumble.BundleManagementService.Infrastructure.Authentication;
-using Dumble.SharedKernel.Contracts;
 using Dumble.BundleManagementService.Infrastructure.Blobs;
 using Dumble.BundleManagementService.Infrastructure.Persistence.Data;
 using Dumble.BundleManagementService.Infrastructure.Persistence.Repositories;
