@@ -22,6 +22,7 @@ internal static class ExceptionMapping
                     UnauthorizedAccessException => (HttpStatusCode.Forbidden, "Forbidden"),
                     ValidationException => (HttpStatusCode.BadRequest, "Validation failed"),
                     ArgumentException => (HttpStatusCode.BadRequest, "Invalid request"),
+                    InvalidOperationException => (HttpStatusCode.BadRequest, "Invalid operation"),
                     _ => (HttpStatusCode.InternalServerError, "Unexpected error")
                 };
 

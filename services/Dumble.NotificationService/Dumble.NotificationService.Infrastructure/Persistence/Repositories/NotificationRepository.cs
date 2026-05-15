@@ -49,8 +49,13 @@ public class NotificationRepository : INotificationRepository
 
     public async Task MarkAsReadAsync(string id, CancellationToken ct)
     {
+        // Conditional set — only flip false→true so two concurrent retries
+        // can't double-decrement an unread counter computed off the result.
+        var filter = Builders<Notification>.Filter.And(
+            Builders<Notification>.Filter.Eq(n => n.Id, id),
+            Builders<Notification>.Filter.Eq(n => n.IsRead, false));
         var update = Builders<Notification>.Update.Set(n => n.IsRead, true);
-        await _context.Notifications.UpdateOneAsync(n => n.Id == id, update, cancellationToken: ct);
+        await _context.Notifications.UpdateOneAsync(filter, update, cancellationToken: ct);
     }
 
     public async Task MarkAllAsReadAsync(string recipientId, CancellationToken ct)

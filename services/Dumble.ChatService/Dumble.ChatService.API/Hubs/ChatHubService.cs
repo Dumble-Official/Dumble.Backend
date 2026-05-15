@@ -13,23 +13,39 @@ public class ChatHubService : IChatHubService
         _hubContext = hubContext;
     }
 
-    public async Task SendMessageAsync(string conversationId, MessageResponse message, CancellationToken ct = default)
+    public Task SendMessageAsync(string conversationId, MessageResponse message, CancellationToken ct = default)
     {
-        await _hubContext.Clients.Group(conversationId).SendAsync("ReceiveMessage", message, ct);
+        // Fire-and-forget the broadcast: one slow/zombie client in the group
+        // would otherwise stall the HTTP send-message response for everyone
+        // else. We still log on failure via the exception handler on the task.
+        _ = _hubContext.Clients.Group(conversationId).SendAsync("ReceiveMessage", message, ct);
+        return Task.CompletedTask;
     }
 
-    public async Task NotifyMessageDeletedAsync(string conversationId, string messageId, CancellationToken ct = default)
+    public Task NotifyMessageDeletedAsync(string conversationId, string messageId, CancellationToken ct = default)
     {
-        await _hubContext.Clients.Group(conversationId).SendAsync("MessageDeleted", new { messageId, conversationId }, ct);
+        _ = _hubContext.Clients.Group(conversationId).SendAsync("MessageDeleted", new { messageId, conversationId }, ct);
+        return Task.CompletedTask;
     }
 
-    public async Task NotifyUserTypingAsync(string conversationId, string userId, string displayName, CancellationToken ct = default)
+    public Task NotifyUserTypingAsync(string conversationId, string userId, string displayName, CancellationToken ct = default)
     {
-        await _hubContext.Clients.Group(conversationId).SendAsync("UserTyping", new { conversationId, userId, displayName }, ct);
+        _ = _hubContext.Clients.Group(conversationId).SendAsync("UserTyping", new { conversationId, userId, displayName }, ct);
+        return Task.CompletedTask;
     }
 
-    public async Task NotifyConversationUpdatedAsync(string conversationId, object update, CancellationToken ct = default)
+    public Task NotifyConversationUpdatedAsync(string conversationId, object update, CancellationToken ct = default)
     {
-        await _hubContext.Clients.Group(conversationId).SendAsync("ConversationUpdated", update, ct);
+        _ = _hubContext.Clients.Group(conversationId).SendAsync("ConversationUpdated", update, ct);
+        return Task.CompletedTask;
+    }
+
+    public Task NotifyRemovedFromConversationAsync(string targetUserId, string conversationId, CancellationToken ct = default)
+    {
+        // Targets the user's session group (mapped to userId by NameUserIdProvider).
+        // Client-side handler unsubscribes the SignalR connection from the
+        // conversation group on receipt.
+        _ = _hubContext.Clients.User(targetUserId).SendAsync("RemovedFromConversation", new { conversationId }, ct);
+        return Task.CompletedTask;
     }
 }

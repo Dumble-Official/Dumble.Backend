@@ -1,3 +1,4 @@
+using System.Net;
 using Dumble.ChatService.API.Authentication;
 using Dumble.ChatService.API.Errors;
 using Dumble.ChatService.API.Hubs;
@@ -84,11 +85,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 builder.Services.AddTransient<IClaimsTransformation, RolesClaimsTransformation>();
 
+// ForwardedHeaders only honours X-Forwarded-* when the immediate peer is in
+// Gateway:TrustedProxies (CSV of IPs). Empty / unset → keep the ASP.NET
+// loopback default. Clearing both lists unconditionally lets any client spoof
+// the headers and breaks every downstream IP-based control.
 builder.Services.Configure<ForwardedHeadersOptions>(opt =>
 {
     opt.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    opt.KnownNetworks.Clear();
-    opt.KnownProxies.Clear();
+    var trustedProxiesCsv = builder.Configuration["Gateway:TrustedProxies"];
+    if (!string.IsNullOrWhiteSpace(trustedProxiesCsv))
+    {
+        opt.KnownProxies.Clear();
+        opt.KnownNetworks.Clear();
+        foreach (var raw in trustedProxiesCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (IPAddress.TryParse(raw, out var ip))
+                opt.KnownProxies.Add(ip);
+        }
+    }
 });
 
 builder.Services.AddHealthChecks();

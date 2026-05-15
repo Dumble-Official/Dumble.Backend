@@ -4,7 +4,8 @@ using MediatR;
 namespace Dumble.ChatService.Application.Features.Conversations.Commands.RemoveParticipant;
 
 public class RemoveParticipantCommandHandler(
-    IConversationRepository conversationRepository
+    IConversationRepository conversationRepository,
+    IChatHubService hubService
 ) : IRequestHandler<RemoveParticipantCommand>
 {
     public async Task Handle(RemoveParticipantCommand request, CancellationToken cancellationToken)
@@ -20,5 +21,12 @@ public class RemoveParticipantCommandHandler(
 
         await conversationRepository.RemoveParticipantAsync(
             request.ConversationId, request.TargetUserId, cancellationToken);
+
+        // Notify the removed user's connected hub session so the client
+        // unsubscribes from the conversation group. Without this, an
+        // ex-participant with an existing WebSocket keeps receiving group
+        // broadcasts (privacy leak in the kick-from-group case).
+        await hubService.NotifyRemovedFromConversationAsync(
+            request.TargetUserId, request.ConversationId, cancellationToken);
     }
 }

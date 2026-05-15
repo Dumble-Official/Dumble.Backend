@@ -25,6 +25,16 @@ public class ChatHub : Hub
 
     public override async Task OnConnectedAsync()
     {
+        // The platform issues a short-lived JWT with purpose=hub specifically
+        // for SignalR connections so a leaked API token can't be repurposed
+        // for unbounded real-time access. Reject any token that doesn't carry
+        // the marker before we register presence or join groups.
+        var purpose = Context.User?.FindFirst("purpose")?.Value;
+        if (!string.Equals(purpose, "hub", StringComparison.Ordinal))
+        {
+            throw new HubException("Hub connections require a purpose=hub token (POST /api/auth/hub-token)");
+        }
+
         var userId = Context.UserIdentifier;
         if (userId is not null)
         {
