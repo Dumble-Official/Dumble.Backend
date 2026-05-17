@@ -106,6 +106,14 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             @Nonnull HttpServletResponse response,
             @Nonnull FilterChain filterChain) throws ServletException, IOException {
 
+        // CORS preflights are unauthenticated infrastructure traffic — counting
+        // them against the credential-abuse budget can lock real users out
+        // during a burst of preflighted requests from a busy SPA.
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         String path = request.getRequestURI();
         Integer cap = capsPerMinute.get(path);
         if (cap == null) {

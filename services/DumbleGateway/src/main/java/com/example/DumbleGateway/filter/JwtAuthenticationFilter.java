@@ -36,12 +36,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
     private final ObjectMapper objectMapper;
 
-    // Routes that do not require authentication
+    // Routes that do not require authentication. Includes the actuator
+    // liveness/readiness endpoints so external load balancers and orchestrators
+    // (k8s, ECS, ALB target group) can probe the gateway without minting a JWT.
     private static final Set<String> PUBLIC_PATHS = Set.of(
             "/api/auth/register",
             "/api/auth/login",
             "/api/auth/refresh",
-            "/api/auth/google"
+            "/api/auth/google",
+            "/actuator/health",
+            "/actuator/health/liveness",
+            "/actuator/health/readiness"
     );
 
     public JwtAuthenticationFilter(JwtService jwtService, ObjectMapper objectMapper) {

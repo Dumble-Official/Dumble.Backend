@@ -35,12 +35,17 @@ public class BannedUserFilter extends OncePerRequestFilter {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
-    // Same public routes as JwtAuthenticationFilter — no check needed
+    // Same public routes as JwtAuthenticationFilter — no check needed.
+    // Includes the actuator liveness/readiness endpoints so external probes
+    // don't hit Redis for every health check.
     private static final Set<String> PUBLIC_PATHS = Set.of(
             "/api/auth/register",
             "/api/auth/login",
             "/api/auth/refresh",
-            "/api/auth/google"
+            "/api/auth/google",
+            "/actuator/health",
+            "/actuator/health/liveness",
+            "/actuator/health/readiness"
     );
 
     public BannedUserFilter(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
