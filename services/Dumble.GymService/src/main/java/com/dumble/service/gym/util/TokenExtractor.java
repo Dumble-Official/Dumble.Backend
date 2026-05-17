@@ -42,9 +42,9 @@ public class TokenExtractor {
 
         Object userIdClaim = claims.get("userId");
         UUID uuid;
-        if (userIdClaim instanceof String s) {
+        if (userIdClaim instanceof String idStr) {
             try {
-                uuid = UUID.fromString(s);
+                uuid = UUID.fromString(idStr);
             } catch (IllegalArgumentException ex) {
                 throw new UnauthorizedAccessException("JWT 'userId' claim is not a valid UUID");
             }

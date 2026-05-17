@@ -3,7 +3,6 @@ package com.dumble.service.gym.security;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -32,9 +31,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Swagger / OpenAPI
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
-                        // Read-only public discovery (browse gyms / amenities catalog without login)
-                        .requestMatchers(HttpMethod.GET, "/gyms", "/gyms/", "/gyms/nearby", "/gyms/*").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/amenities", "/amenities/", "/amenities/search", "/amenities/*").permitAll()
+                        // Everything else (gyms catalog, amenities catalog, writes) requires a user
+                        // JWT — the app gates access at login so by the time a client hits any
+                        // /gyms or /amenities path it already has a token. No public-read carve-out
+                        // → no cross-service mismatch with the gateway's PUBLIC_PATHS allowlist.
                         .anyRequest().authenticated()
                 )
                 // JSON 401 for missing/invalid auth, JSON 403 for insufficient role.
