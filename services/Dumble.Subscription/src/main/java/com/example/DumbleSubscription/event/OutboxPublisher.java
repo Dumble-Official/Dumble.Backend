@@ -11,23 +11,32 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.core.MessagePropertiesBuilder;
+import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 /**
- * Drains pending OutboxEvent rows and publishes them to RabbitMQ. Runs every
- * 2 seconds; bounded batch size to avoid long transactions.
+ * Drains pending {@link OutboxEvent} rows and publishes them to RabbitMQ.
  *
- * Failures bump attempts + lastError but do not block subsequent events.
- * After N attempts a row could be moved to FAILED for manual inspection.
+ * <p>The payload is sent as raw bytes with explicit JSON content-type so the
+ * Jackson converter on the {@link RabbitTemplate} doesn't re-encode the
+ * already-serialized JSON string into an escaped string literal (bug_018).
+ *
+ * <p>Confirm-aware lifecycle (Subscription PDF Decision 8.5): a row moves
+ * PENDING → IN_FLIGHT in {@link OutboxPublishingPersister#claim} BEFORE the
+ * broker call so the asynchronous {@link OutboxConfirmCoordinator} can find
+ * it when the ack lands. Without IN_FLIGHT, a confirm could race the drain's
+ * commit and miss its target. Mirrors Wallet's publisher.
  */
 @Component
 @ConditionalOnProperty(name = "subscription.scheduling.enabled", havingValue = "true", matchIfMissing = true)
@@ -35,57 +44,58 @@ public class OutboxPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxPublisher.class);
     private static final int BATCH_SIZE = 50;
-    private static final int MAX_ATTEMPTS = 10;
 
     private final OutboxEventRepository repository;
+    private final OutboxPublishingPersister persister;
     private final RabbitTemplate rabbitTemplate;
+    private final long inFlightGraceSeconds;
 
-    public OutboxPublisher(OutboxEventRepository repository, RabbitTemplate rabbitTemplate) {
+    public OutboxPublisher(OutboxEventRepository repository,
+                           OutboxPublishingPersister persister,
+                           RabbitTemplate rabbitTemplate,
+                           @Value("${subscription.outbox.in-flight-grace-seconds:60}") long inFlightGraceSeconds) {
         this.repository = repository;
+        this.persister = persister;
         this.rabbitTemplate = rabbitTemplate;
+        this.inFlightGraceSeconds = inFlightGraceSeconds;
     }
 
-    @Scheduled(fixedDelay = 2000)
-    @Transactional
+    @Scheduled(fixedDelayString = "${subscription.outbox.publish-delay-ms:2000}")
     public void drain() {
+        // Recovery sweep first — any IN_FLIGHT row that hasn't seen a confirm
+        // within the grace window is reset to PENDING and re-published below.
+        persister.recoverStuckInFlight(Instant.now().minus(Duration.ofSeconds(inFlightGraceSeconds)));
+
         List<OutboxEvent> batch = repository.findByStatusOrderByCreatedAtAsc(
                 OutboxStatus.PENDING, PageRequest.of(0, BATCH_SIZE));
         for (OutboxEvent event : batch) {
-            try {
-                // bug_018 — payloadJson is already a serialized JSON object
-                // (OutboxWriter.toJson). Going through convertAndSend hits the
-                // Jackson2JsonMessageConverter wired in RabbitMQConfig, which
-                // would JSON-encode the String *again* — landing on the wire
-                // as a quoted/escaped string literal that breaks every
-                // downstream consumer. Send raw bytes with an explicit JSON
-                // content-type so the converter is bypassed.
-                Message msg = MessageBuilder
-                        .withBody(event.getPayloadJson().getBytes(StandardCharsets.UTF_8))
-                        .andProperties(MessagePropertiesBuilder.newInstance()
-                                .setContentType(MessageProperties.CONTENT_TYPE_JSON)
-                                .setContentEncoding(StandardCharsets.UTF_8.name())
-                                .build())
-                        .build();
-                rabbitTemplate.send(
-                        RabbitMQConfig.DUMBLE_EVENTS_EXCHANGE,
-                        event.getRoutingKey(),
-                        msg);
-                event.setStatus(OutboxStatus.PUBLISHED);
-                event.setPublishedAt(Instant.now());
-            } catch (AmqpException ex) {
-                event.setAttempts(event.getAttempts() + 1);
-                event.setLastError(truncate(ex.getMessage(), 1900));
-                if (event.getAttempts() >= MAX_ATTEMPTS) {
-                    event.setStatus(OutboxStatus.FAILED);
-                    log.error("Outbox event {} permanently FAILED after {} attempts: {}",
-                            event.getId(), event.getAttempts(), ex.getMessage());
-                }
-            }
+            Optional<OutboxEvent> claimed = persister.claim(event.getId());
+            if (claimed.isEmpty()) continue;
+            send(claimed.get());
         }
     }
 
-    private static String truncate(String s, int max) {
-        if (s == null) return null;
-        return s.length() <= max ? s : s.substring(0, max);
+    private void send(OutboxEvent event) {
+        String correlationId = event.getId().toString();
+        Message msg = MessageBuilder
+                .withBody(event.getPayloadJson().getBytes(StandardCharsets.UTF_8))
+                .andProperties(MessagePropertiesBuilder.newInstance()
+                        .setContentType(MessageProperties.CONTENT_TYPE_JSON)
+                        .setContentEncoding(StandardCharsets.UTF_8.name())
+                        .setCorrelationId(correlationId)
+                        .build())
+                .build();
+        try {
+            rabbitTemplate.send(
+                    RabbitMQConfig.DUMBLE_EVENTS_EXCHANGE,
+                    event.getRoutingKey(),
+                    msg,
+                    new CorrelationData(correlationId));
+        } catch (AmqpException ex) {
+            // Synchronous failure — channel closed, serialization issue, etc.
+            // The confirm callback will not fire; treat as nack.
+            log.warn("Outbox event {} send failed synchronously: {}", event.getId(), ex.getMessage());
+            persister.onSendFailed(event.getId(), ex.getMessage());
+        }
     }
 }
