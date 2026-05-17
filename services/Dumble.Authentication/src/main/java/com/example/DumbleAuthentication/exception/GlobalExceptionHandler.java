@@ -32,12 +32,17 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex) {
-        HttpStatus status = ex.getMessage().contains("already registered")
+        // Defensive: third-party libraries (Google API client, Guava
+        // Preconditions) throw IAE with no message — calling .contains on
+        // null would NPE and bubble up as 500.
+        String message = ex.getMessage();
+        HttpStatus status = message != null && message.contains("already registered")
                 ? HttpStatus.CONFLICT
                 : HttpStatus.BAD_REQUEST;
 
         return ResponseEntity.status(status)
-                .body(new ErrorResponse(status.value(), ex.getMessage()));
+                .body(new ErrorResponse(status.value(),
+                        message != null ? message : "Invalid request"));
     }
 
     @ExceptionHandler(IllegalStateException.class)

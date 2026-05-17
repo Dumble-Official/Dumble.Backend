@@ -220,10 +220,14 @@ public class AuthService {
                 throw new IllegalArgumentException("Invalid Google ID token");
             }
             return idToken.getPayload();
-        } catch (IllegalArgumentException e) {
-            throw e;
         } catch (Exception e) {
-            throw new IllegalArgumentException("Failed to verify Google ID token: " + e.getMessage());
+            // The Google client library throws bare IllegalArgumentException
+            // (with no message) for malformed tokens via Guava Preconditions.
+            // Rewrap unconditionally so we never bubble a null-message IAE up
+            // to the global handler — keeps the response a clean 400 with a
+            // useful message instead of leaking the inner null.
+            String detail = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            throw new IllegalArgumentException("Invalid Google ID token: " + detail);
         }
     }
 

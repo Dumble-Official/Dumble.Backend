@@ -39,7 +39,7 @@ public class UserTypeRenameMigration implements CommandLineRunner {
     @Transactional
     public void run(String... args) {
         try {
-            int rows = jdbc.update("UPDATE users SET user_type = 'GYM_OWNER' WHERE user_type = 'GYM'");
+            int rows = jdbc.update("UPDATE app_user SET user_type = 'GYM_OWNER' WHERE user_type = 'GYM'");
             if (rows > 0) {
                 log.info("Migrated {} user(s) from legacy 'GYM' user_type to 'GYM_OWNER'", rows);
             }
