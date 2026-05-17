@@ -55,6 +55,12 @@
 			<artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
 		</dependency>
 
+		<!-- Actuator: liveness/readiness probes for orchestrators and LBs -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
 		<!-- JWT Support (same version as Auth service) -->
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
