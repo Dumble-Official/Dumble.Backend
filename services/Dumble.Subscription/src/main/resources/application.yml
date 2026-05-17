@@ -48,7 +48,7 @@ services:
   wallet:
     base-url: ${WALLET_SERVICE_URL:http://localhost:8184}
   bundle-management:
-    base-url: ${BUNDLE_MANAGEMENT_URL:http://localhost:8081}
+    base-url: ${BUNDLE_MANAGEMENT_URL:http://localhost:5012}
   gym:
     base-url: ${GYM_SERVICE_URL:http://localhost:8181}
   authentication:
