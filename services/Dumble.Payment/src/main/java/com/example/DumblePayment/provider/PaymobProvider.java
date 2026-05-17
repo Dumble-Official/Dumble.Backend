@@ -39,14 +39,12 @@ import java.util.UUID;
  * </ul>
  *
  * Webhook signature verification (Decision 4.1) uses HMAC-SHA512 with
- * constant-time comparison. The current implementation HMACs the raw HTTP
- * request body — Paymob's real scheme HMACs a documented field-concatenation
- * of {@code obj.*} fields, so this path is INTENTIONALLY ELIDED in v1
- * (matching the elided charge / refund / payout HTTP paths) and must be
- * filled in before {@code paymob.enabled=true} ships to any environment that
- * sees real Paymob traffic. The {@code paymob.enabled} flag does NOT relax
- * the HMAC path — even in stub mode the comparison is exercised when the
- * signature header is present, so misconfigured tests fail loudly.
+ * constant-time comparison. Paymob signs an ordered concatenation of 20
+ * specific {@code obj.*} fields (NOT the raw HTTP body) — see
+ * {@link #buildPaymobCanonical(JsonNode)} for the exact field list and order
+ * lifted from Paymob's webhook docs. The {@code paymob.enabled} flag does
+ * NOT relax the HMAC path — even in stub mode the comparison is exercised
+ * when the signature header is present, so misconfigured tests fail loudly.
  */
 @Component
 public class PaymobProvider implements IPaymentProvider {
@@ -152,19 +150,78 @@ public class PaymobProvider implements IPaymentProvider {
             return parseEvent(rawBody, true, null);
         }
 
-        // TODO(paymob): Real Paymob webhook HMAC is computed over a documented
-        // ordered concatenation of obj.* fields (amount_cents + created_at +
-        // currency + ... + success), NOT the raw HTTP body. This raw-body
-        // implementation is INTENTIONALLY ELIDED — every real Paymob webhook
-        // will fail signature verification the moment paymob.enabled=true.
-        // Implement the field-concatenation rule per the Paymob docs before
-        // flipping the flag in any environment that sees real webhooks.
-        String expected = hmacSha512Hex(rawBody, hmacSecret);
+        // Real Paymob HMAC: SHA-512 over the documented ordered concatenation
+        // of obj.* fields, not the raw body. Build the canonical string, HMAC
+        // it, hex-encode, constant-time compare.
+        JsonNode obj;
+        try {
+            obj = objectMapper.readTree(rawBody).path("obj");
+            if (obj.isMissingNode() || obj.isNull()) {
+                return ProviderWebhookVerification.builder()
+                        .valid(false).reason("missing_obj").build();
+            }
+        } catch (Exception ex) {
+            return ProviderWebhookVerification.builder()
+                    .valid(false).reason("malformed_body: " + ex.getMessage()).build();
+        }
+
+        String canonical = buildPaymobCanonical(obj);
+        String expected = hmacSha512Hex(canonical, hmacSecret);
         if (!constantTimeEquals(expected, signatureHeader)) {
             return ProviderWebhookVerification.builder()
                     .valid(false).reason("signature_mismatch").build();
         }
         return parseEvent(rawBody, true, null);
+    }
+
+    /**
+     * Paymob webhook canonical string (per their public docs): concatenation
+     * — no separator — of these 20 fields from the {@code obj} payload, in
+     * this exact order. Boolean values serialize as the lowercase strings
+     * {@code "true"} / {@code "false"}; missing / null fields serialize as
+     * the empty string. The same canonical is used for transaction and
+     * subscription webhooks (Paymob keeps the structure uniform).
+     *
+     * <p>Field order is load-bearing — changing it breaks every webhook.
+     * If Paymob revises the contract, change here and re-test against a
+     * captured live payload + signature pair.
+     */
+    static String buildPaymobCanonical(JsonNode obj) {
+        JsonNode order = obj.path("order");
+        JsonNode source = obj.path("source_data");
+        StringBuilder sb = new StringBuilder(256);
+        sb.append(asPaymobText(obj.path("amount_cents")));
+        sb.append(asPaymobText(obj.path("created_at")));
+        sb.append(asPaymobText(obj.path("currency")));
+        sb.append(asPaymobText(obj.path("error_occured")));
+        sb.append(asPaymobText(obj.path("has_parent_transaction")));
+        sb.append(asPaymobText(obj.path("id")));
+        sb.append(asPaymobText(obj.path("integration_id")));
+        sb.append(asPaymobText(obj.path("is_3d_secure")));
+        sb.append(asPaymobText(obj.path("is_auth")));
+        sb.append(asPaymobText(obj.path("is_capture")));
+        sb.append(asPaymobText(obj.path("is_refunded")));
+        sb.append(asPaymobText(obj.path("is_standalone_payment")));
+        sb.append(asPaymobText(obj.path("is_voided")));
+        sb.append(asPaymobText(order.path("id")));
+        sb.append(asPaymobText(obj.path("owner")));
+        sb.append(asPaymobText(source.path("pan")));
+        sb.append(asPaymobText(source.path("sub_type")));
+        sb.append(asPaymobText(source.path("type")));
+        sb.append(asPaymobText(obj.path("success")));
+        return sb.toString();
+    }
+
+    /**
+     * Render a JsonNode the way Paymob's signer renders Python primitives
+     * when it builds its canonical string: booleans become lowercase
+     * {@code "true"}/{@code "false"}, numbers and strings use their natural
+     * text, missing/null values become the empty string.
+     */
+    private static String asPaymobText(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) return "";
+        if (node.isBoolean()) return node.asBoolean() ? "true" : "false";
+        return node.asText("");
     }
 
     private ProviderWebhookVerification parseEvent(String rawBody, boolean valid, String reason) {
