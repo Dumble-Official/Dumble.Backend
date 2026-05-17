@@ -42,15 +42,21 @@ public class RabbitMQConfig {
      * silently dropped at the broker and {@link com.example.DumbleSubscription.event.PaymentEventListener}
      * never fires. That breaks escrow → PAID_OUT transitions, the Paymob
      * Pending→Active flow (bug_029 from review-pr4-run2), and the chargeback
-     * refund path (Decision 6.2). Single {@code payment.*} pattern covers the
-     * payout, charge, and chargeback families the listener switches on.
+     * refund path (Decision 6.2).
+     *
+     * Pattern is {@code payment.#} (multi-segment), not {@code payment.*}
+     * (single-segment): Payment emits three-segment routing keys like
+     * {@code payment.charge.succeeded}, {@code payment.payout.completed},
+     * {@code payment.chargeback.filed}. AMQP topic {@code *} matches exactly
+     * one word, so {@code payment.*} would drop every event the listener
+     * actually cares about.
      */
     @Bean
     public Binding paymentEventsBinding(Queue subscriptionInboundQueue,
                                         TopicExchange dumbleEventsExchange) {
         return BindingBuilder.bind(subscriptionInboundQueue)
                 .to(dumbleEventsExchange)
-                .with("payment.*");
+                .with("payment.#");
     }
 
     @Bean
