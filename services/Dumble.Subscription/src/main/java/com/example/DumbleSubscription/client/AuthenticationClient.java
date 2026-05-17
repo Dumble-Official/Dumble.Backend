@@ -22,7 +22,7 @@ public class AuthenticationClient {
     private final WebClient client;
     private final SystemTokenSigner signer;
 
-    public AuthenticationClient(@Qualifier("authenticationClient") WebClient client,
+    public AuthenticationClient(@Qualifier("authenticationWebClient") WebClient client,
                                 SystemTokenSigner signer) {
         this.client = client;
         this.signer = signer;

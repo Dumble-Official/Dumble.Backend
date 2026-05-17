@@ -17,7 +17,7 @@ public class BundleManagementClient {
     private final SystemTokenSigner signer;
     private final UserTokenForwarder userTokenForwarder;
 
-    public BundleManagementClient(@Qualifier("bundleManagementClient") WebClient client,
+    public BundleManagementClient(@Qualifier("bundleManagementWebClient") WebClient client,
                                   SystemTokenSigner signer,
                                   UserTokenForwarder userTokenForwarder) {
         this.client = client;
