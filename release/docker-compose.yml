@@ -179,6 +179,12 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/dumble_project
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # First-boot admin bootstrap. Idempotent — once the admin row exists,
+      # later boots no-op. Leave enabled with real creds in dev/staging;
+      # flip to false in prod after the first deploy.
+      ADMIN_BOOTSTRAP_ENABLED: ${ADMIN_BOOTSTRAP_ENABLED:-true}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@dumble.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set in release/.env}
     depends_on:
       db:
         condition: service_healthy
