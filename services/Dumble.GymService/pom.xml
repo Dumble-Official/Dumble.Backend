@@ -128,16 +128,6 @@
             <artifactId>cloudinary-http44</artifactId>
             <version>1.33.0</version>
         </dependency>
-        <dependency>
-            <groupId>me.paulschwarz</groupId>
-            <artifactId>spring-dotenv</artifactId>
-            <version>4.0.0</version>
-        </dependency>
-        <dependency>
-            <groupId>io.github.cdimascio</groupId>
-            <artifactId>dotenv-java</artifactId>
-            <version>2.2.4</version>
-        </dependency>
 <!--        mapstruct-->
         <dependency>
             <groupId>org.mapstruct</groupId>
@@ -154,16 +144,6 @@
             <groupId>com.cloudinary</groupId>
             <artifactId>cloudinary-http44</artifactId>
             <version>1.33.0</version>
-        </dependency>
-        <dependency>
-            <groupId>me.paulschwarz</groupId>
-            <artifactId>spring-dotenv</artifactId>
-            <version>4.0.0</version>
-        </dependency>
-        <dependency>
-            <groupId>io.github.cdimascio</groupId>
-            <artifactId>dotenv-java</artifactId>
-            <version>2.2.4</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.cloud</groupId>
