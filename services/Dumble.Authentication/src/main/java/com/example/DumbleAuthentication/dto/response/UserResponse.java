@@ -6,10 +6,11 @@ import com.example.DumbleAuthentication.domain.UserType;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.UUID;
 
 public class UserResponse {
 
-    private Long id;
+    private UUID id;
     private String firstName;
     private String lastName;
     private String email;
@@ -47,8 +48,8 @@ public class UserResponse {
         return r;
     }
 
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
     public String getFirstName() { return firstName; }
     public void setFirstName(String firstName) { this.firstName = firstName; }
     public String getLastName() { return lastName; }

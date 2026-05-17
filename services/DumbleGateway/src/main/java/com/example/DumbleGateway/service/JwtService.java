@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * JWT Service for the Gateway — validation only (no token generation).
@@ -39,10 +40,14 @@ public class JwtService {
         return claims.getSubject();
     }
 
-    public Long extractUserId(Claims claims) {
+    public UUID extractUserId(Claims claims) {
         Object userId = claims.get("userId");
-        if (userId instanceof Number n) {
-            return n.longValue();
+        if (userId instanceof String s) {
+            try {
+                return UUID.fromString(s);
+            } catch (IllegalArgumentException ex) {
+                throw new io.jsonwebtoken.MalformedJwtException("Invalid 'userId' claim: not a UUID");
+            }
         }
         // Fail-closed: a token without userId cannot be authorised — otherwise
         // BannedUserFilter and any downstream userId-based check is bypassed.
