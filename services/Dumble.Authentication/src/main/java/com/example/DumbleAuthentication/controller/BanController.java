@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/users")
@@ -24,13 +25,13 @@ public class BanController {
     }
 
     @PostMapping("/{id}/ban")
-    public ResponseEntity<Map<String, String>> banUser(@PathVariable Long id) {
+    public ResponseEntity<Map<String, String>> banUser(@PathVariable UUID id) {
         banService.banUser(id);
         return ResponseEntity.ok(Map.of("message", "User banned successfully"));
     }
 
     @PostMapping("/{id}/unban")
-    public ResponseEntity<Map<String, String>> unbanUser(@PathVariable Long id) {
+    public ResponseEntity<Map<String, String>> unbanUser(@PathVariable UUID id) {
         banService.unbanUser(id);
         return ResponseEntity.ok(Map.of("message", "User unbanned successfully"));
     }

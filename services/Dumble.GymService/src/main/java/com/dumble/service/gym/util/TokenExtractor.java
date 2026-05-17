@@ -41,10 +41,16 @@ public class TokenExtractor {
         }
 
         Object userIdClaim = claims.get("userId");
-        if (!(userIdClaim instanceof Number num)) {
+        UUID uuid;
+        if (userIdClaim instanceof String s) {
+            try {
+                uuid = UUID.fromString(s);
+            } catch (IllegalArgumentException ex) {
+                throw new UnauthorizedAccessException("JWT 'userId' claim is not a valid UUID");
+            }
+        } else {
             throw new UnauthorizedAccessException("JWT missing 'userId' claim");
         }
-        UUID uuid = longToGuidMatchingDotNet(num.longValue());
 
         // Prefer the explicit `userType` claim (single source of truth) and fall
         // back to deriving from the roles list for backward-compat with tokens
@@ -78,15 +84,5 @@ public class TokenExtractor {
         user.setId(uuid);
         user.setUserType(userType);
         return user;
-    }
-
-    // Mirrors .NET `new Guid(byte[])` where the first 8 bytes are the long in
-    // little-endian and the last 8 are zero, so the same userId maps to the
-    // same UUID in Gym (Java) and Bundle (C#).
-    private static UUID longToGuidMatchingDotNet(long userId) {
-        long msb = ((userId & 0xFFFFFFFFL) << 32)
-                | (((userId >>> 32) & 0xFFFFL) << 16)
-                | ((userId >>> 48) & 0xFFFFL);
-        return new UUID(msb, 0L);
     }
 }

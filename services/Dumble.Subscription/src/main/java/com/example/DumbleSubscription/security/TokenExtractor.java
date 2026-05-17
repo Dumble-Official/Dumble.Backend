@@ -67,11 +67,6 @@ public class TokenExtractor {
                 throw new UnauthorizedAccessException("JWT 'userId' claim is not a valid UUID");
             }
         }
-        if (claim instanceof Number num) {
-            // Backwards compat: long-encoded user id mirrored from .NET
-            // (matches GymService's longToGuidMatchingDotNet)
-            return longToGuidMatchingDotNet(num.longValue());
-        }
         throw new UnauthorizedAccessException("JWT 'userId' claim is missing or unreadable");
     }
 
@@ -102,12 +97,5 @@ public class TokenExtractor {
             return roles.stream().map(String::valueOf).toList();
         }
         return List.of();
-    }
-
-    private static UUID longToGuidMatchingDotNet(long userId) {
-        long msb = ((userId & 0xFFFFFFFFL) << 32)
-                | (((userId >>> 32) & 0xFFFFL) << 16)
-                | ((userId >>> 48) & 0xFFFFL);
-        return new UUID(msb, 0L);
     }
 }

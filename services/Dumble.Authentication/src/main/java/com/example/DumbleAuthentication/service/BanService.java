@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.PostConstruct;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class BanService {
@@ -53,7 +54,7 @@ public class BanService {
     }
 
     @Transactional
-    public void banUser(Long userId) {
+    public void banUser(UUID userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
@@ -82,7 +83,7 @@ public class BanService {
     }
 
     @Transactional
-    public void unbanUser(Long userId) {
+    public void unbanUser(UUID userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
