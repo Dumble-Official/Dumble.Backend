@@ -332,6 +332,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${GYM_DB_PASSWORD:?GYM_DB_PASSWORD must be set in release/.env}
       SERVICES_AUTH_URL: http://authentication:8081
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
+      CLOUDINARY_URL: ${CLOUDINARY_URL:-cloudinary://placeholder:placeholder@placeholder}
     depends_on:
       gym-db:
         condition: service_healthy
