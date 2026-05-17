@@ -41,8 +41,12 @@ public class HttpClientConfig {
         return build(baseUrl);
     }
 
-    @Bean(name = "bundleManagementClient")
-    public WebClient bundleManagementClient(@Value("${services.bundle-management.base-url}") String baseUrl) {
+    // Named "...WebClient" deliberately so this bean doesn't collide with the
+    // @Component-derived bean from BundleManagementClient.class (which Spring
+    // names "bundleManagementClient" from the class name). Spring Boot 3.x
+    // refuses bean-definition overrides by default; clashing names crash boot.
+    @Bean(name = "bundleManagementWebClient")
+    public WebClient bundleManagementWebClient(@Value("${services.bundle-management.base-url}") String baseUrl) {
         return build(baseUrl);
     }
 
@@ -51,8 +55,10 @@ public class HttpClientConfig {
         return build(baseUrl);
     }
 
-    @Bean(name = "authenticationClient")
-    public WebClient authenticationClient(@Value("${services.authentication.base-url}") String baseUrl) {
+    // Same rationale as bundleManagementWebClient — avoid collision with the
+    // @Component-derived "authenticationClient" bean from AuthenticationClient.
+    @Bean(name = "authenticationWebClient")
+    public WebClient authenticationWebClient(@Value("${services.authentication.base-url}") String baseUrl) {
         return build(baseUrl);
     }
 

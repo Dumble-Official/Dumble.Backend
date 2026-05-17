@@ -37,6 +37,8 @@ Thumbs.db
 # Keep the project's release/ folder (docker-compose + env.example) tracked.
 !release/
 !release/**
+# Local-only compose override (host port remaps, dev-only volume mounts, etc.)
+release/docker-compose.override.yml
 x64/
 x86/
 [Ww][Ii][Nn]32/
