@@ -7,8 +7,9 @@ COPY mvnw .
 COPY .mvn .mvn
 COPY pom.xml .
 
-# Download dependencies
-RUN ./mvnw dependency:go-offline -B
+# Download dependencies (chmod first — the +x bit on mvnw is not preserved
+# when the build context comes from a Windows working tree).
+RUN chmod +x mvnw && ./mvnw dependency:go-offline -B
 
 # Copy source code and build jar
 COPY src src
@@ -18,8 +19,8 @@ RUN ./mvnw clean package -DskipTests -B
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-# Copy the built jar from the build stage
-COPY --from=build /app/target/gym-service-0.0.1-SNAPSHOT.jar app.jar
+# Copy the built jar from the build stage (glob — version-agnostic)
+COPY --from=build /app/target/*.jar app.jar
 
 EXPOSE 8181
 

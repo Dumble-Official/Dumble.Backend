@@ -1,12 +1,30 @@
 spring:
   application:
     name: gym-service
-  profiles:
-    active: dev
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 20MB
 
 server:
+  port: 8181
   servlet:
     context-path: /api
 
 jwt:
   secret: ${JWT_SECRET}
+
+# SpringDoc Swagger
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
