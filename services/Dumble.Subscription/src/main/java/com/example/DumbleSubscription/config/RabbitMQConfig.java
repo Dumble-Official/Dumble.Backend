@@ -1,5 +1,7 @@
 package com.example.DumbleSubscription.config;
 
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
@@ -13,14 +15,15 @@ import org.springframework.context.annotation.Configuration;
  * (NotificationService, audit collectors, etc.) bind their own queues with
  * routing-key patterns matching the event names.
  *
- * Outgoing only for now — Subscription doesn't consume events from other
- * services in v1 (it consumes events FROM Payment via the Payment integration
- * but that wiring lives near {@code PaymentEventConsumer}, added when needed).
+ * Subscription also consumes events FROM Payment on its own
+ * {@code subscription.inbound} queue — payout confirmations, charge
+ * confirmations after Paymob OTP, chargebacks. Those bindings live below.
  */
 @Configuration
 public class RabbitMQConfig {
 
     public static final String DUMBLE_EVENTS_EXCHANGE = "dumble.events";
+    public static final String SUBSCRIPTION_INBOUND_QUEUE = "subscription.inbound";
 
     @Bean
     public TopicExchange dumbleEventsExchange() {
@@ -29,8 +32,25 @@ public class RabbitMQConfig {
 
     @Bean
     public Queue subscriptionInboundQueue() {
-        // Queue Subscription listens on for events from Payment / Wallet
-        return new Queue("subscription.inbound", true, false, false);
+        return new Queue(SUBSCRIPTION_INBOUND_QUEUE, true, false, false);
+    }
+
+    /**
+     * Without this binding the {@code dumble.events} topic exchange has no
+     * queue listening for {@code payment.*} routing keys, so every payout
+     * confirmation, OTP-completed charge, and chargeback Payment publishes is
+     * silently dropped at the broker and {@link com.example.DumbleSubscription.event.PaymentEventListener}
+     * never fires. That breaks escrow → PAID_OUT transitions, the Paymob
+     * Pending→Active flow (bug_029 from review-pr4-run2), and the chargeback
+     * refund path (Decision 6.2). Single {@code payment.*} pattern covers the
+     * payout, charge, and chargeback families the listener switches on.
+     */
+    @Bean
+    public Binding paymentEventsBinding(Queue subscriptionInboundQueue,
+                                        TopicExchange dumbleEventsExchange) {
+        return BindingBuilder.bind(subscriptionInboundQueue)
+                .to(dumbleEventsExchange)
+                .with("payment.*");
     }
 
     @Bean
