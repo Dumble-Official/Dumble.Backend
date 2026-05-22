@@ -105,12 +105,22 @@ builder.Services.Configure<ForwardedHeadersOptions>(opt =>
     }
 });
 
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+        policy.SetIsOriginAllowed(_ => true)
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials());
+});
+
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
 app.UseForwardedHeaders();
 app.UseExceptionMapping();
+app.UseCors();
 
 app.UseAuthentication();
 app.UseAuthorization();
