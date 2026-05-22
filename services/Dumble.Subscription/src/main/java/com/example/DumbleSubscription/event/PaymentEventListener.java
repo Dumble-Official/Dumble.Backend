@@ -36,7 +36,7 @@ import java.util.UUID;
  * Routing keys:
  *   payment.payout.completed     → mark escrow PAID_OUT
  *   payment.payout.failed        → roll escrow back to HELD
- *   payment.charge.completed     → flip PENDING sub to ACTIVE (Decision: Paymob 3DS/OTP confirm)
+ *   payment.charge.succeeded     → flip PENDING sub to ACTIVE (Decision: Paymob 3DS/OTP confirm)
  *   payment.charge.failed        → flip PENDING sub to EXPIRED
  *   payment.chargeback.filed     → lock related escrow + mark sub REFUNDED (Decision 6.2)
  */
@@ -85,7 +85,12 @@ public class PaymentEventListener {
             switch (type) {
                 case "payment.payout.completed"   -> handlePayoutCompleted(node);
                 case "payment.payout.failed"      -> handlePayoutFailed(node);
-                case "payment.charge.completed"   -> handleChargeCompleted(node);
+                // Payment publishes `.succeeded` per payment-service-decisions
+                // (the internal status is SUCCEEDED). We accept the legacy
+                // `.completed` spelling too so any in-flight broker rows
+                // queued before the rename still resolve.
+                case "payment.charge.succeeded", "payment.charge.completed"
+                        -> handleChargeSucceeded(node);
                 case "payment.charge.failed"      -> handleChargeFailed(node);
                 case "payment.chargeback.filed"   -> handleChargebackFiled(node);
                 default -> log.debug("Ignoring event type {}", type);
@@ -130,13 +135,13 @@ public class PaymentEventListener {
     /**
      * bug_029 — Paymob's Egyptian card flow returns Pending on the first call
      * (3DS/OTP required). When the participant confirms the OTP, Payment emits
-     * payment.charge.completed; we use that to flip the PENDING sub to ACTIVE.
+     * payment.charge.succeeded; we use that to flip the PENDING sub to ACTIVE.
      *
      * Expects payload: { "providerRef": "...", "subscriptionId": "...", "userId": "..." }
      * subscriptionId/userId are accepted as alternate lookup keys when
      * providerRef isn't carried.
      */
-    private void handleChargeCompleted(JsonNode node) {
+    private void handleChargeSucceeded(JsonNode node) {
         String providerRef = node.path("providerRef").asText("");
         String subIdStr = node.path("subscriptionId").asText("");
         String userIdStr = node.path("userId").asText("");
