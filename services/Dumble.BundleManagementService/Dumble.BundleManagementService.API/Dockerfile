@@ -6,15 +6,19 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 
-COPY Dumble.BundleManagementService.Domain/Dumble.BundleManagementService.Domain.csproj Dumble.BundleManagementService.Domain/
-COPY Dumble.BundleManagementService.Contracts/Dumble.BundleManagementService.Contracts.csproj Dumble.BundleManagementService.Contracts/
-COPY Dumble.BundleManagementService.Application/Dumble.BundleManagementService.Application.csproj Dumble.BundleManagementService.Application/
-COPY Dumble.BundleManagementService.Infrastructure/Dumble.BundleManagementService.Infrastructure.csproj Dumble.BundleManagementService.Infrastructure/
-COPY Dumble.BundleManagementService.API/Dumble.BundleManagementService.API.csproj Dumble.BundleManagementService.API/
-RUN dotnet restore Dumble.BundleManagementService.API/Dumble.BundleManagementService.API.csproj
+# Copy SharedKernel
+COPY Dumble.SharedKernel/Dumble.SharedKernel/Dumble.SharedKernel.csproj Dumble.SharedKernel/Dumble.SharedKernel/
+
+# Copy BundleManagementService projects
+COPY Dumble.BundleManagementService/Dumble.BundleManagementService.Domain/Dumble.BundleManagementService.Domain.csproj Dumble.BundleManagementService/Dumble.BundleManagementService.Domain/
+COPY Dumble.BundleManagementService/Dumble.BundleManagementService.Contracts/Dumble.BundleManagementService.Contracts.csproj Dumble.BundleManagementService/Dumble.BundleManagementService.Contracts/
+COPY Dumble.BundleManagementService/Dumble.BundleManagementService.Application/Dumble.BundleManagementService.Application.csproj Dumble.BundleManagementService/Dumble.BundleManagementService.Application/
+COPY Dumble.BundleManagementService/Dumble.BundleManagementService.Infrastructure/Dumble.BundleManagementService.Infrastructure.csproj Dumble.BundleManagementService/Dumble.BundleManagementService.Infrastructure/
+COPY Dumble.BundleManagementService/Dumble.BundleManagementService.API/Dumble.BundleManagementService.API.csproj Dumble.BundleManagementService/Dumble.BundleManagementService.API/
+RUN dotnet restore Dumble.BundleManagementService/Dumble.BundleManagementService.API/Dumble.BundleManagementService.API.csproj
 
 COPY . .
-WORKDIR /src/Dumble.BundleManagementService.API
+WORKDIR /src/Dumble.BundleManagementService/Dumble.BundleManagementService.API
 RUN dotnet build -c $BUILD_CONFIGURATION -o /app/build
 
 FROM build AS publish

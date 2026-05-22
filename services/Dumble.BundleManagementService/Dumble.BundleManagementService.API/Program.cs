@@ -9,6 +9,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Net;
 
@@ -64,10 +65,10 @@ builder.Services.Configure<ForwardedHeadersOptions>(opt =>
     var configuredProxies = builder.Configuration["GATEWAY_TRUSTED_PROXIES"];
     if (string.IsNullOrWhiteSpace(configuredProxies))
     {
-        opt.KnownNetworks.Add(new IPNetwork(IPAddress.Loopback, 8));
-        opt.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
-        opt.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("192.168.0.0"), 16));
-        opt.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("10.0.0.0"), 8));
+        opt.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Loopback, 8));
+        opt.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+        opt.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("192.168.0.0"), 16));
+        opt.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("10.0.0.0"), 8));
     }
     else
     {
@@ -86,6 +87,13 @@ builder.Services.AddHealthChecks()
     .AddDbContextCheck<BundleManagementDbContext>(name: "database");
 
 var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<BundleManagementDbContext>();
+    db.Database.Migrate();
+}
 
 app.UseForwardedHeaders();
 app.UseExceptionMapping();

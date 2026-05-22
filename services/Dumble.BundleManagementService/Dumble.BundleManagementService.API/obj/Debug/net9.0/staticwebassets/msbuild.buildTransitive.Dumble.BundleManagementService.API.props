@@ -1,3 +1,0 @@
-﻿<Project>
-  <Import Project="..\buildMultiTargeting\Dumble.BundleManagementService.API.props" />
-</Project>
