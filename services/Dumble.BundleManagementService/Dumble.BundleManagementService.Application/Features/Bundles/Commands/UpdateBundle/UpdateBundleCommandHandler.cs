@@ -3,7 +3,9 @@ using Dumble.BundleManagementService.Application.Identity;
 using Dumble.BundleManagementService.Domain.BundleAggregate;
 using Dumble.BundleManagementService.Domain.BundleAggregate.Enums;
 using Dumble.BundleManagementService.Domain.BundleAggregate.ValueObjects;
+using Dumble.BundleManagementService.Domain.CategoryAggregate.ValueObjects;
 using Dumble.SharedKernel.Contracts;
+using Dumble.SharedKernel.Enums;
 using MediatR;
 using Name = Dumble.BundleManagementService.Domain.BundleAggregate.ValueObjects.Name;
 
@@ -22,7 +24,8 @@ internal sealed class UpdateBundleCommandHandler(
 
         var currentUserAccountId = AccountId.Create(AccountIdentity.ToAccountGuid(loggedInUser.Id));
 
-        if (!currentUserAccountId.Equals(bundle.OwnerId))
+        // ADMIN can update any bundle; other roles can only update their own.
+        if (!loggedInUser.IsInRole(UserType.Admin) && !currentUserAccountId.Equals(bundle.OwnerId))
             throw new UnauthorizedAccessException("You can only update your own bundles");
 
         // Apply each non-null field through the aggregate's Modify method.
