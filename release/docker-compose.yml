@@ -310,8 +310,8 @@ services:
 
   bundle-service:
     build:
-      context: ../services/Dumble.BundleManagementService
-      dockerfile: Dumble.BundleManagementService.API/Dockerfile
+      context: ../services
+      dockerfile: Dumble.BundleManagementService/Dumble.BundleManagementService.API/Dockerfile
     expose:
       - "5012"
     environment:
