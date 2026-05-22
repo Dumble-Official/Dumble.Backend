@@ -28,6 +28,12 @@ public class ChatHubService : IChatHubService
         return Task.CompletedTask;
     }
 
+    public Task NotifyMessageEditedAsync(string conversationId, string messageId, string newContent, CancellationToken ct = default)
+    {
+        _ = _hubContext.Clients.Group(conversationId).SendAsync("MessageEdited", new { messageId, conversationId, content = newContent }, ct);
+        return Task.CompletedTask;
+    }
+
     public Task NotifyUserTypingAsync(string conversationId, string userId, string displayName, CancellationToken ct = default)
     {
         _ = _hubContext.Clients.Group(conversationId).SendAsync("UserTyping", new { conversationId, userId, displayName }, ct);

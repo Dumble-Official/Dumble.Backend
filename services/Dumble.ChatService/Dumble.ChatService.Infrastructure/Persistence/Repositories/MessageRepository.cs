@@ -51,4 +51,12 @@ public class MessageRepository : IMessageRepository
 
         await _context.Messages.UpdateOneAsync(m => m.Id == messageId, update, cancellationToken: ct);
     }
+
+    public async Task EditAsync(string messageId, string newContent, CancellationToken ct = default)
+    {
+        var update = Builders<Message>.Update
+            .Set(m => m.Content, newContent);
+
+        await _context.Messages.UpdateOneAsync(m => m.Id == messageId, update, cancellationToken: ct);
+    }
 }
