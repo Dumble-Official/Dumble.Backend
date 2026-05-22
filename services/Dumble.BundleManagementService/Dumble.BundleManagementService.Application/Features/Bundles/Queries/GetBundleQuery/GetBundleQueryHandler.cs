@@ -2,30 +2,46 @@ using Dumble.BundleManagementService.Application.Contracts.Repositories;
 using Dumble.BundleManagementService.Application.Identity;
 using Dumble.BundleManagementService.Domain.BundleAggregate;
 using Dumble.BundleManagementService.Domain.BundleAggregate.ValueObjects;
-using Dumble.SharedKernel.Contracts;
+using Dumble.BundleManagementService.Domain.CategoryAggregate;
+using Dumble.BundleManagementService.Domain.CategoryAggregate.ValueObjects;
 using MediatR;
 
 namespace Dumble.BundleManagementService.Application.Features.Bundles.Queries.GetBundleQuery;
 
 internal sealed class GetBundleQueryHandler(
-    ILogger<GetBundleQueryHandler> logger,
     IGenericRepository<Bundle, BundleId> bundlesRepository,
-    ILoggedInUserService loggedInUserService) : IRequestHandler<GetBundleQuery, Bundle>
+    IGenericRepository<Category, CategoryId> categoryRepository) : IRequestHandler<GetBundleQuery, GetBundleResult>
 {
     public async Task<GetBundleResult> Handle(GetBundleQuery request, CancellationToken cancellationToken)
     {
         var bundle = await bundlesRepository.Get(BundleId.Create(request.Id))
             ?? throw new KeyNotFoundException($"Bundle {request.Id} not found");
 
-        var currentUser = loggedInUserService.GetCurrentUser();
-        var accountId = AccountId.Create(AccountIdentity.ToAccountGuid(currentUser.Id));
-
-        if (bundle.View(accountId))
+        // Track view only when the viewer is authenticated — the endpoint
+        // is AllowAnonymous so GetCurrentUser() would throw for unauthenticated
+        // callers. Use the viewerExternalId passed by the endpoint instead.
+        if (!string.IsNullOrWhiteSpace(request.ViewerExternalId))
         {
-            bundlesRepository.Update(bundle);
-            await bundlesRepository.CompleteAsync();
+            var accountId = AccountId.Create(AccountIdentity.ToAccountGuid(request.ViewerExternalId));
+            if (bundle.View(accountId))
+            {
+                bundlesRepository.Update(bundle);
+                await bundlesRepository.CompleteAsync();
+            }
         }
 
-        return bundle;
+        var category = await categoryRepository.Get(bundle.CategoryId);
+
+        return new GetBundleResult(
+            bundle.Id.Value,
+            bundle.Images.Select(i => i.Value).ToList(),
+            bundle.Name.Value,
+            bundle.Description.Value,
+            bundle.Price.Value,
+            bundle.ExpiresOn,
+            bundle.Status.ToString(),
+            bundle.Viewers.Count,
+            category?.Name.Value ?? string.Empty
+        );
     }
 }
