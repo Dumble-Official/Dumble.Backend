@@ -2,6 +2,10 @@ package com.example.DumblePayment.service;
 
 import com.example.DumblePayment.domain.IdempotencyKey;
 import com.example.DumblePayment.repository.IdempotencyKeyRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.PersistenceException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,12 +31,20 @@ public class IdempotencyKeyStore {
 
     private final IdempotencyKeyRepository repository;
 
+    @PersistenceContext
+    private EntityManager entityManager;
+
     public IdempotencyKeyStore(IdempotencyKeyRepository repository) {
         this.repository = repository;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public boolean tryClaim(String key, String endpoint, UUID userId, int httpStatus, long ttlHours) {
+    public boolean tryClaim(String key,
+                            String endpoint,
+                            UUID userId,
+                            int httpStatus,
+                            String requestHash,
+                            long ttlHours) {
         Optional<IdempotencyKey> existing = repository.findById(key);
         if (existing.isPresent()) {
             IdempotencyKey row = existing.get();
@@ -49,10 +61,30 @@ public class IdempotencyKeyStore {
         row.setUserId(userId);
         row.setState(STATE_PENDING);
         row.setHttpStatus(httpStatus);
+        row.setRequestHash(requestHash);
         row.setResponseJson(null);
         row.setCreatedAt(Instant.now());
         row.setExpiresAt(Instant.now().plus(ttlHours, ChronoUnit.HOURS));
-        repository.saveAndFlush(row);
+        // entityManager.persist forces a bare INSERT that hard-fails on a PK
+        // collision — unlike repository.save(), which Spring Data routes
+        // through merge() for manually-@Id entities and quietly UPDATEs the
+        // existing row when a concurrent peer has already inserted it. With
+        // merge() semantics two racing tryClaim calls can both return true
+        // (one INSERT, one UPDATE) and a double-spend slips through; persist
+        // closes that race by guaranteeing exactly one winner.
+        //
+        // PersistenceException from the flush() is the unique-violation case;
+        // re-throw as Spring's DataIntegrityViolationException so the caller's
+        // existing race handling (catch in IdempotencyService.run) still works
+        // — @Component beans don't get the @Repository exception-translation
+        // proxy, so we translate manually here.
+        try {
+            entityManager.persist(row);
+            entityManager.flush();
+        } catch (PersistenceException ex) {
+            throw new DataIntegrityViolationException(
+                    "Idempotency-Key already claimed by a concurrent peer", ex);
+        }
         return true;
     }
 

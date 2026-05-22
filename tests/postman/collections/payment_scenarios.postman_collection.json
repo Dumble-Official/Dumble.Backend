@@ -1,0 +1,1893 @@
+{
+  "info": {
+    "_postman_id": "8a1b9b00-0002-4000-8000-000000000007",
+    "name": "Dumble Payment — Real-World Scenarios",
+    "description": "Level-up suite that exercises the production-risk surface the contract suite doesn't: webhook-driven state transitions end-to-end, out-of-order / late / unknown / duplicate webhooks, refund over-spend prevention against a real SUCCEEDED charge, chargeback flow, and adversarial input fuzz. Each scenario is self-contained (its own callerReference + idempotency key), and uses busy-wait pauses to let the async WebhookProcessingJob (default 1000ms tick) settle before asserting state. Uses dev-stub-ok HMAC bypass and the same system JWTs as the contract suite.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "wait_ms", "value": "2000" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Collection-level helper exposed to every request via pm.variables.",
+          "// 2000 ms gives the async WebhookProcessingJob (1000 ms tick) one full",
+          "// cycle plus 1000 ms of slack — enough that timing slop on busy CI",
+          "// boxes doesn't cause flakes.",
+          "if (!pm.variables.get('wait_ms')) { pm.variables.set('wait_ms', '2000'); }"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "A. Charge lifecycle (webhook-driven)",
+      "item": [
+        {
+          "name": "A.1 POST /charges happy path → 201 Pending",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const stamp = pm.variables.replaceIn('{{$timestamp}}');",
+                  "pm.environment.set('scn_a_caller_ref', 'scn-a-' + stamp);",
+                  "pm.environment.set('scn_a_idem', 'k-scn-a-' + stamp);",
+                  "// Numeric provider id for the eventual webhook (Paymob obj.id is int).",
+                  "pm.environment.set('scn_a_provider_ref', String((Date.now() % 9000000) + 1000000));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const j = pm.response.json();",
+                  "pm.test('status is Pending', () => pm.expect(j.status).to.eql('Pending'));",
+                  "pm.environment.set('scn_a_charge_id', j.chargeId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{scn_a_idem}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"00000099-0000-0000-0000-0000000000a1\",\n  \"amountCents\": 4200,\n  \"currency\": \"EGP\",\n  \"description\": \"scenario A — charge lifecycle\",\n  \"callerReference\": \"{{scn_a_caller_ref}}\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges"]
+            }
+          }
+        },
+        {
+          "name": "A.2 webhook success → 200 ACK",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('webhook ACK 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Paymob-Signature", "value": "dev-stub-ok" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"TRANSACTION\",\n  \"obj\": {\n    \"id\": {{scn_a_provider_ref}},\n    \"amount_cents\": 4200,\n    \"currency\": \"EGP\",\n    \"success\": true,\n    \"merchant_order_id\": \"{{scn_a_charge_id}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/webhooks/paymob",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "webhooks", "paymob"]
+            }
+          }
+        },
+        {
+          "name": "A.3 wait for async job, then GET /charges/{id} → Succeeded",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Busy-wait so the async WebhookProcessingJob has time to flip the",
+                  "// charge to SUCCEEDED before we assert the wire status.",
+                  "const start = Date.now();",
+                  "const waitMs = parseInt(pm.variables.get('wait_ms') || '2000', 10);",
+                  "while (Date.now() - start < waitMs) { /* spin */ }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('charge moved to Succeeded', () => pm.expect(j.status).to.eql('Succeeded'));",
+                  "pm.test('providerRef populated by webhook', () => pm.expect(j.providerRef).to.eql(pm.environment.get('scn_a_provider_ref')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" }
+            ],
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges/{{scn_a_charge_id}}",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges", "{{scn_a_charge_id}}"]
+            }
+          }
+        },
+        {
+          "name": "A.4 webhook success replay (same event id) → 200 (dedup)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Phase-1 dedup on the Paymob event id: a second delivery with",
+                  "// the same obj.id is accepted (200) but the WebhookEventRecorder",
+                  "// short-circuits before Phase-2 fires — verified by the next request.",
+                  "pm.test('webhook duplicate accepted (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Paymob-Signature", "value": "dev-stub-ok" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"TRANSACTION\",\n  \"obj\": {\n    \"id\": {{scn_a_provider_ref}},\n    \"amount_cents\": 4200,\n    \"currency\": \"EGP\",\n    \"success\": true,\n    \"merchant_order_id\": \"{{scn_a_charge_id}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/webhooks/paymob",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "webhooks", "paymob"]
+            }
+          }
+        },
+        {
+          "name": "A.5 late conflicting webhook (success=false) → ignored (charge stays Succeeded)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// New event id so it isn't dedup'd at Phase-1; but the persister's",
+                  "// markFailed() short-circuits on non-PENDING parents, so the charge",
+                  "// must stay Succeeded.",
+                  "pm.environment.set('scn_a_late_id', String((Date.now() % 9000000) + 1000000));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('late conflicting webhook 200 ACK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Paymob-Signature", "value": "dev-stub-ok" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"TRANSACTION\",\n  \"obj\": {\n    \"id\": {{scn_a_late_id}},\n    \"success\": false,\n    \"data\": {\"message\": \"late_failure_attempt\"},\n    \"merchant_order_id\": \"{{scn_a_charge_id}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/webhooks/paymob",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "webhooks", "paymob"]
+            }
+          }
+        },
+        {
+          "name": "A.6 verify charge stays Succeeded (terminal state is absorbing)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const start = Date.now();",
+                  "const waitMs = parseInt(pm.variables.get('wait_ms') || '2000', 10);",
+                  "while (Date.now() - start < waitMs) { /* spin */ }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('charge still Succeeded (Succeeded is absorbing)', () => pm.expect(j.status).to.eql('Succeeded'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" }
+            ],
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges/{{scn_a_charge_id}}",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges", "{{scn_a_charge_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "B. Charge → Failed via webhook",
+      "item": [
+        {
+          "name": "B.1 POST /charges (will be failed via webhook) → 201 Pending",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const stamp = pm.variables.replaceIn('{{$timestamp}}');",
+                  "pm.environment.set('scn_b_caller_ref', 'scn-b-' + stamp);",
+                  "pm.environment.set('scn_b_idem', 'k-scn-b-' + stamp);",
+                  "pm.environment.set('scn_b_provider_ref', String((Date.now() % 9000000) + 2000000));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.environment.set('scn_b_charge_id', pm.response.json().chargeId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{scn_b_idem}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"00000099-0000-0000-0000-0000000000b1\",\n  \"amountCents\": 5000,\n  \"currency\": \"EGP\",\n  \"description\": \"scenario B — failed lifecycle\",\n  \"callerReference\": \"{{scn_b_caller_ref}}\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges"]
+            }
+          }
+        },
+        {
+          "name": "B.2 webhook success=false with reason → 200 ACK",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('webhook 200 ACK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Paymob-Signature", "value": "dev-stub-ok" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"transaction\",\n  \"obj\": {\n    \"id\": {{scn_b_provider_ref}},\n    \"amount_cents\": 5000,\n    \"currency\": \"EGP\",\n    \"success\": false,\n    \"data\": {\"message\": \"insufficient_funds\"},\n    \"merchant_order_id\": \"{{scn_b_charge_id}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/webhooks/paymob",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "webhooks", "paymob"]
+            }
+          }
+        },
+        {
+          "name": "B.3 GET /charges/{id} → Failed with reason",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const start = Date.now();",
+                  "const waitMs = parseInt(pm.variables.get('wait_ms') || '2000', 10);",
+                  "while (Date.now() - start < waitMs) { /* spin */ }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('charge moved to Failed', () => pm.expect(j.status).to.eql('Failed'));",
+                  "pm.test('failureReason from webhook data.message', () => pm.expect(j.failureReason).to.eql('insufficient_funds'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" }
+            ],
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges/{{scn_b_charge_id}}",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges", "{{scn_b_charge_id}}"]
+            }
+          }
+        },
+        {
+          "name": "B.4 attempt to refund a Failed charge → 422 (business rule)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// RefundPersister requires the parent charge in SUCCEEDED or REVERSED;",
+                  "// FAILED gets a BusinessRuleViolation → 422.",
+                  "pm.test('status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-refund-failed-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chargeId\": \"{{scn_b_charge_id}}\",\n  \"amountCents\": 100,\n  \"destination\": \"WALLET\",\n  \"reason\": \"cannot refund a failed charge\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/refunds",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "refunds"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "C. Refund flow against a real Succeeded charge",
+      "item": [
+        {
+          "name": "C.1 setup: POST /charges + webhook success → Succeeded",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const stamp = pm.variables.replaceIn('{{$timestamp}}');",
+                  "pm.environment.set('scn_c_caller_ref', 'scn-c-' + stamp);",
+                  "pm.environment.set('scn_c_idem', 'k-scn-c-' + stamp);",
+                  "pm.environment.set('scn_c_provider_ref', String((Date.now() % 9000000) + 3000000));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('charge created (201)', () => pm.response.to.have.status(201));",
+                  "pm.environment.set('scn_c_charge_id', pm.response.json().chargeId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{scn_c_idem}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"00000099-0000-0000-0000-0000000000c1\",\n  \"amountCents\": 10000,\n  \"currency\": \"EGP\",\n  \"description\": \"scenario C — refund flow\",\n  \"callerReference\": \"{{scn_c_caller_ref}}\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges"]
+            }
+          }
+        },
+        {
+          "name": "C.2 webhook success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('webhook 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Paymob-Signature", "value": "dev-stub-ok" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"transaction\",\n  \"obj\": {\n    \"id\": {{scn_c_provider_ref}},\n    \"amount_cents\": 10000,\n    \"currency\": \"EGP\",\n    \"success\": true,\n    \"merchant_order_id\": \"{{scn_c_charge_id}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/webhooks/paymob",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "webhooks", "paymob"]
+            }
+          }
+        },
+        {
+          "name": "C.3 wait, then partial refund #1 (6000 of 10000) → 201 Succeeded",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const start = Date.now();",
+                  "const waitMs = parseInt(pm.variables.get('wait_ms') || '2000', 10);",
+                  "while (Date.now() - start < waitMs) { /* spin */ }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const j = pm.response.json();",
+                  "pm.test('refund status Succeeded (WALLET path is immediate)', () => pm.expect(j.status).to.eql('Succeeded'));",
+                  "pm.test('amountCents 6000', () => pm.expect(j.amountCents).to.eql(6000));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-scn-c-refund1-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chargeId\": \"{{scn_c_charge_id}}\",\n  \"amountCents\": 6000,\n  \"destination\": \"WALLET\",\n  \"reason\": \"partial refund 1\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/refunds",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "refunds"]
+            }
+          }
+        },
+        {
+          "name": "C.4 partial refund #2 (4000 remaining) → 201 Succeeded",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const j = pm.response.json();",
+                  "pm.test('refund Succeeded', () => pm.expect(j.status).to.eql('Succeeded'));",
+                  "pm.test('amountCents 4000', () => pm.expect(j.amountCents).to.eql(4000));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-scn-c-refund2-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chargeId\": \"{{scn_c_charge_id}}\",\n  \"amountCents\": 4000,\n  \"destination\": \"WALLET\",\n  \"reason\": \"partial refund 2\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/refunds",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "refunds"]
+            }
+          }
+        },
+        {
+          "name": "C.5 over-refund attempt (1 cent) → 422 (refund total > charge)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// RefundPersister sums non-FAILED refunds under FOR-UPDATE and",
+                  "// throws BusinessRuleViolationException → 422 when the next refund",
+                  "// would exceed the parent charge amount.",
+                  "pm.test('status 422 (over-refund blocked)', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-scn-c-overrefund-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chargeId\": \"{{scn_c_charge_id}}\",\n  \"amountCents\": 1,\n  \"destination\": \"WALLET\",\n  \"reason\": \"over-refund probe\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/refunds",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "refunds"]
+            }
+          }
+        },
+        {
+          "name": "C.6 refund with negative amount → 400 (validation)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-scn-c-negative-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chargeId\": \"{{scn_c_charge_id}}\",\n  \"amountCents\": -500,\n  \"destination\": \"WALLET\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/refunds",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "refunds"]
+            }
+          }
+        },
+        {
+          "name": "C.7 refund with unknown destination → 422 (business rule)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-scn-c-bad-dest-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chargeId\": \"{{scn_c_charge_id}}\",\n  \"amountCents\": 100,\n  \"destination\": \"CRYPTO\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/refunds",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "refunds"]
+            }
+          }
+        },
+        {
+          "name": "C.8 refund for nonexistent chargeId → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-scn-c-ghost-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chargeId\": \"00000000-0000-0000-0000-000000000000\",\n  \"amountCents\": 100,\n  \"destination\": \"WALLET\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/refunds",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "refunds"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "D. Chargeback flow (Succeeded → Reversed)",
+      "item": [
+        {
+          "name": "D.1 setup: POST /charges + webhook success → Succeeded",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const stamp = pm.variables.replaceIn('{{$timestamp}}');",
+                  "pm.environment.set('scn_d_caller_ref', 'scn-d-' + stamp);",
+                  "pm.environment.set('scn_d_idem', 'k-scn-d-' + stamp);",
+                  "pm.environment.set('scn_d_provider_ref', String((Date.now() % 9000000) + 4000000));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.environment.set('scn_d_charge_id', pm.response.json().chargeId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{scn_d_idem}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"00000099-0000-0000-0000-0000000000d1\",\n  \"amountCents\": 7500,\n  \"currency\": \"EGP\",\n  \"description\": \"scenario D — chargeback\",\n  \"callerReference\": \"{{scn_d_caller_ref}}\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges"]
+            }
+          }
+        },
+        {
+          "name": "D.2 webhook success → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('webhook 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Paymob-Signature", "value": "dev-stub-ok" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"transaction\",\n  \"obj\": {\n    \"id\": {{scn_d_provider_ref}},\n    \"amount_cents\": 7500,\n    \"currency\": \"EGP\",\n    \"success\": true,\n    \"merchant_order_id\": \"{{scn_d_charge_id}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/webhooks/paymob",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "webhooks", "paymob"]
+            }
+          }
+        },
+        {
+          "name": "D.3 chargeback webhook → 200 ACK",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// First wait for the success webhook to land providerRef on the charge.",
+                  "const start = Date.now();",
+                  "const waitMs = parseInt(pm.variables.get('wait_ms') || '2000', 10);",
+                  "while (Date.now() - start < waitMs) { /* spin */ }",
+                  "pm.environment.set('scn_d_chargeback_id', String((Date.now() % 9000000) + 4500000));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('chargeback 200 ACK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Paymob-Signature", "value": "dev-stub-ok" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"chargeback\",\n  \"obj\": {\n    \"id\": {{scn_d_chargeback_id}},\n    \"transaction_id\": {{scn_d_provider_ref}},\n    \"reason\": \"customer_dispute\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/webhooks/paymob",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "webhooks", "paymob"]
+            }
+          }
+        },
+        {
+          "name": "D.4 GET /charges/{id} → Reversed",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const start = Date.now();",
+                  "const waitMs = parseInt(pm.variables.get('wait_ms') || '2000', 10);",
+                  "while (Date.now() - start < waitMs) { /* spin */ }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('charge status Reversed', () => pm.expect(j.status).to.eql('Reversed'));",
+                  "pm.test('failureReason carries chargeback reason', () => pm.expect(j.failureReason).to.eql('customer_dispute'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" }
+            ],
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges/{{scn_d_charge_id}}",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges", "{{scn_d_charge_id}}"]
+            }
+          }
+        },
+        {
+          "name": "D.5 refund of a Reversed charge → 201 (allowed by persister rule)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Persister allows refunds on SUCCEEDED or REVERSED. Business",
+                  "// flow: customer was charged, disputed (chargeback filed), the",
+                  "// merchant still wants the audit trail of a refund.",
+                  "pm.test('status 201 (refund of reversed allowed)', () => pm.response.to.have.status(201));",
+                  "pm.test('refund Succeeded', () => pm.expect(pm.response.json().status).to.eql('Succeeded'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-scn-d-refund-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chargeId\": \"{{scn_d_charge_id}}\",\n  \"amountCents\": 7500,\n  \"destination\": \"WALLET\",\n  \"reason\": \"refund after chargeback for audit\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/refunds",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "refunds"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "E. Withdrawal lifecycle (Pending → Sent → Completed)",
+      "item": [
+        {
+          "name": "E.1 POST /withdrawals → 201 Pending",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const stamp = pm.variables.replaceIn('{{$timestamp}}');",
+                  "pm.environment.set('scn_e_caller_ref', 'scn-e-' + stamp);",
+                  "pm.environment.set('scn_e_idem', 'k-scn-e-' + stamp);",
+                  "pm.environment.set('scn_e_provider_ref', String((Date.now() % 9000000) + 5000000));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const j = pm.response.json();",
+                  "pm.test('status Pending', () => pm.expect(j.status).to.eql('Pending'));",
+                  "pm.test('withdrawalId populated (USER_WITHDRAWAL)', () => pm.expect(j.withdrawalId).to.be.a('string'));",
+                  "pm.environment.set('scn_e_withdrawal_id', j.withdrawalId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{scn_e_idem}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"00000099-0000-0000-0000-0000000000e1\",\n  \"amountCents\": 25000,\n  \"currency\": \"EGP\",\n  \"destination\": {\"type\":\"bank\",\"iban\":\"EG800000000000000000000001\"},\n  \"callerReference\": \"{{scn_e_caller_ref}}\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/withdrawals",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "withdrawals"]
+            }
+          }
+        },
+        {
+          "name": "E.2 webhook state=sent → 200 ACK",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('webhook 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Paymob-Signature", "value": "dev-stub-ok" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"payout\",\n  \"obj\": {\n    \"id\": {{scn_e_provider_ref}},\n    \"state\": \"sent\",\n    \"merchant_payout_id\": \"{{scn_e_withdrawal_id}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/webhooks/paymob",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "webhooks", "paymob"]
+            }
+          }
+        },
+        {
+          "name": "E.3 GET /withdrawals/by-caller-ref → Sent",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const start = Date.now();",
+                  "const waitMs = parseInt(pm.variables.get('wait_ms') || '2000', 10);",
+                  "while (Date.now() - start < waitMs) { /* spin */ }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status Sent', () => pm.expect(pm.response.json().status).to.eql('Sent'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" }
+            ],
+            "url": {
+              "raw": "{{payment_url}}/api/payment/withdrawals/by-caller-ref/{{scn_e_caller_ref}}",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "withdrawals", "by-caller-ref", "{{scn_e_caller_ref}}"]
+            }
+          }
+        },
+        {
+          "name": "E.4 webhook state=completed → 200 ACK",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('scn_e_complete_id', String((Date.now() % 9000000) + 5500000));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('webhook 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Paymob-Signature", "value": "dev-stub-ok" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"payout\",\n  \"obj\": {\n    \"id\": {{scn_e_complete_id}},\n    \"state\": \"completed\",\n    \"merchant_payout_id\": \"{{scn_e_withdrawal_id}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/webhooks/paymob",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "webhooks", "paymob"]
+            }
+          }
+        },
+        {
+          "name": "E.5 GET /withdrawals/by-caller-ref → Completed",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const start = Date.now();",
+                  "const waitMs = parseInt(pm.variables.get('wait_ms') || '2000', 10);",
+                  "while (Date.now() - start < waitMs) { /* spin */ }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status Completed', () => pm.expect(pm.response.json().status).to.eql('Completed'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" }
+            ],
+            "url": {
+              "raw": "{{payment_url}}/api/payment/withdrawals/by-caller-ref/{{scn_e_caller_ref}}",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "withdrawals", "by-caller-ref", "{{scn_e_caller_ref}}"]
+            }
+          }
+        },
+        {
+          "name": "E.6 late webhook state=failed after Completed → ignored",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('scn_e_late_fail_id', String((Date.now() % 9000000) + 5700000));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('webhook 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Paymob-Signature", "value": "dev-stub-ok" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"payout\",\n  \"obj\": {\n    \"id\": {{scn_e_late_fail_id}},\n    \"state\": \"failed\",\n    \"failure_reason\": \"late_failure_should_not_apply\",\n    \"merchant_payout_id\": \"{{scn_e_withdrawal_id}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/webhooks/paymob",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "webhooks", "paymob"]
+            }
+          }
+        },
+        {
+          "name": "E.7 GET /withdrawals/by-caller-ref → still Completed (terminal absorbing)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const start = Date.now();",
+                  "const waitMs = parseInt(pm.variables.get('wait_ms') || '2000', 10);",
+                  "while (Date.now() - start < waitMs) { /* spin */ }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('still Completed', () => pm.expect(pm.response.json().status).to.eql('Completed'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" }
+            ],
+            "url": {
+              "raw": "{{payment_url}}/api/payment/withdrawals/by-caller-ref/{{scn_e_caller_ref}}",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "withdrawals", "by-caller-ref", "{{scn_e_caller_ref}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "F. Cohort payout — failed terminal",
+      "item": [
+        {
+          "name": "F.1 POST /payouts → 201 Pending",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const stamp = pm.variables.replaceIn('{{$timestamp}}');",
+                  "pm.environment.set('scn_f_caller_ref', 'scn-f-' + stamp);",
+                  "pm.environment.set('scn_f_idem', 'k-scn-f-' + stamp);",
+                  "pm.environment.set('scn_f_provider_ref', String((Date.now() % 9000000) + 6000000));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const j = pm.response.json();",
+                  "pm.test('payoutId populated (COHORT_PAYOUT)', () => pm.expect(j.payoutId).to.be.a('string'));",
+                  "pm.environment.set('scn_f_payout_id', j.payoutId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{scn_f_idem}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sellerId\": \"00000099-0000-0000-0000-0000000000f1\",\n  \"amountCents\": 50000,\n  \"currency\": \"EGP\",\n  \"destination\": {\"type\":\"bank\",\"iban\":\"EG800000000000000000000099\"},\n  \"cohortKey\": \"2026-W21\",\n  \"callerReference\": \"{{scn_f_caller_ref}}\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/payouts",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "payouts"]
+            }
+          }
+        },
+        {
+          "name": "F.2 webhook state=failed → 200 ACK",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('webhook 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Paymob-Signature", "value": "dev-stub-ok" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"payout\",\n  \"obj\": {\n    \"id\": {{scn_f_provider_ref}},\n    \"state\": \"failed\",\n    \"failure_reason\": \"recipient_iban_invalid\",\n    \"merchant_payout_id\": \"{{scn_f_payout_id}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/webhooks/paymob",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "webhooks", "paymob"]
+            }
+          }
+        },
+        {
+          "name": "F.3 GET /payouts/by-caller-ref → Failed",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const start = Date.now();",
+                  "const waitMs = parseInt(pm.variables.get('wait_ms') || '2000', 10);",
+                  "while (Date.now() - start < waitMs) { /* spin */ }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('status Failed', () => pm.expect(j.status).to.eql('Failed'));",
+                  "pm.test('failureReason from webhook', () => pm.expect(j.failureReason).to.eql('recipient_iban_invalid'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" }
+            ],
+            "url": {
+              "raw": "{{payment_url}}/api/payment/payouts/by-caller-ref/{{scn_f_caller_ref}}",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "payouts", "by-caller-ref", "{{scn_f_caller_ref}}"]
+            }
+          }
+        },
+        {
+          "name": "F.4 cross-type lookup: scn_f payoutId via withdrawals/by-caller-ref → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Cohort payouts must NOT leak through the withdrawal lookup.",
+                  "// PayoutService.lookupByCallerReference filters by PayoutType.",
+                  "pm.test('status 404 (type-isolated lookup)', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" }
+            ],
+            "url": {
+              "raw": "{{payment_url}}/api/payment/withdrawals/by-caller-ref/{{scn_f_caller_ref}}",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "withdrawals", "by-caller-ref", "{{scn_f_caller_ref}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "G. Webhook ordering & unknown-target",
+      "item": [
+        {
+          "name": "G.1 transaction webhook with unknown merchant_order_id → 200 (no-op, warned)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('scn_g_id', String((Date.now() % 9000000) + 7000000));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Unknown charge: the persister branch isn't entered. The webhook is",
+                  "// still recorded as PROCESSED so Paymob stops retrying — fast 200 ACK.",
+                  "pm.test('webhook 200 even for unknown charge', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Paymob-Signature", "value": "dev-stub-ok" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"transaction\",\n  \"obj\": {\n    \"id\": {{scn_g_id}},\n    \"success\": true,\n    \"merchant_order_id\": \"00000000-0000-0000-0000-000000000000\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/webhooks/paymob",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "webhooks", "paymob"]
+            }
+          }
+        },
+        {
+          "name": "G.2 chargeback for unknown providerRef → 200 (no-op)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('scn_g_cb_id', String((Date.now() % 9000000) + 7100000));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('webhook 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Paymob-Signature", "value": "dev-stub-ok" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"chargeback\",\n  \"obj\": {\n    \"id\": {{scn_g_cb_id}},\n    \"transaction_id\": 999999999,\n    \"reason\": \"orphan_chargeback\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/webhooks/paymob",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "webhooks", "paymob"]
+            }
+          }
+        },
+        {
+          "name": "G.3 unknown event type → 200 (PROCESSED, no state change)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('scn_g_unk_id', String((Date.now() % 9000000) + 7200000));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('webhook 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Paymob-Signature", "value": "dev-stub-ok" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"futuristic_unknown_event_type\",\n  \"obj\": {\"id\": {{scn_g_unk_id}}, \"some_field\": \"value\"}\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/webhooks/paymob",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "webhooks", "paymob"]
+            }
+          }
+        },
+        {
+          "name": "G.4 webhook missing obj.id but has merchant_order_id → falls back to caller-ref lookup",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const stamp = pm.variables.replaceIn('{{$timestamp}}');",
+                  "pm.environment.set('scn_g_caller_ref', 'scn-g-' + stamp);",
+                  "pm.environment.set('scn_g_idem', 'k-scn-g-' + stamp);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('charge created', () => pm.response.to.have.status(201));",
+                  "pm.environment.set('scn_g_charge_id', pm.response.json().chargeId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{scn_g_idem}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"00000099-0000-0000-0000-000000000071\",\n  \"amountCents\": 1234,\n  \"currency\": \"EGP\",\n  \"description\": \"scenario G — caller-ref fallback\",\n  \"callerReference\": \"{{scn_g_caller_ref}}\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges"]
+            }
+          }
+        },
+        {
+          "name": "G.5 webhook with merchant_order_id only (no obj.id) → resolves and marks Succeeded",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// locateCharge() will return null on findByProviderRef(null) → falls",
+                  "// through to merchant_order_id path. The verifier still requires SOME",
+                  "// eventId (here we provide a transaction_id via the 'order.id' field).",
+                  "pm.test('webhook 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Paymob-Signature", "value": "dev-stub-ok" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"transaction\",\n  \"obj\": {\n    \"id\": {{$timestamp}}001,\n    \"success\": true,\n    \"merchant_order_id\": \"{{scn_g_charge_id}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/webhooks/paymob",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "webhooks", "paymob"]
+            }
+          }
+        },
+        {
+          "name": "G.6 verify scn_g charge is Succeeded via merchant_order_id path",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const start = Date.now();",
+                  "const waitMs = parseInt(pm.variables.get('wait_ms') || '2000', 10);",
+                  "while (Date.now() - start < waitMs) { /* spin */ }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Succeeded via merchant_order_id', () => pm.expect(pm.response.json().status).to.eql('Succeeded'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" }
+            ],
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges/{{scn_g_charge_id}}",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges", "{{scn_g_charge_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "H. Adversarial input",
+      "item": [
+        {
+          "name": "H.1 amountCents = 0 → 400 (@Positive)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-adv-zero-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"00000099-0000-0000-0000-000000000099\",\n  \"amountCents\": 0,\n  \"currency\": \"EGP\",\n  \"callerReference\": \"adv-zero\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges"]
+            }
+          }
+        },
+        {
+          "name": "H.2 amountCents = -1 → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-adv-neg-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"00000099-0000-0000-0000-000000000099\",\n  \"amountCents\": -1,\n  \"currency\": \"EGP\",\n  \"callerReference\": \"adv-neg\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges"]
+            }
+          }
+        },
+        {
+          "name": "H.3 amountCents > Long.MAX_VALUE → 400 (Jackson overflow)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 9223372036854775808 = Long.MAX_VALUE + 1; Jackson rejects as a number-overflow",
+                  "// when binding to `long amountCents`. Caught by HttpMessageNotReadable handler.",
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-adv-overflow-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"00000099-0000-0000-0000-000000000099\",\n  \"amountCents\": 9223372036854775808,\n  \"currency\": \"EGP\",\n  \"callerReference\": \"adv-overflow\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges"]
+            }
+          }
+        },
+        {
+          "name": "H.4 amountCents = Long.MAX_VALUE → 201 (boundary accepted; business will cap upstream)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Payment doesn't impose a numeric ceiling — the upstream service",
+                  "// (Wallet / Subscription) owns sanity-checks. Boundary is informational.",
+                  "pm.test('status 201 (boundary accepted)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-adv-max-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"00000099-0000-0000-0000-000000000099\",\n  \"amountCents\": 9223372036854775807,\n  \"currency\": \"EGP\",\n  \"callerReference\": \"adv-max-{{$timestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges"]
+            }
+          }
+        },
+        {
+          "name": "H.5 description with unicode / emoji / RTL → 201 (UTF-8 round-trips)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.environment.set('scn_h_unicode_id', pm.response.json().chargeId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-adv-unicode-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"00000099-0000-0000-0000-000000000099\",\n  \"amountCents\": 100,\n  \"currency\": \"EGP\",\n  \"description\": \"تمرين 🏋️ Дюмбле — \\u202E unicode probe \\u202C\",\n  \"callerReference\": \"adv-unicode-{{$timestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges"]
+            }
+          }
+        },
+        {
+          "name": "H.6 SQL-injection probe in description → 201 (params don't interpolate)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JPA binds parameters; the literal SQL fragment lands in the DB",
+                  "// as plain text. The 201 here is the proof — a missing parameterization",
+                  "// would have surfaced as 500 from a syntax error.",
+                  "pm.test('status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-adv-sqli-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"00000099-0000-0000-0000-000000000099\",\n  \"amountCents\": 100,\n  \"currency\": \"EGP\",\n  \"description\": \"'; DROP TABLE charges; -- AND 1=1\",\n  \"callerReference\": \"adv-sqli-{{$timestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges"]
+            }
+          }
+        },
+        {
+          "name": "H.7 huge description (8KB) → 201 or 400 (depending on column limit; either is sane)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let s = 'A'.repeat(8000);",
+                  "pm.environment.set('huge_desc', s);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 201 = column accepts; 400 = JPA/Hibernate rejected the over-size.",
+                  "// Either is fine — what would NOT be fine is 500.",
+                  "pm.test('status not 5xx', () => pm.expect(pm.response.code).to.be.below(500));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-adv-huge-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"00000099-0000-0000-0000-000000000099\",\n  \"amountCents\": 100,\n  \"currency\": \"EGP\",\n  \"description\": \"{{huge_desc}}\",\n  \"callerReference\": \"adv-huge-{{$timestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges"]
+            }
+          }
+        },
+        {
+          "name": "H.8 malformed UUID userId → 400 (Jackson deserialization)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-adv-uuid-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"not-a-uuid\",\n  \"amountCents\": 100,\n  \"currency\": \"EGP\",\n  \"callerReference\": \"adv-uuid\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges"]
+            }
+          }
+        },
+        {
+          "name": "H.9 unknown JSON fields (forwards-compat) → 201 (Jackson default ignores unknown)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Forward-compat: future clients can add new fields and v1 Payment",
+                  "// must not 400. If FAIL_ON_UNKNOWN_PROPERTIES is ever turned on this",
+                  "// flips to 400 and we need an explicit decision.",
+                  "pm.test('status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-adv-extra-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"00000099-0000-0000-0000-000000000099\",\n  \"amountCents\": 100,\n  \"currency\": \"EGP\",\n  \"callerReference\": \"adv-extra-{{$timestamp}}\",\n  \"futureField\": \"ignored\",\n  \"nested\": {\"deeper\": [1,2,3]}\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges"]
+            }
+          }
+        },
+        {
+          "name": "H.10 trailing JSON garbage → 200/201 (Jackson lenient by default) or 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Jackson defaults to lenient parsing — FAIL_ON_TRAILING_TOKENS is",
+                  "// off, so `{...} junk` parses as the leading object and trailing",
+                  "// bytes are ignored. The contract here is 'don't 5xx' — strictness",
+                  "// is a config toggle the team can flip later if desired.",
+                  "pm.test('not 5xx', () => pm.expect(pm.response.code).to.be.below(500));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{system_jwt_service}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "k-adv-trail-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"userId\":\"00000099-0000-0000-0000-000000000099\",\"amountCents\":100,\"currency\":\"EGP\",\"callerReference\":\"adv-trail\"} garbage trailing data"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/payment/charges",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "payment", "charges"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

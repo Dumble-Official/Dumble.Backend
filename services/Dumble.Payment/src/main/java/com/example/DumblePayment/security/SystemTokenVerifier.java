@@ -43,6 +43,13 @@ public class SystemTokenVerifier {
                     .build()
                     .parseSignedClaims(jwt)
                     .getPayload();
+            // jjwt validates exp if present (throws ExpiredJwtException) but
+            // accepts tokens that omit exp entirely. A no-exp token never goes
+            // stale, so a leaked service token would be valid forever —
+            // refuse it explicitly. (Caught by the QA security probe.)
+            if (claims.getExpiration() == null) {
+                throw new UnauthorizedAccessException("System token missing exp claim");
+            }
             // jjwt 0.12 returns Set<String> for aud; older versions returned
             // a scalar. Handle both via Collection membership, NEVER via a
             // substring match (otherwise "paymentservice" would slip past).

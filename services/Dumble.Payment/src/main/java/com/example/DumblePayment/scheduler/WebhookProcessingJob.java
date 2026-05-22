@@ -102,12 +102,18 @@ public class WebhookProcessingJob {
         // Paymob's event names vary by integration; we accept the common
         // shapes. Anything unknown is recorded as PROCESSED with no state
         // change so it doesn't loop forever.
-        if (type.contains("transaction") || type.contains("charge")) {
+        //
+        // Order matters: "chargeback" contains the substring "charge", so the
+        // chargeback branch MUST be checked before the transaction branch —
+        // otherwise a chargeback event gets misrouted through
+        // applyTransactionEvent (and a SUCCEEDED parent silently stays
+        // SUCCEEDED instead of flipping to REVERSED).
+        if (type.contains("chargeback") || type.contains("dispute")) {
+            applyChargebackEvent(body);
+        } else if (type.contains("transaction") || type.contains("charge")) {
             applyTransactionEvent(body);
         } else if (type.contains("payout") || type.contains("withdrawal") || type.contains("disbursement")) {
             applyPayoutEvent(body);
-        } else if (type.contains("chargeback") || type.contains("dispute")) {
-            applyChargebackEvent(body);
         } else {
             log.info("Webhook {} type={} — unknown class, marking processed with no state change",
                     ev.getEventId(), ev.getEventType());

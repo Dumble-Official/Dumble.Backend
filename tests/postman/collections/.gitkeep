@@ -1,0 +1,2 @@
+Collections are generated on-demand at test time and gitignored.
+Do not commit *.postman_collection.json files here.

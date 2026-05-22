@@ -36,6 +36,7 @@ public class RefundController {
                 "POST /payment/refunds",
                 null,
                 201,
+                req,
                 RefundResponse.class,
                 () -> refundService.refund(req, actor));
         return ResponseEntity.status(cached.replayed() ? HttpStatus.OK : HttpStatus.CREATED)

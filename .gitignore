@@ -55,6 +55,10 @@ bld/
 [Bb]uild[Ll]og.*
 TestResult.xml
 
+## Newman / Postman runner artifacts (generated per run)
+tests/postman/reports/
+tests/postman/node_modules/
+
 ## User-specific
 *.rsuser
 *.cache

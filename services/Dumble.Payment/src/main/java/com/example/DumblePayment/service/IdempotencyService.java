@@ -3,11 +3,15 @@ package com.example.DumblePayment.service;
 import com.example.DumblePayment.domain.IdempotencyKey;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -25,6 +29,11 @@ public class IdempotencyService {
 
     private final IdempotencyKeyStore store;
     private final ObjectMapper objectMapper;
+    // Dedicated mapper for body hashing — same modules as the API mapper but
+    // with map keys sorted alphabetically so {"a":1,"b":2} and {"b":2,"a":1}
+    // hash identically. We copy() rather than mutate the injected mapper so
+    // the API's normal serialization isn't affected by the sort feature.
+    private final ObjectMapper hashMapper;
     private final long ttlHours;
 
     public IdempotencyService(IdempotencyKeyStore store,
@@ -32,6 +41,8 @@ public class IdempotencyService {
                               @Value("${payment.idempotency.ttl-hours:24}") long ttlHours) {
         this.store = store;
         this.objectMapper = objectMapper;
+        this.hashMapper = objectMapper.copy()
+                .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
         this.ttlHours = ttlHours;
     }
 
@@ -44,9 +55,10 @@ public class IdempotencyService {
                                               String endpoint,
                                               UUID userId,
                                               int httpStatus,
+                                              Object requestBody,
                                               Class<T> resultType,
                                               Supplier<T> action) {
-        return run(key, endpoint, userId, httpStatus, resultType, action, true);
+        return run(key, endpoint, userId, httpStatus, requestBody, resultType, action, true);
     }
 
     /**
@@ -61,15 +73,17 @@ public class IdempotencyService {
                                                    String endpoint,
                                                    UUID userId,
                                                    int httpStatus,
+                                                   Object requestBody,
                                                    Class<T> resultType,
                                                    Supplier<T> action) {
-        return run(key, endpoint, userId, httpStatus, resultType, action, false);
+        return run(key, endpoint, userId, httpStatus, requestBody, resultType, action, false);
     }
 
     private <T> CachedResult<T> run(String key,
                                     String endpoint,
                                     UUID userId,
                                     int httpStatus,
+                                    Object requestBody,
                                     Class<T> resultType,
                                     Supplier<T> action,
                                     boolean releaseOnFailure) {
@@ -88,15 +102,17 @@ public class IdempotencyService {
                     "Idempotency-Key may only contain letters, digits, '.', '_', ':', '-'");
         }
 
+        String requestHash = hashRequest(requestBody);
+
         boolean claimed;
         try {
-            claimed = store.tryClaim(key, endpoint, userId, httpStatus, ttlHours);
+            claimed = store.tryClaim(key, endpoint, userId, httpStatus, requestHash, ttlHours);
         } catch (DataIntegrityViolationException dup) {
             claimed = false;
         }
 
         if (!claimed) {
-            return resolveExisting(key, endpoint, userId, httpStatus, resultType, action, releaseOnFailure);
+            return resolveExisting(key, endpoint, userId, httpStatus, requestHash, resultType, action, releaseOnFailure);
         }
 
         T result;
@@ -120,13 +136,14 @@ public class IdempotencyService {
                                                 String endpoint,
                                                 UUID userId,
                                                 int httpStatus,
+                                                String currentRequestHash,
                                                 Class<T> resultType,
                                                 Supplier<T> action,
                                                 boolean releaseOnFailure) {
         Optional<IdempotencyKey> rowOpt = store.find(key);
         if (rowOpt.isEmpty()) {
             try {
-                if (store.tryClaim(key, endpoint, userId, httpStatus, ttlHours)) {
+                if (store.tryClaim(key, endpoint, userId, httpStatus, currentRequestHash, ttlHours)) {
                     T result;
                     try {
                         result = action.get();
@@ -145,6 +162,15 @@ public class IdempotencyService {
             throw new IdempotencyConflictException("Idempotency-Key in flight; please retry");
         }
         IdempotencyKey row = rowOpt.get();
+        // Strict variant of Decision 3.2: if the stored body hash differs from
+        // the new request's hash, refuse the replay. Rows written before V4
+        // (or with a null incoming body) skip the comparison so the migration
+        // stays backward-safe.
+        String storedHash = row.getRequestHash();
+        if (storedHash != null && currentRequestHash != null && !storedHash.equals(currentRequestHash)) {
+            throw new IdempotencyConflictException(
+                    "Idempotency-Key was used with a different request payload; refusing replay");
+        }
         if (IdempotencyKeyStore.STATE_PENDING.equals(row.getState())) {
             throw new IdempotencyConflictException("Request with this Idempotency-Key is in flight");
         }
@@ -153,6 +179,28 @@ public class IdempotencyService {
         }
         T cached = deserialize(row.getResponseJson(), resultType);
         return new CachedResult<>(cached, row.getHttpStatus(), true);
+    }
+
+    /**
+     * SHA-256 hex of the request body serialized with sorted map keys, so
+     * semantically-equivalent JSON ({@code {"a":1,"b":2}} vs
+     * {@code {"b":2,"a":1}}) hashes identically. Returns {@code null} when the
+     * body is {@code null} — the caller treats that as "no comparison".
+     */
+    private String hashRequest(Object body) {
+        if (body == null) {
+            return null;
+        }
+        try {
+            byte[] payload = hashMapper.writeValueAsBytes(body);
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(payload);
+            return HexFormat.of().formatHex(digest);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Idempotency request hash serialization failed", ex);
+        } catch (NoSuchAlgorithmException ex) {
+            // SHA-256 is mandated by every JRE — this branch is defensive.
+            throw new IllegalStateException("SHA-256 not available", ex);
+        }
     }
 
     private String serialize(Object value) {
