@@ -37,6 +37,7 @@ public class ChargeController {
                 "POST /payment/charges",
                 req.getUserId(),
                 201,
+                req,
                 ChargeResponse.class,
                 () -> chargeService.charge(req, actor));
         return ResponseEntity.status(cached.replayed() ? HttpStatus.OK : HttpStatus.CREATED)

@@ -1,0 +1,4 @@
+reports/
+environments/*.local.postman_environment.json
+environments/local.runtime.postman_environment.json
+node_modules/

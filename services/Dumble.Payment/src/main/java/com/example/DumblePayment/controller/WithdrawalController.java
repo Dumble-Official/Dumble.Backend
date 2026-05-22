@@ -37,6 +37,7 @@ public class WithdrawalController {
                 "POST /payment/withdrawals",
                 req.getUserId(),
                 201,
+                req,
                 PayoutResponse.class,
                 () -> payoutService.requestWithdrawal(req, actor));
         return ResponseEntity.status(cached.replayed() ? HttpStatus.OK : HttpStatus.CREATED)

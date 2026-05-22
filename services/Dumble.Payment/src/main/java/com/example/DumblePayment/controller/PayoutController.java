@@ -43,6 +43,7 @@ public class PayoutController {
                 "POST /payment/payouts",
                 req.getSellerId(),
                 201,
+                req,
                 PayoutResponse.class,
                 () -> payoutService.requestCohortPayout(req, actor));
         return ResponseEntity.status(cached.replayed() ? HttpStatus.OK : HttpStatus.CREATED)

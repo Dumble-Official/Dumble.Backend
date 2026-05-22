@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.util.UUID;
@@ -21,6 +22,7 @@ public class WithdrawalRequest {
     @Positive
     private long amountCents;
 
+    @Size(min = 3, max = 3, message = "currency must be a 3-letter ISO 4217 code")
     private String currency;
 
     @NotNull
@@ -28,5 +30,6 @@ public class WithdrawalRequest {
 
     /** Wallet's withdrawal-request id — used to look up status by caller-ref. */
     @NotBlank
+    @Size(max = 255)
     private String callerReference;
 }
