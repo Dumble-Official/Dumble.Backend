@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Infrastructure.Messaging.Consumers;
+using Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 using Dumble.NotificationService.Infrastructure.Persistence;
 using Dumble.NotificationService.Infrastructure.Persistence.Repositories;
 using Dumble.NotificationService.Infrastructure.Push;
@@ -42,10 +43,29 @@ public static class DependencyInjection
         // MassTransit + RabbitMQ
         services.AddMassTransit(x =>
         {
+            // .NET service consumers (MassTransit-typed exchanges)
             x.AddConsumer<PostReactedConsumer>();
             x.AddConsumer<CommentCreatedConsumer>();
             x.AddConsumer<UserFollowedConsumer>();
             x.AddConsumer<MessageSentConsumer>();
+
+            // Java Subscription service consumers (dumble.events topic exchange)
+            x.AddConsumer<BundleActivatedConsumer>();
+            x.AddConsumer<BundleExpiredConsumer>();
+            x.AddConsumer<ChargebackProcessedConsumer>();
+            x.AddConsumer<PaymentFailedConsumer>();
+            x.AddConsumer<PaymentFailedFinalConsumer>();
+            x.AddConsumer<PlanChangedConsumer>();
+            x.AddConsumer<PlatformActivatedConsumer>();
+            x.AddConsumer<PlatformExpiredConsumer>();
+            x.AddConsumer<ReceiptIssuedConsumer>();
+            x.AddConsumer<RefundIssuedConsumer>();
+            x.AddConsumer<RenewalPromptConsumer>();
+            x.AddConsumer<SellerBannedConsumer>();
+            x.AddConsumer<SellerClosedConsumer>();
+            x.AddConsumer<SellerFrozenConsumer>();
+            x.AddConsumer<SellerUnfrozenConsumer>();
+            x.AddConsumer<SellerWindingDownConsumer>();
 
             x.UsingRabbitMq((context, cfg) =>
             {
@@ -55,7 +75,38 @@ public static class DependencyInjection
                     h.Password(configuration["RabbitMQ:Password"] ?? "guest");
                 });
 
+                // Auto-configure endpoints for .NET MassTransit-typed exchanges
                 cfg.ConfigureEndpoints(context);
+
+                // Explicit endpoint for Java-side dumble.events topic exchange
+                // Subscription publishes raw JSON (no MassTransit envelope) with
+                // routing keys like subscription.seller.frozen, subscription.bundle.activated, etc.
+                cfg.ReceiveEndpoint("notification-service.subscription-events", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.Bind("dumble.events", b =>
+                    {
+                        b.ExchangeType = "topic";
+                        b.Durable = true;
+                        b.RoutingKey = "subscription.#";
+                    });
+                    e.ConfigureConsumer<BundleActivatedConsumer>(context);
+                    e.ConfigureConsumer<BundleExpiredConsumer>(context);
+                    e.ConfigureConsumer<ChargebackProcessedConsumer>(context);
+                    e.ConfigureConsumer<PaymentFailedConsumer>(context);
+                    e.ConfigureConsumer<PaymentFailedFinalConsumer>(context);
+                    e.ConfigureConsumer<PlanChangedConsumer>(context);
+                    e.ConfigureConsumer<PlatformActivatedConsumer>(context);
+                    e.ConfigureConsumer<PlatformExpiredConsumer>(context);
+                    e.ConfigureConsumer<ReceiptIssuedConsumer>(context);
+                    e.ConfigureConsumer<RefundIssuedConsumer>(context);
+                    e.ConfigureConsumer<RenewalPromptConsumer>(context);
+                    e.ConfigureConsumer<SellerBannedConsumer>(context);
+                    e.ConfigureConsumer<SellerClosedConsumer>(context);
+                    e.ConfigureConsumer<SellerFrozenConsumer>(context);
+                    e.ConfigureConsumer<SellerUnfrozenConsumer>(context);
+                    e.ConfigureConsumer<SellerWindingDownConsumer>(context);
+                });
             });
         });
 
