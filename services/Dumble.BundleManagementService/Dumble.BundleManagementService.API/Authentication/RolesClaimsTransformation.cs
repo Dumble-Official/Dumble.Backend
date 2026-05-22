@@ -14,7 +14,7 @@ internal sealed class RolesClaimsTransformation : IClaimsTransformation
         if (identity.HasClaim(c => c.Type == ClaimTypes.Role))
             return Task.FromResult(principal);
 
-        foreach (var raw in identity.FindAll(AuthConstants.RolesClaim))
+        foreach (var raw in identity.FindAll(AuthConstants.RolesClaim).ToList())
         {
             // Match the case-insensitive strip used by CurrentUserExtensions so
             // a token carrying "role_admin" lands as the same ClaimTypes.Role
