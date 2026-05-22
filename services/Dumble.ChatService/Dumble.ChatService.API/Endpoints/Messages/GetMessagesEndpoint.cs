@@ -25,8 +25,8 @@ public class GetMessagesEndpoint : EndpointWithoutRequest<CursorPagedResponse<Me
     {
         var conversationId = Route<string>("id")!;
         var userId = User.FindFirst("userId")!.Value;
-        var cursor = Query<string?>("cursor");
-        var limit = Math.Clamp(Query<int?>("limit") ?? 20, 1, 100);
+        var cursor = Query<string?>("cursor", isRequired: false);
+        var limit = Math.Clamp(Query<int?>("limit", isRequired: false) ?? 20, 1, 100);
 
         var result = await _mediator.Send(new GetMessagesQuery(conversationId, userId, cursor, limit), ct);
         await SendAsync(result, cancellation: ct);
