@@ -15,8 +15,7 @@ namespace Dumble.BundleManagementService.Application.Features.Bundles.Commands.C
 internal sealed class CreateBundleCommandHandler(
     ILoggedInUserService loggedInUserService,
     IFileService fileService,
-    IGenericRepository<Bundle, BundleId> bundlesRepository,
-    ILogger<CreateBundleCommandHandler> logger) : IRequestHandler<CreateBundleCommand, BundleId>
+    IGenericRepository<Bundle, BundleId> bundlesRepository) : IRequestHandler<CreateBundleCommand, BundleId>
 {
     public async Task<BundleId> Handle(CreateBundleCommand request, CancellationToken cancellationToken)
     {
@@ -33,8 +32,8 @@ internal sealed class CreateBundleCommandHandler(
         {
             var uploadTasks = request.Images.Select(async img =>
             {
-                await using var stream = img.OpenReadStream();
-                return BundleImage.Create(await fileService.UploadAsync(stream, img.Name, img.ContentType));
+                await using var stream = img.Content;
+                return BundleImage.Create(await fileService.UploadAsync(stream, img.FileName, img.ContentType));
             });
 
             imageUrls = await Task.WhenAll(uploadTasks);

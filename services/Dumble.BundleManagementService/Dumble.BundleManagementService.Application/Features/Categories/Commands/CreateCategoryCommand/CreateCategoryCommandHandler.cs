@@ -18,12 +18,6 @@ public sealed class CreateCategoryCommandHandler(
         if (!user.IsInRole(UserType.Admin))
             throw new UnauthorizedAccessException("Only administrators can create categories");
 
-        var isAdmin = user.UserType == UserType.Admin
-            || user.Roles.Any(r => r.Equals("ROLE_ADMIN", StringComparison.OrdinalIgnoreCase));
-
-        if (!isAdmin)
-            throw new UnauthorizedAccessException("Only administrators can create categories");
-
         var category = Category.Create(Name.Create(request.Name));
 
         await categoryRepository.Create(category);
