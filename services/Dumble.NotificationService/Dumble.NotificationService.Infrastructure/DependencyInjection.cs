@@ -18,7 +18,7 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         // MongoDB
-        var connectionString = configuration.GetConnectionString("MongoDb") ?? "mongodb://admin:admin123@localhost:27017";
+        var connectionString = configuration.GetConnectionString("MongoDb") ?? throw new InvalidOperationException("ConnectionStrings:MongoDb is required");
         var databaseName = configuration["MongoDb:DatabaseName"] ?? "dumble_notifications";
 
         services.AddSingleton<IMongoClient>(new MongoClient(connectionString));
