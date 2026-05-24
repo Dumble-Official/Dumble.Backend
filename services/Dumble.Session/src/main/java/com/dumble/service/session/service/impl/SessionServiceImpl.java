@@ -28,23 +28,21 @@ public class SessionServiceImpl implements SessionService {
     private final SessionMapper sessionMapper;
 
 
-    // TODO: Update session limit logic to support paid subscriptions.
-    // Gyms and Trainers should be able to create additional sessions after exceeding
-    // the free weekly limit based on their active subscription plan.
+
     @Override
     public SessionResponse createSession(SessionCreateRequest request) {
 
-        LocalDateTime weekStart = request.getStartTime()
-                .with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
-                .withHour(0).withMinute(0).withSecond(0);
-        LocalDateTime weekEnd = weekStart.plusDays(6)
-                .withHour(23).withMinute(59).withSecond(59);
-
-        long sessionCount = sessionRepository.countSessionsInWeek(request.getGymId(), request.getTrainerId(), weekStart, weekEnd);
-        int freeLimit = 4;
-        if(sessionCount >= freeLimit) {
-            throw new RuntimeException("Maximum weekly limit reached (4 sessions).");
-        }
+//        LocalDateTime weekStart = request.getStartTime()
+//                .with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
+//                .withHour(0).withMinute(0).withSecond(0);
+//        LocalDateTime weekEnd = weekStart.plusDays(6)
+//                .withHour(23).withMinute(59).withSecond(59);
+//
+//        long sessionCount = sessionRepository.countSessionsInWeek(request.getGymId(), request.getTrainerId(), weekStart, weekEnd);
+//        int freeLimit = 4;
+//        if(sessionCount >= freeLimit) {
+//            throw new RuntimeException("Maximum weekly limit reached (4 sessions).");
+//        }
 
         if(request.getGymId() != null) {
             long overlapping = sessionRepository.countConcurrentSessions(request.getGymId(), request.getStartTime(), request.getEndTime());

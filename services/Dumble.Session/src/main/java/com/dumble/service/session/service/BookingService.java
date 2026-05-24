@@ -11,5 +11,5 @@ public interface BookingService {
     BookingResponse getBookingDetails(UUID bookingId);
     List<BookingResponse> getParticipantBookings(UUID participantId);
     void cancelBooking(UUID bookingId);
-    void confirmPayment(UUID paymentId, String transactionRef);
+    void confirmPayment(UUID paymentId);
 }

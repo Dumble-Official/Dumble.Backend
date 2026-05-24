@@ -2,15 +2,18 @@ package com.dumble.service.session.repository;
 
 import com.dumble.service.session.domain.entity.Session;
 import com.dumble.service.session.domain.enumuration.SessionStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -26,6 +29,10 @@ public interface SessionRepository extends JpaRepository<Session, UUID> {
     List<Session> findActiveSessions();
 
     Page<Session> findByTitleContainingIgnoreCase(String title, Pageable pageable);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM Session s WHERE s.id = :id")
+    Optional<Session> findByIdForUpdate(@Param("id") UUID id);
 
     @Query("SELECT s FROM Session s WHERE s.currentParticipants < s.maxCapacity AND s.status = 'PUBLISHED'")
     Page<Session> findSessionsWithAvailableSpots(Pageable pageable);

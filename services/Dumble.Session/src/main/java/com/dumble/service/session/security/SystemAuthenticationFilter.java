@@ -1,0 +1,66 @@
+package com.dumble.service.session.security;
+
+import com.dumble.service.session.exception.UnauthorizedAccessException;
+import io.jsonwebtoken.Claims;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.lang.NonNull;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+@Component
+public class SystemAuthenticationFilter extends OncePerRequestFilter {
+
+    private static final Logger log = LoggerFactory.getLogger(SystemAuthenticationFilter.class);
+    private static final String ADMIN_ISSUER = "admin";
+
+    private final SystemTokenVerifier verifier;
+
+    public SystemAuthenticationFilter(SystemTokenVerifier verifier) {
+        this.verifier = verifier;
+    }
+
+    @Override
+    protected void doFilterInternal(@NonNull HttpServletRequest request,
+                                    @NonNull HttpServletResponse response,
+                                    @NonNull FilterChain chain) throws ServletException, IOException {
+        String header = request.getHeader("Authorization");
+        if (header != null && header.startsWith("Bearer ")) {
+            try {
+                Claims claims = verifier.verify(header);
+                String issuer = claims.getIssuer() == null ? "unknown" : claims.getIssuer();
+
+                List<SimpleGrantedAuthority> authorities = new ArrayList<>(3);
+                authorities.add(new SimpleGrantedAuthority("ROLE_SERVICE"));
+                authorities.add(new SimpleGrantedAuthority("ROLE_SERVICE_" + issuer.toUpperCase()));
+                if (ADMIN_ISSUER.equalsIgnoreCase(issuer)) {
+                    authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+                }
+
+                var auth = new UsernamePasswordAuthenticationToken(issuer, null, authorities);
+                SecurityContextHolder.getContext().setAuthentication(auth);
+            } catch (UnauthorizedAccessException ex) {
+                log.warn("System JWT validation failed (path={}): {}", request.getRequestURI(), ex.getMessage());
+                SecurityContextHolder.clearContext();
+            }
+        }
+//        String mockParticipantId = "22222222-2222-2222-2222-222222222222";
+//        var authorities = List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_PARTICIPANT"));
+//
+//        var auth = new UsernamePasswordAuthenticationToken(mockParticipantId, null, authorities);
+//        SecurityContextHolder.getContext().setAuthentication(auth);
+
+        chain.doFilter(request, response);
+    }
+}
