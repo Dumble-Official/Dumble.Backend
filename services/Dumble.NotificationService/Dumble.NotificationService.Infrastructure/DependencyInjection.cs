@@ -94,34 +94,122 @@ public static class DependencyInjection
                     e.ConfigureConsumer<MessageSentConsumer>(context);
                 });
 
-                // Explicit endpoint for Java-side dumble.events topic exchange
-                // Subscription publishes raw JSON (no MassTransit envelope) with
-                // routing keys like subscription.seller.frozen, subscription.bundle.activated, etc.
-                cfg.ReceiveEndpoint("notification-service.subscription-events", e =>
+                // Java Subscription service consumers (dumble.events topic exchange)
+                // Each gets its own endpoint bound with a specific routing key so
+                // RabbitMQ's topic exchange delivers only matching events — necessary
+                // because Java publishes raw JSON without a MassTransit envelope, and
+                // UseRawJsonSerializer on a shared endpoint would dispatch every message
+                // to all 16 consumers (all record types deserialize from any JSON).
+                cfg.ReceiveEndpoint("notification-service.bundle-activated", e =>
                 {
                     e.UseRawJsonSerializer();
                     e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
-                    e.Bind("dumble.events", b =>
-                    {
-                        b.ExchangeType = "topic";
-                        b.Durable = true;
-                        b.RoutingKey = "subscription.#";
-                    });
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.bundle.activated"; });
                     e.ConfigureConsumer<BundleActivatedConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("notification-service.bundle-expired", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.bundle.expired"; });
                     e.ConfigureConsumer<BundleExpiredConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("notification-service.chargeback-processed", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.chargeback.processed"; });
                     e.ConfigureConsumer<ChargebackProcessedConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("notification-service.payment-failed", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.payment.failed"; });
                     e.ConfigureConsumer<PaymentFailedConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("notification-service.payment-failed-final", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.payment.failed-final"; });
                     e.ConfigureConsumer<PaymentFailedFinalConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("notification-service.plan-changed", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.plan.changed"; });
                     e.ConfigureConsumer<PlanChangedConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("notification-service.platform-activated", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.platform.activated"; });
                     e.ConfigureConsumer<PlatformActivatedConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("notification-service.platform-expired", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.platform.expired"; });
                     e.ConfigureConsumer<PlatformExpiredConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("notification-service.receipt-issued", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.receipt.issued"; });
                     e.ConfigureConsumer<ReceiptIssuedConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("notification-service.refund-issued", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.refund.issued"; });
                     e.ConfigureConsumer<RefundIssuedConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("notification-service.renewal-prompt", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.#.renewal-prompt"; });
                     e.ConfigureConsumer<RenewalPromptConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("notification-service.seller-banned", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.seller.banned"; });
                     e.ConfigureConsumer<SellerBannedConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("notification-service.seller-closed", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.seller.closed"; });
                     e.ConfigureConsumer<SellerClosedConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("notification-service.seller-frozen", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.seller.frozen"; });
                     e.ConfigureConsumer<SellerFrozenConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("notification-service.seller-unfrozen", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.seller.unfrozen"; });
                     e.ConfigureConsumer<SellerUnfrozenConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("notification-service.seller-winding-down", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.seller.winding-down"; });
                     e.ConfigureConsumer<SellerWindingDownConsumer>(context);
                 });
             });
