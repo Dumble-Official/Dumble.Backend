@@ -12,18 +12,21 @@ public sealed class RabbitMqHealthCheck : IHealthCheck
         _bus = bus;
     }
 
-    public async Task<HealthCheckResult> CheckHealthAsync(
+    public Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            _bus.GetProbeResult();
-            return HealthCheckResult.Healthy("MassTransit bus is ready");
+            var probe = _bus.GetProbeResult();
+            var isReady = string.Equals(probe.Status, "ready", StringComparison.OrdinalIgnoreCase);
+            return Task.FromResult(isReady
+                ? HealthCheckResult.Healthy("MassTransit bus is ready")
+                : HealthCheckResult.Degraded($"MassTransit bus status: {probe.Status}"));
         }
         catch (Exception ex)
         {
-            return HealthCheckResult.Unhealthy("MassTransit bus check failed", ex);
+            return Task.FromResult(HealthCheckResult.Unhealthy("MassTransit bus check failed", ex));
         }
     }
 }
