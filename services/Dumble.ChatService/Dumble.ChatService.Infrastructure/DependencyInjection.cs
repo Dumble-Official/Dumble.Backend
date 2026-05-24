@@ -15,9 +15,8 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         // MongoDB
-        var mongoConnectionString = configuration.GetConnectionString("MongoDb");
-        if (string.IsNullOrEmpty(mongoConnectionString))
-            mongoConnectionString = "mongodb://dumble_chat_user:chatpass123@[::1]:27017/dumble_chat?authSource=dumble_chat";
+        var mongoConnectionString = configuration.GetConnectionString("MongoDb")
+            ?? throw new InvalidOperationException("ConnectionStrings:MongoDb is required");
         var databaseName = configuration["MongoDb:DatabaseName"];
         if (string.IsNullOrEmpty(databaseName))
             databaseName = "dumble_chat";
