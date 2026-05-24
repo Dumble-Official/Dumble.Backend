@@ -59,6 +59,7 @@ public class WalletController {
                 "POST /wallet/credit",
                 req.getUserId(),
                 201,
+                req,
                 WalletWriteResponse.class,
                 () -> walletService.credit(req));
         return ResponseEntity.status(cached.replayed() ? HttpStatus.OK : HttpStatus.CREATED).body(cached.value());
@@ -82,6 +83,7 @@ public class WalletController {
                 "POST /wallet/debit",
                 req.getUserId(),
                 201,
+                req,
                 WalletWriteResponse.class,
                 () -> walletService.debit(req));
         return ResponseEntity.status(cached.replayed() ? HttpStatus.OK : HttpStatus.CREATED).body(cached.value());

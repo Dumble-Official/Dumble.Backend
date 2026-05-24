@@ -49,6 +49,12 @@ public class SystemTokenVerifier {
             if (!audienceMatches(claims.getAudience())) {
                 throw new UnauthorizedAccessException("System token aud does not include 'wallet'");
             }
+            // jjwt only enforces exp when the claim is present. A token issued
+            // without exp would otherwise be valid forever — leaking one would
+            // have no clock-based recovery. Refuse explicitly.
+            if (claims.getExpiration() == null) {
+                throw new UnauthorizedAccessException("System token missing exp claim");
+            }
             return claims;
         } catch (JwtException | IllegalArgumentException ex) {
             throw new UnauthorizedAccessException("Invalid or expired system token");
