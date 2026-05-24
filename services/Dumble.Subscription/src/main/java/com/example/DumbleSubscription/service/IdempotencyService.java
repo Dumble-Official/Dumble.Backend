@@ -8,6 +8,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -52,6 +53,18 @@ public class IdempotencyService {
                                               Supplier<T> action) {
         if (key == null || key.isBlank()) {
             throw new IllegalArgumentException("Idempotency-Key header required");
+        }
+        // The dedup column is VARCHAR(128). Without an explicit length cap two
+        // distinct keys that differ only past char 128 collide silently after
+        // Postgres truncation, bypassing dedup. The charset restriction blocks
+        // a multi-MB header (or one with control chars / spaces) from being
+        // shoved into log lines and the DB column. Mirrors Wallet + Payment.
+        if (key.length() > 128) {
+            throw new IllegalArgumentException("Idempotency-Key must be at most 128 characters");
+        }
+        if (!key.matches("^[A-Za-z0-9._:\\-]+$")) {
+            throw new IllegalArgumentException(
+                    "Idempotency-Key may only contain letters, digits, '.', '_', ':', '-'");
         }
 
         // 1. Try to claim the key by inserting a PENDING row in its own short tx.
@@ -115,6 +128,15 @@ public class IdempotencyService {
             throw new IdempotencyConflictException("Idempotency-Key in flight; please retry");
         }
         IdempotencyKey row = rowOpt.get();
+        // The PK on idempotency_keys is `key` alone — a second user reusing
+        // the same key would otherwise be served the original caller's
+        // cached response (a cross-user IDOR; the level-up review caught
+        // exactly this on Subscription). Treat key collision across users
+        // as a conflict so the second caller has to pick a fresh key.
+        if (!Objects.equals(row.getUserId(), userId)) {
+            throw new IdempotencyConflictException(
+                    "Idempotency-Key already used by a different caller; pick a fresh key");
+        }
         if (IdempotencyKeyStore.STATE_PENDING.equals(row.getState())) {
             // A concurrent peer is still running the action. Don't replay an
             // empty body — make the client back off and retry.
