@@ -9,6 +9,19 @@ spring:
     username: ${SUBSCRIPTION_DB_USERNAME:postgres}
     password: ${SUBSCRIPTION_DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      # Default pool of 10 is undersized for the cohort-payout + dunning +
+      # outbox publisher background load plus user-facing checkout traffic.
+      # 20 covers expected peak with headroom.
+      maximum-pool-size: ${SUBSCRIPTION_HIKARI_MAX_POOL_SIZE:20}
+      minimum-idle: ${SUBSCRIPTION_HIKARI_MIN_IDLE:5}
+      # Fast-fail at 5 s instead of the 30 s default — under a DB outage we
+      # want callers to see a clean 5xx promptly so upstream circuit breakers
+      # open, not have requests sit blocked for half a minute.
+      connection-timeout: ${SUBSCRIPTION_HIKARI_CONNECTION_TIMEOUT_MS:5000}
+      validation-timeout: 2000
+      # Surface connection leaks during local dev (off in prod via env=0).
+      leak-detection-threshold: ${SUBSCRIPTION_HIKARI_LEAK_THRESHOLD_MS:60000}
 
   jpa:
     hibernate:

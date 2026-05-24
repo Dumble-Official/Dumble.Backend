@@ -2,6 +2,10 @@ package com.example.DumbleSubscription.service;
 
 import com.example.DumbleSubscription.domain.IdempotencyKey;
 import com.example.DumbleSubscription.repository.IdempotencyKeyRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.PersistenceException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +30,9 @@ public class IdempotencyKeyStore {
     static final String STATE_COMPLETED = "COMPLETED";
 
     private final IdempotencyKeyRepository repository;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public IdempotencyKeyStore(IdempotencyKeyRepository repository) {
         this.repository = repository;
@@ -57,7 +64,21 @@ public class IdempotencyKeyStore {
         row.setResponseJson(null);
         row.setCreatedAt(Instant.now());
         row.setExpiresAt(Instant.now().plus(ttlHours, ChronoUnit.HOURS));
-        repository.saveAndFlush(row);     // surface PK violations now, not at tx commit
+        // entityManager.persist forces a bare INSERT and hard-fails on a PK
+        // collision. repository.save() / saveAndFlush() for a manually-@Id
+        // entity routes through merge() — Spring Data first SELECTs by id, and
+        // if the row already exists it UPDATEs instead of failing. Two parallel
+        // tryClaim calls under that semantic could both win (one INSERT, one
+        // UPDATE) → double-spend. persist() closes the race; the second caller
+        // gets a PersistenceException → DataIntegrityViolationException that
+        // IdempotencyService's outer handler translates to "already in flight".
+        try {
+            entityManager.persist(row);
+            entityManager.flush();
+        } catch (PersistenceException ex) {
+            throw new DataIntegrityViolationException(
+                    "Idempotency key already claimed concurrently: " + key, ex);
+        }
         return true;
     }
 
