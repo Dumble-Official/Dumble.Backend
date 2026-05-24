@@ -29,7 +29,50 @@ services:
       retries: 15
       start_period: 30s
 
+  mongo:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   # ── .NET Application Services ───────────────────────────────────────
+
+  notification-service:
+    build:
+      context: ../services
+      dockerfile: Dumble.NotificationService/Dockerfile
+    ports:
+      - "5023:5023"
+    environment:
+      ASPNETCORE_URLS: http://+:5023
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__MongoDb: mongodb://admin:${MONGO_PASSWORD}@mongo:27017
+      MongoDb__DatabaseName: dumble_notifications
+      JWT_SECRET: ${JWT_SECRET}
+      RabbitMQ__Host: rabbitmq
+    depends_on:
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
   bundle-service:
     build:

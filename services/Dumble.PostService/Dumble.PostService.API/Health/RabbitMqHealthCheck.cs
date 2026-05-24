@@ -5,9 +5,9 @@ namespace Dumble.PostService.API.Health;
 
 public sealed class RabbitMqHealthCheck : IHealthCheck
 {
-    private readonly IBus _bus;
+    private readonly IBusControl _bus;
 
-    public RabbitMqHealthCheck(IBus bus)
+    public RabbitMqHealthCheck(IBusControl bus)
     {
         _bus = bus;
     }
