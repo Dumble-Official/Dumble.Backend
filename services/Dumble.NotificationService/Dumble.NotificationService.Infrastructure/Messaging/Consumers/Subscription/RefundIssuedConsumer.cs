@@ -2,6 +2,7 @@ using MassTransit;
 using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Domain.Models;
 using Dumble.SharedKernel.Events.Subscription;
+using Dumble.NotificationService.Domain.Constants;
 
 namespace Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 
@@ -21,7 +22,7 @@ public class RefundIssuedConsumer(
             new Notification
             {
                 RecipientId = evt.SubscriptionId.ToString(),
-                Type = "Refund",
+                Type = NotificationTypes.Refund,
                 Title = "Refund Processed",
                 Body = $"A refund of {amount:F2} has been processed{(!string.IsNullOrEmpty(evt.Reason) ? $": {evt.Reason}" : ".")}",
                 Data = new Dictionary<string, string>

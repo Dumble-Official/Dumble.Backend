@@ -2,6 +2,7 @@ using MassTransit;
 using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Domain.Models;
 using Dumble.SharedKernel.Events.Subscription;
+using Dumble.NotificationService.Domain.Constants;
 
 namespace Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 
@@ -20,7 +21,7 @@ public class SellerWindingDownConsumer(
             new Notification
             {
                 RecipientId = evt.SellerId.ToString(),
-                Type = "SellerAccount",
+                Type = NotificationTypes.SellerAccount,
                 Title = "Account Winding Down",
                 Body = evt.Reason is not null
                     ? $"Your seller account is winding down: {evt.Reason}"

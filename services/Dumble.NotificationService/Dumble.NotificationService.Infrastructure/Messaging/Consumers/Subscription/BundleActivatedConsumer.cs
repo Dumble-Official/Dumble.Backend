@@ -2,6 +2,7 @@ using MassTransit;
 using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Domain.Models;
 using Dumble.SharedKernel.Events.Subscription;
+using Dumble.NotificationService.Domain.Constants;
 
 namespace Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 
@@ -20,7 +21,7 @@ public class BundleActivatedConsumer(
             new Notification
             {
                 RecipientId = evt.ParticipantId.ToString(),
-                Type = "BundleSubscription",
+                Type = NotificationTypes.BundleSubscription,
                 Title = "Subscription Active",
                 Body = $"Your subscription to \"{evt.BundleName}\" is now active for {evt.DurationDays} days.",
                 Data = new Dictionary<string, string>

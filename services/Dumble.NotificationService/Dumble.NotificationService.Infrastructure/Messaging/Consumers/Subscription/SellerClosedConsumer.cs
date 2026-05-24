@@ -2,6 +2,7 @@ using MassTransit;
 using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Domain.Models;
 using Dumble.SharedKernel.Events.Subscription;
+using Dumble.NotificationService.Domain.Constants;
 
 namespace Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 
@@ -20,7 +21,7 @@ public class SellerClosedConsumer(
             new Notification
             {
                 RecipientId = evt.SellerId.ToString(),
-                Type = "SellerAccount",
+                Type = NotificationTypes.SellerAccount,
                 Title = "Account Closed",
                 Body = "Your seller account has been closed.",
                 Data = new Dictionary<string, string>

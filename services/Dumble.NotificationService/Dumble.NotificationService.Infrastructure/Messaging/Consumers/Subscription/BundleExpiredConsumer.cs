@@ -2,6 +2,7 @@ using MassTransit;
 using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Domain.Models;
 using Dumble.SharedKernel.Events.Subscription;
+using Dumble.NotificationService.Domain.Constants;
 
 namespace Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 
@@ -20,7 +21,7 @@ public class BundleExpiredConsumer(
             new Notification
             {
                 RecipientId = evt.SubscriptionId.ToString(),
-                Type = "BundleSubscription",
+                Type = NotificationTypes.BundleSubscription,
                 Title = "Subscription Expired",
                 Body = "Your bundle subscription has expired.",
                 Data = new Dictionary<string, string>

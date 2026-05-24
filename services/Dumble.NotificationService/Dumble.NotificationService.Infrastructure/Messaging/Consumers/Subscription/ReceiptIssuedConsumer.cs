@@ -2,6 +2,7 @@ using MassTransit;
 using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Domain.Models;
 using Dumble.SharedKernel.Events.Subscription;
+using Dumble.NotificationService.Domain.Constants;
 
 namespace Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 
@@ -21,7 +22,7 @@ public class ReceiptIssuedConsumer(
             new Notification
             {
                 RecipientId = evt.UserId.ToString(),
-                Type = "Receipt",
+                Type = NotificationTypes.Receipt,
                 Title = "Receipt Available",
                 Body = $"Your receipt for {amount:F2} {evt.Currency} is now available.",
                 Data = new Dictionary<string, string>

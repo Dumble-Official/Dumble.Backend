@@ -2,6 +2,7 @@ using MassTransit;
 using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Domain.Models;
 using Dumble.SharedKernel.Events.Subscription;
+using Dumble.NotificationService.Domain.Constants;
 
 namespace Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 
@@ -20,7 +21,7 @@ public class ChargebackProcessedConsumer(
             new Notification
             {
                 RecipientId = evt.SubscriptionId.ToString(),
-                Type = "Chargeback",
+                Type = NotificationTypes.Chargeback,
                 Title = "Chargeback Filed",
                 Body = $"A chargeback of {(evt.AmountCents / 100m):F2} has been processed for your subscription.",
                 Data = new Dictionary<string, string>

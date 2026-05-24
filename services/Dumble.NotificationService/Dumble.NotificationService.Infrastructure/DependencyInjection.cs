@@ -84,6 +84,7 @@ public static class DependencyInjection
                 cfg.ReceiveEndpoint("notification-service.subscription-events", e =>
                 {
                     e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
                     e.Bind("dumble.events", b =>
                     {
                         b.ExchangeType = "topic";

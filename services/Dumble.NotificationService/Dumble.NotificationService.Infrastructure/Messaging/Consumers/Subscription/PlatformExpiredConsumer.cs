@@ -2,6 +2,7 @@ using MassTransit;
 using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Domain.Models;
 using Dumble.SharedKernel.Events.Subscription;
+using Dumble.NotificationService.Domain.Constants;
 
 namespace Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 
@@ -20,7 +21,7 @@ public class PlatformExpiredConsumer(
             new Notification
             {
                 RecipientId = evt.UserId.ToString(),
-                Type = "PlanChange",
+                Type = NotificationTypes.PlanChange,
                 Title = "Plan Expired",
                 Body = "Your platform plan has expired.",
                 Data = new Dictionary<string, string>

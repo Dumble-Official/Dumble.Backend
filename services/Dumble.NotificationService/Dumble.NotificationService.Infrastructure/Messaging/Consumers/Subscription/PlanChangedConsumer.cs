@@ -2,6 +2,7 @@ using MassTransit;
 using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Domain.Models;
 using Dumble.SharedKernel.Events.Subscription;
+using Dumble.NotificationService.Domain.Constants;
 
 namespace Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 
@@ -20,7 +21,7 @@ public class PlanChangedConsumer(
             new Notification
             {
                 RecipientId = evt.UserId.ToString(),
-                Type = "PlanChange",
+                Type = NotificationTypes.PlanChange,
                 Title = "Plan Changed",
                 Body = $"Your plan has been changed to {evt.NewPlan}.",
                 Data = new Dictionary<string, string>
