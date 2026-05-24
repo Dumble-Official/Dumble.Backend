@@ -75,8 +75,24 @@ public static class DependencyInjection
                     h.Password(configuration["RabbitMQ:Password"] ?? "guest");
                 });
 
-                // Auto-configure endpoints for .NET MassTransit-typed exchanges
-                cfg.ConfigureEndpoints(context);
+                // .NET service consumers (MassTransit-typed exchanges) — explicit endpoints
+                // to prevent double-registration with subscription consumers on the topic exchange
+                cfg.ReceiveEndpoint("PostReacted", e =>
+                {
+                    e.ConfigureConsumer<PostReactedConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("CommentCreated", e =>
+                {
+                    e.ConfigureConsumer<CommentCreatedConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("UserFollowed", e =>
+                {
+                    e.ConfigureConsumer<UserFollowedConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("MessageSent", e =>
+                {
+                    e.ConfigureConsumer<MessageSentConsumer>(context);
+                });
 
                 // Explicit endpoint for Java-side dumble.events topic exchange
                 // Subscription publishes raw JSON (no MassTransit envelope) with
