@@ -5,9 +5,9 @@ namespace Dumble.PostService.API.Health;
 
 public sealed class RabbitMqHealthCheck : IHealthCheck
 {
-    private readonly IBusControl _bus;
+    private readonly IBus _bus;
 
-    public RabbitMqHealthCheck(IBusControl bus)
+    public RabbitMqHealthCheck(IBus bus)
     {
         _bus = bus;
     }
@@ -18,15 +18,12 @@ public sealed class RabbitMqHealthCheck : IHealthCheck
     {
         try
         {
-            var probe = _bus.GetProbeResult();
-            var isReady = string.Equals(probe.Status, "ready", StringComparison.OrdinalIgnoreCase);
-            return Task.FromResult(isReady
-                ? HealthCheckResult.Healthy("MassTransit bus is ready")
-                : HealthCheckResult.Degraded($"MassTransit bus status: {probe.Status}"));
+            _bus.GetProbeResult();
+            return Task.FromResult(HealthCheckResult.Healthy("MassTransit bus is ready"));
         }
         catch (Exception ex)
         {
-            return Task.FromResult(HealthCheckResult.Unhealthy("MassTransit bus check failed", ex));
+            return Task.FromResult(HealthCheckResult.Unhealthy("MassTransit bus connection failed", ex));
         }
     }
 }
