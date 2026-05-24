@@ -1,8 +1,9 @@
 using Dumble.SharedKernel.Common;
+using System.Text.Json.Serialization;
 
 namespace Dumble.SharedKernel.Events.Subscription;
 
 public record PlanChangedEvent(
-    Guid UserId,
-    string NewPlan
+    [property: JsonPropertyName("userId")] Guid? UserId,
+    [property: JsonPropertyName("newPlan")] string? NewPlan
 ) : IntegrationEvent;

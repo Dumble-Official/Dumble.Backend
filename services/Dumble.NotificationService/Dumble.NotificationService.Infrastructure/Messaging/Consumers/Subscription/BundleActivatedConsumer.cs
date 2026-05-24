@@ -3,21 +3,30 @@ using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Domain.Models;
 using Dumble.SharedKernel.Events.Subscription;
 using Dumble.NotificationService.Domain.Constants;
+using Microsoft.Extensions.Logging;
 
 namespace Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 
 public class BundleActivatedConsumer(
-    INotificationRepository notificationRepository,
-    INotificationPreferenceRepository preferenceRepository,
-    IDeviceTokenRepository deviceTokenRepository,
-    IPushNotificationService pushService,
-    INotificationHubService hubService
+    INotificationDeliveryService deliveryService,
+    IDedupEventStore dedupEventStore,
+    ILogger<BundleActivatedConsumer> logger
 ) : IConsumer<BundleActivatedEvent>
 {
     public async Task Consume(ConsumeContext<BundleActivatedEvent> context)
     {
         var evt = context.Message;
-        await NotificationDeliveryHelper.DeliverAsync(
+
+        if (context.MessageId.HasValue)
+        {
+            if (!await dedupEventStore.TryClaimAsync(context.MessageId.Value.ToString(), nameof(BundleActivatedConsumer), context.CancellationToken))
+            {
+                logger.LogInformation("Dedup: {MessageId} already processed by {ConsumerType}", context.MessageId, nameof(BundleActivatedConsumer));
+                return;
+            }
+        }
+
+        await deliveryService.DeliverAsync(
             new Notification
             {
                 RecipientId = evt.ParticipantId.ToString(),
@@ -26,7 +35,7 @@ public class BundleActivatedConsumer(
                 Body = $"Your subscription to \"{evt.BundleName}\" is now active for {evt.DurationDays} days.",
                 Data = new Dictionary<string, string>
                 {
-                    ["subscriptionId"] = evt.SubscriptionId.ToString(),
+                    ["subscriptionId"] = evt.Id.ToString(),
                     ["bundleName"] = evt.BundleName,
                     ["sellerId"] = evt.SellerId.ToString(),
                     ["durationDays"] = evt.DurationDays.ToString()
@@ -34,7 +43,6 @@ public class BundleActivatedConsumer(
                 CreatedAt = DateTime.UtcNow,
                 ExpiresAt = DateTime.UtcNow.AddDays(30)
             },
-            notificationRepository, preferenceRepository, deviceTokenRepository, pushService, hubService,
             context.CancellationToken);
     }
 }

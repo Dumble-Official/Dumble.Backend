@@ -18,8 +18,11 @@ public sealed class RabbitMqHealthCheck : IHealthCheck
     {
         try
         {
-            _bus.GetProbeResult();
-            return Task.FromResult(HealthCheckResult.Healthy("MassTransit bus is ready"));
+            var healthResult = _bus.CheckHealth();
+            return healthResult.Status == BusHealthStatus.Healthy
+                ? Task.FromResult(HealthCheckResult.Healthy("MassTransit bus is ready"))
+                : Task.FromResult(HealthCheckResult.Unhealthy(
+                    $"MassTransit bus status: {healthResult.Status}"));
         }
         catch (Exception ex)
         {

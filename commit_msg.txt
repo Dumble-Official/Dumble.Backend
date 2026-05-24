@@ -1,0 +1,23 @@
+fix(notification): add DedupEventStore, injectable NotificationDeliveryService, and NotificationSettings for TTL
+
+- Add IDedupEventStore + MongoDB-backed DedupEventStore for inbound idempotency
+- Refactor static NotificationDeliveryHelper into injectable INotificationDeliveryService
+- Add NotificationSettings config (DefaultExpiryDays = 30) for configurable TTL
+- Reduce consumer constructor from 5 individual services to 2 interfaces
+- Add TTL index on dedup_events collection (7-day auto-expiry)
+
+fix(SharedKernel): align all 16 Subscription event DTOs with Java JSON contract
+
+Every C# event record now carries [property: JsonPropertyName("...")] attributes
+matching Java's camelCase payload (e.g., sellerId, frozenUntil, bundleName).
+Structural mismatches corrected:
+  - BundleActivatedEvent: SubscriptionId -> Id (Java uses "id")
+  - ChargebackProcessedEvent: replaced AmountCents with LockedCents/ChargebackCents
+  - RefundIssuedEvent: removed RefundId/Reason, added ParticipantId
+  - PlatformActivatedEvent: added UserId as nullable (Java POJO lacks it)
+  - PlanChangedEvent: UserId/NewPlan made nullable (Java payload varies)
+  - SellerClosedEvent: added From field (Java sometimes sends "from")
+
+fix(post): use RabbitMqHealthCheck.CheckHealth() instead of GetProbeResult()
+GetProbeResult() never throws for a disconnected bus; CheckHealth() returns
+actual BusHealthStatus.

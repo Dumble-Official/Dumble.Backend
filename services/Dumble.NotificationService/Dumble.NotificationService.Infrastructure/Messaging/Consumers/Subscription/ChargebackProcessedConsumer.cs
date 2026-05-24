@@ -3,37 +3,46 @@ using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Domain.Models;
 using Dumble.SharedKernel.Events.Subscription;
 using Dumble.NotificationService.Domain.Constants;
+using Microsoft.Extensions.Logging;
 
 namespace Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 
 public class ChargebackProcessedConsumer(
-    INotificationRepository notificationRepository,
-    INotificationPreferenceRepository preferenceRepository,
-    IDeviceTokenRepository deviceTokenRepository,
-    IPushNotificationService pushService,
-    INotificationHubService hubService
+    INotificationDeliveryService deliveryService,
+    IDedupEventStore dedupEventStore,
+    ILogger<ChargebackProcessedConsumer> logger
 ) : IConsumer<ChargebackProcessedEvent>
 {
     public async Task Consume(ConsumeContext<ChargebackProcessedEvent> context)
     {
         var evt = context.Message;
-        await NotificationDeliveryHelper.DeliverAsync(
+
+        if (context.MessageId.HasValue)
+        {
+            if (!await dedupEventStore.TryClaimAsync(context.MessageId.Value.ToString(), nameof(ChargebackProcessedConsumer), context.CancellationToken))
+            {
+                logger.LogInformation("Dedup: {MessageId} already processed by {ConsumerType}", context.MessageId, nameof(ChargebackProcessedConsumer));
+                return;
+            }
+        }
+
+        await deliveryService.DeliverAsync(
             new Notification
             {
-                RecipientId = evt.SubscriptionId.ToString(),
+                RecipientId = evt.ParticipantId.ToString(),
                 Type = NotificationTypes.Chargeback,
                 Title = "Chargeback Filed",
-                Body = $"A chargeback of {(evt.AmountCents / 100m):F2} has been processed for your subscription.",
+                Body = $"A chargeback of {(evt.ChargebackCents / 100m):F2} has been processed for your subscription.",
                 Data = new Dictionary<string, string>
                 {
-                    ["chargebackId"] = evt.ChargebackId.ToString(),
                     ["subscriptionId"] = evt.SubscriptionId.ToString(),
-                    ["amountCents"] = evt.AmountCents.ToString()
+                    ["chargebackCents"] = evt.ChargebackCents.ToString(),
+                    ["lockedCents"] = evt.LockedCents.ToString(),
+                    ["partial"] = evt.Partial.ToString()
                 },
                 CreatedAt = DateTime.UtcNow,
                 ExpiresAt = DateTime.UtcNow.AddDays(90)
             },
-            notificationRepository, preferenceRepository, deviceTokenRepository, pushService, hubService,
             context.CancellationToken);
     }
 }

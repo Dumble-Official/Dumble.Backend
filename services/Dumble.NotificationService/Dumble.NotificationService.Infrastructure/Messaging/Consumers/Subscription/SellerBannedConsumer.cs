@@ -3,21 +3,30 @@ using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Domain.Models;
 using Dumble.SharedKernel.Events.Subscription;
 using Dumble.NotificationService.Domain.Constants;
+using Microsoft.Extensions.Logging;
 
 namespace Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 
 public class SellerBannedConsumer(
-    INotificationRepository notificationRepository,
-    INotificationPreferenceRepository preferenceRepository,
-    IDeviceTokenRepository deviceTokenRepository,
-    IPushNotificationService pushService,
-    INotificationHubService hubService
+    INotificationDeliveryService deliveryService,
+    IDedupEventStore dedupEventStore,
+    ILogger<SellerBannedConsumer> logger
 ) : IConsumer<SellerBannedEvent>
 {
     public async Task Consume(ConsumeContext<SellerBannedEvent> context)
     {
         var evt = context.Message;
-        await NotificationDeliveryHelper.DeliverAsync(
+
+        if (context.MessageId.HasValue)
+        {
+            if (!await dedupEventStore.TryClaimAsync(context.MessageId.Value.ToString(), nameof(SellerBannedConsumer), context.CancellationToken))
+            {
+                logger.LogInformation("Dedup: {MessageId} already processed by {ConsumerType}", context.MessageId, nameof(SellerBannedConsumer));
+                return;
+            }
+        }
+
+        await deliveryService.DeliverAsync(
             new Notification
             {
                 RecipientId = evt.SellerId.ToString(),
@@ -34,7 +43,6 @@ public class SellerBannedConsumer(
                 CreatedAt = DateTime.UtcNow,
                 ExpiresAt = DateTime.UtcNow.AddDays(90)
             },
-            notificationRepository, preferenceRepository, deviceTokenRepository, pushService, hubService,
             context.CancellationToken);
     }
 }

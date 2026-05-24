@@ -1,10 +1,11 @@
 using Dumble.SharedKernel.Common;
+using System.Text.Json.Serialization;
 
 namespace Dumble.SharedKernel.Events.Subscription;
 
 public record PaymentFailedEvent(
-    Guid? UserId,
-    Guid? SubscriptionId,
-    int Attempt,
-    DateTimeOffset? NextRetryAt
+    [property: JsonPropertyName("userId")] Guid? UserId,
+    [property: JsonPropertyName("subscriptionId")] Guid? SubscriptionId,
+    [property: JsonPropertyName("attempt")] int Attempt,
+    [property: JsonPropertyName("nextRetryAt")] DateTimeOffset? NextRetryAt
 ) : IntegrationEvent;

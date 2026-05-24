@@ -16,6 +16,7 @@ public class MongoDbContext
     public IMongoCollection<Notification> Notifications => _database.GetCollection<Notification>("notifications");
     public IMongoCollection<NotificationPreference> NotificationPreferences => _database.GetCollection<NotificationPreference>("notification_preferences");
     public IMongoCollection<DeviceToken> DeviceTokens => _database.GetCollection<DeviceToken>("device_tokens");
+    public IMongoCollection<DedupEventEntry> DedupEvents => _database.GetCollection<DedupEventEntry>("dedup_events");
 
     private void ConfigureIndexes()
     {
@@ -36,5 +37,9 @@ public class MongoDbContext
 
         DeviceTokens.Indexes.CreateOne(new CreateIndexModel<DeviceToken>(
             Builders<DeviceToken>.IndexKeys.Ascending(d => d.UserId)));
+
+        DedupEvents.Indexes.CreateOne(new CreateIndexModel<DedupEventEntry>(
+            Builders<DedupEventEntry>.IndexKeys.Ascending(e => e.ConsumedAt),
+            new CreateIndexOptions { ExpireAfter = TimeSpan.FromDays(7) }));
     }
 }

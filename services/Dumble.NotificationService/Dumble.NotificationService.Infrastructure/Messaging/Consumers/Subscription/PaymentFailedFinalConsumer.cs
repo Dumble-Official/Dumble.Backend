@@ -8,17 +8,24 @@ using Microsoft.Extensions.Logging;
 namespace Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 
 public class PaymentFailedFinalConsumer(
-    INotificationRepository notificationRepository,
-    INotificationPreferenceRepository preferenceRepository,
-    IDeviceTokenRepository deviceTokenRepository,
-    IPushNotificationService pushService,
-    INotificationHubService hubService,
+    INotificationDeliveryService deliveryService,
+    IDedupEventStore dedupEventStore,
     ILogger<PaymentFailedFinalConsumer> logger
 ) : IConsumer<PaymentFailedFinalEvent>
 {
     public async Task Consume(ConsumeContext<PaymentFailedFinalEvent> context)
     {
         var evt = context.Message;
+
+        if (context.MessageId.HasValue)
+        {
+            if (!await dedupEventStore.TryClaimAsync(context.MessageId.Value.ToString(), nameof(PaymentFailedFinalConsumer), context.CancellationToken))
+            {
+                logger.LogInformation("Dedup: {MessageId} already processed by {ConsumerType}", context.MessageId, nameof(PaymentFailedFinalConsumer));
+                return;
+            }
+        }
+
         var recipientId = (evt.UserId ?? evt.SubscriptionId)?.ToString();
         if (recipientId is null)
         {
@@ -26,7 +33,7 @@ public class PaymentFailedFinalConsumer(
             return;
         }
 
-        await NotificationDeliveryHelper.DeliverAsync(
+        await deliveryService.DeliverAsync(
             new Notification
             {
                 RecipientId = recipientId,
@@ -41,7 +48,6 @@ public class PaymentFailedFinalConsumer(
                 CreatedAt = DateTime.UtcNow,
                 ExpiresAt = DateTime.UtcNow.AddDays(60)
             },
-            notificationRepository, preferenceRepository, deviceTokenRepository, pushService, hubService,
             context.CancellationToken);
     }
 }

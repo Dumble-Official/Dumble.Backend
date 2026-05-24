@@ -8,17 +8,24 @@ using Microsoft.Extensions.Logging;
 namespace Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 
 public class RenewalPromptConsumer(
-    INotificationRepository notificationRepository,
-    INotificationPreferenceRepository preferenceRepository,
-    IDeviceTokenRepository deviceTokenRepository,
-    IPushNotificationService pushService,
-    INotificationHubService hubService,
+    INotificationDeliveryService deliveryService,
+    IDedupEventStore dedupEventStore,
     ILogger<RenewalPromptConsumer> logger
 ) : IConsumer<RenewalPromptEvent>
 {
     public async Task Consume(ConsumeContext<RenewalPromptEvent> context)
     {
         var evt = context.Message;
+
+        if (context.MessageId.HasValue)
+        {
+            if (!await dedupEventStore.TryClaimAsync(context.MessageId.Value.ToString(), nameof(RenewalPromptConsumer), context.CancellationToken))
+            {
+                logger.LogInformation("Dedup: {MessageId} already processed by {ConsumerType}", context.MessageId, nameof(RenewalPromptConsumer));
+                return;
+            }
+        }
+
         var recipientId = (evt.UserId ?? evt.ParticipantId)?.ToString();
         if (recipientId is null)
         {
@@ -27,7 +34,7 @@ public class RenewalPromptConsumer(
         }
 
         var amount = evt.AmountCents.HasValue ? $"{evt.AmountCents.Value / 100m:F2} {evt.Currency}" : "";
-        await NotificationDeliveryHelper.DeliverAsync(
+        await deliveryService.DeliverAsync(
             new Notification
             {
                 RecipientId = recipientId,
@@ -43,7 +50,6 @@ public class RenewalPromptConsumer(
                 CreatedAt = DateTime.UtcNow,
                 ExpiresAt = DateTime.UtcNow.AddDays(14)
             },
-            notificationRepository, preferenceRepository, deviceTokenRepository, pushService, hubService,
             context.CancellationToken);
     }
 }

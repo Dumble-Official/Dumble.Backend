@@ -1,9 +1,10 @@
 using Dumble.SharedKernel.Common;
+using System.Text.Json.Serialization;
 
 namespace Dumble.SharedKernel.Events.Subscription;
 
 public record SellerFrozenEvent(
-    Guid SellerId,
-    DateTimeOffset? FrozenUntil,
-    string? Reason
+    [property: JsonPropertyName("sellerId")] Guid SellerId,
+    [property: JsonPropertyName("frozenUntil")] DateTimeOffset? FrozenUntil,
+    [property: JsonPropertyName("reason")] string? Reason
 ) : IntegrationEvent;

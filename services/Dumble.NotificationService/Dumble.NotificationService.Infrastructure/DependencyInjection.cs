@@ -5,6 +5,7 @@ using MongoDB.Driver;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Dumble.NotificationService.Application.Contracts;
+using Dumble.NotificationService.Infrastructure.Configuration;
 using Dumble.NotificationService.Infrastructure.Messaging.Consumers;
 using Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 using Dumble.NotificationService.Infrastructure.Persistence;
@@ -39,6 +40,11 @@ public static class DependencyInjection
             });
         }
         services.AddScoped<IPushNotificationService, FirebasePushNotificationService>();
+
+        // Dedup + notification delivery
+        services.AddSingleton<IDedupEventStore, DedupEventStore>();
+        services.AddScoped<INotificationDeliveryService, NotificationDeliveryService>();
+        services.Configure<NotificationSettings>(configuration.GetSection(NotificationSettings.SectionName));
 
         // MassTransit + RabbitMQ
         services.AddMassTransit(x =>

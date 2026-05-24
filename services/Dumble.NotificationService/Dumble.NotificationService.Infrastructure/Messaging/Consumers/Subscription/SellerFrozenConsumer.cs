@@ -3,21 +3,30 @@ using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Domain.Models;
 using Dumble.SharedKernel.Events.Subscription;
 using Dumble.NotificationService.Domain.Constants;
+using Microsoft.Extensions.Logging;
 
 namespace Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 
 public class SellerFrozenConsumer(
-    INotificationRepository notificationRepository,
-    INotificationPreferenceRepository preferenceRepository,
-    IDeviceTokenRepository deviceTokenRepository,
-    IPushNotificationService pushService,
-    INotificationHubService hubService
+    INotificationDeliveryService deliveryService,
+    IDedupEventStore dedupEventStore,
+    ILogger<SellerFrozenConsumer> logger
 ) : IConsumer<SellerFrozenEvent>
 {
     public async Task Consume(ConsumeContext<SellerFrozenEvent> context)
     {
         var evt = context.Message;
-        await NotificationDeliveryHelper.DeliverAsync(
+
+        if (context.MessageId.HasValue)
+        {
+            if (!await dedupEventStore.TryClaimAsync(context.MessageId.Value.ToString(), nameof(SellerFrozenConsumer), context.CancellationToken))
+            {
+                logger.LogInformation("Dedup: {MessageId} already processed by {ConsumerType}", context.MessageId, nameof(SellerFrozenConsumer));
+                return;
+            }
+        }
+
+        await deliveryService.DeliverAsync(
             new Notification
             {
                 RecipientId = evt.SellerId.ToString(),
@@ -35,7 +44,6 @@ public class SellerFrozenConsumer(
                 CreatedAt = DateTime.UtcNow,
                 ExpiresAt = DateTime.UtcNow.AddDays(30)
             },
-            notificationRepository, preferenceRepository, deviceTokenRepository, pushService, hubService,
             context.CancellationToken);
     }
 }
