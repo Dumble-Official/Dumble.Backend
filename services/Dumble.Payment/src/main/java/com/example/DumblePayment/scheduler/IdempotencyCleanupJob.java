@@ -26,7 +26,7 @@ public class IdempotencyCleanupJob {
     @Scheduled(cron = "0 30 2 * * *")        // 02:30 daily
     @Transactional
     public void purge() {
-        long deleted = repository.deleteByExpiresAtBefore(Instant.now());
+        int deleted = repository.deleteByExpiresAtBefore(Instant.now());
         if (deleted > 0) {
             log.info("Purged {} expired idempotency keys", deleted);
         }
