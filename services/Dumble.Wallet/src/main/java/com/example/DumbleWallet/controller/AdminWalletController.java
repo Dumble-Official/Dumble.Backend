@@ -62,6 +62,7 @@ public class AdminWalletController {
                 "POST /admin/wallet/{userId}/adjust",
                 userId,
                 201,
+                req,
                 WalletWriteResponse.class,
                 () -> adminWalletService.adjust(userId, adminId, req));
         return ResponseEntity.status(cached.replayed() ? HttpStatus.OK : HttpStatus.CREATED).body(cached.value());

@@ -44,6 +44,7 @@ public class WithdrawalController {
                 "POST /wallet/me/withdrawals",
                 user.getId(),
                 201,
+                body,
                 WithdrawalResponse.class,
                 () -> withdrawalService.requestWithdrawal(user.getId(), body, idempotencyKey));
         return ResponseEntity.status(cached.replayed() ? HttpStatus.OK : HttpStatus.CREATED).body(cached.value());

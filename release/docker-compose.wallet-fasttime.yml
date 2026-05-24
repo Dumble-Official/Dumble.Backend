@@ -1,0 +1,27 @@
+# Temporary overlay used only by tests/postman/time_jobs_wallet.js — shortens
+# Wallet's reaper grace window, reconciliation cron, and idempotency cleanup
+# cron so the time-based jobs fire on a test-friendly cadence instead of the
+# production defaults (10-minute grace, 02:30 UTC daily).
+#
+# Bring up with:
+#   docker compose -f release/docker-compose.yml \
+#                  -f release/docker-compose.override.yml \
+#                  -f release/docker-compose.wallet-fasttime.yml \
+#                  up -d --force-recreate --no-deps wallet
+#
+# When done, recreate wallet without this file to restore prod defaults.
+services:
+  wallet:
+    environment:
+      # Reaper polls every 5 s + treats anything >15 s old as stuck
+      # (instead of every 60 s / 10 min).
+      WALLET_WITHDRAWAL_REAPER_DELAY_MS: "5000"
+      WALLET_WITHDRAWAL_REAPER_GRACE_SECONDS: "15"
+      # Reconciliation: every 20 s (cron has 6 fields, leading second).
+      WALLET_RECONCILIATION_CRON: "*/20 * * * * *"
+      # Idempotency cleanup: every 15 s (Spring cron has 6 fields).
+      WALLET_IDEMPOTENCY_CLEANUP_CRON: "*/15 * * * * *"
+      # TTL_HOURS stays at the default 24 — the cleanup test seeds expired
+      # rows directly via SQL so the production TTL is unaffected by test
+      # ordering (setting TTL=0 would make every prod-style claim expire
+      # immediately and break the body-hash strict variant test).
