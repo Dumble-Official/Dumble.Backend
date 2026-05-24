@@ -7,13 +7,15 @@ using Dumble.BundleManagementService.Domain.CategoryAggregate.ValueObjects;
 using Dumble.SharedKernel.Contracts;
 using Dumble.SharedKernel.Enums;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Name = Dumble.BundleManagementService.Domain.BundleAggregate.ValueObjects.Name;
 
 namespace Dumble.BundleManagementService.Application.Features.Bundles.Commands.UpdateBundle;
 
 internal sealed class UpdateBundleCommandHandler(
     IGenericRepository<Bundle, BundleId> bundlesRepository,
-    ILoggedInUserService loggedInUserService) : IRequestHandler<UpdateBundleCommand>
+    ILoggedInUserService loggedInUserService,
+    ILogger<UpdateBundleCommandHandler> logger) : IRequestHandler<UpdateBundleCommand>
 {
     public async Task Handle(UpdateBundleCommand request, CancellationToken cancellationToken)
     {
@@ -24,9 +26,17 @@ internal sealed class UpdateBundleCommandHandler(
 
         var currentUserAccountId = AccountId.Create(AccountIdentity.ToAccountGuid(loggedInUser.Id));
 
+        var isAdmin = loggedInUser.IsInRole(UserType.Admin);
+        var isOwner = currentUserAccountId.Equals(bundle.OwnerId);
+
         // ADMIN can update any bundle; other roles can only update their own.
-        if (!loggedInUser.IsInRole(UserType.Admin) && !currentUserAccountId.Equals(bundle.OwnerId))
+        if (!isAdmin && !isOwner)
             throw new UnauthorizedAccessException("You can only update your own bundles");
+
+        if (isAdmin && !isOwner)
+            logger.LogWarning(
+                "Admin {AdminId} updated bundle {BundleId} owned by {OwnerId}",
+                loggedInUser.Id, bundle.Id.Value, bundle.OwnerId.Value);
 
         // Apply each non-null field through the aggregate's Modify method.
         // The previous implementation called Update(bundle) on an unchanged
