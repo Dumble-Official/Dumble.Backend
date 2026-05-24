@@ -1,6 +1,7 @@
 using MassTransit;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Xunit;
 using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Domain.Models;
 using Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
