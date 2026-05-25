@@ -129,22 +129,27 @@ public class EventDeserializationTests
         var json = """{"subscriptionId":"11111111-1111-1111-1111-111111111111","reason":"expired"}""";
         var result = JsonSerializer.Deserialize<BundleExpiredEvent>(json);
         Assert.NotNull(result);
+        Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), result.SubscriptionId);
+        Assert.Equal("expired", result.Reason);
     }
 
     [Fact]
     public void ReceiptIssuedEvent_DeserializesFromCamelCase()
     {
-        var json = """{"subscriptionId":"11111111-1111-1111-1111-111111111111","participantId":"22222222-2222-2222-2222-222222222222","amountCents":2999,"currency":"USD"}""";
+        var json = """{"receiptId":"11111111-1111-1111-1111-111111111111","userId":"22222222-2222-2222-2222-222222222222","amountCents":2999,"currency":"USD"}""";
         var result = JsonSerializer.Deserialize<ReceiptIssuedEvent>(json);
         Assert.NotNull(result);
+        Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), result.ReceiptId);
+        Assert.Equal(Guid.Parse("22222222-2222-2222-2222-222222222222"), result.UserId);
     }
 
     [Fact]
     public void SellerBannedEvent_DeserializesFromCamelCase()
     {
-        var json = """{"sellerId":"11111111-1111-1111-1111-111111111111","reason":"Fraud","bannedUntil":"2027-01-01T00:00:00Z"}""";
+        var json = """{"sellerId":"11111111-1111-1111-1111-111111111111","reason":"Fraud"}""";
         var result = JsonSerializer.Deserialize<SellerBannedEvent>(json);
         Assert.NotNull(result);
+        Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), result.SellerId);
         Assert.Equal("Fraud", result.Reason);
     }
 
@@ -160,24 +165,29 @@ public class EventDeserializationTests
     [Fact]
     public void PlatformExpiredEvent_DeserializesFromCamelCase()
     {
-        var json = """{"userId":"11111111-1111-1111-1111-111111111111","planCode":"PREMIUM"}""";
+        var json = """{"userId":"11111111-1111-1111-1111-111111111111","reason":"plan expired"}""";
         var result = JsonSerializer.Deserialize<PlatformExpiredEvent>(json);
         Assert.NotNull(result);
+        Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), result.UserId);
+        Assert.Equal("plan expired", result.Reason);
     }
 
     [Fact]
     public void SellerUnfrozenEvent_DeserializesFromCamelCase()
     {
-        var json = """{"sellerId":"11111111-1111-1111-1111-111111111111","frozenUntil":null}""";
+        var json = """{"sellerId":"11111111-1111-1111-1111-111111111111"}""";
         var result = JsonSerializer.Deserialize<SellerUnfrozenEvent>(json);
         Assert.NotNull(result);
+        Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), result.SellerId);
     }
 
     [Fact]
     public void SellerWindingDownEvent_DeserializesFromCamelCase()
     {
-        var json = """{"sellerId":"11111111-1111-1111-1111-111111111111","reason":"Retiring","windingDownUntil":"2026-12-31T00:00:00Z"}""";
+        var json = """{"sellerId":"11111111-1111-1111-1111-111111111111","reason":"Retiring"}""";
         var result = JsonSerializer.Deserialize<SellerWindingDownEvent>(json);
         Assert.NotNull(result);
+        Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), result.SellerId);
+        Assert.Equal("Retiring", result.Reason);
     }
 }
