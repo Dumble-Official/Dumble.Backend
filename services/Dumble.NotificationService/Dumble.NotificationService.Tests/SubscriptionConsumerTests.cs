@@ -235,6 +235,232 @@ public class SubscriptionConsumerTests
     }
 
     [Fact]
+    public async Task PaymentFailedFinalConsumer_DeliversCorrectly()
+    {
+        _dedupMock.Setup(x => x.TryClaimAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var deliveryMock = new Mock<INotificationDeliveryService>();
+        var consumer = new PaymentFailedFinalConsumer(
+            deliveryMock.Object, _dedupMock.Object,
+            new Mock<ILogger<PaymentFailedFinalConsumer>>().Object);
+
+        var userId = Guid.NewGuid();
+        var evt = new PaymentFailedFinalEvent(userId, Guid.NewGuid(), 3);
+        var ctx = CreateContext(evt);
+
+        await consumer.Consume(ctx.Object);
+
+        deliveryMock.Verify(x => x.DeliverAsync(
+            It.Is<Notification>(n =>
+                n.RecipientId == userId.ToString() &&
+                n.Type == "PaymentIssue" &&
+                n.Title == "Payment Failed \u2014 Subscription Expired" &&
+                n.Data["subscriptionId"] == evt.SubscriptionId.ToString()
+            ),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task BundleExpiredConsumer_DeliversCorrectly()
+    {
+        _dedupMock.Setup(x => x.TryClaimAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var deliveryMock = new Mock<INotificationDeliveryService>();
+        var consumer = new BundleExpiredConsumer(
+            deliveryMock.Object, _dedupMock.Object,
+            new Mock<ILogger<BundleExpiredConsumer>>().Object);
+
+        var subId = Guid.NewGuid();
+        var evt = new BundleExpiredEvent(subId, "trial ended");
+        var ctx = CreateContext(evt);
+
+        await consumer.Consume(ctx.Object);
+
+        deliveryMock.Verify(x => x.DeliverAsync(
+            It.Is<Notification>(n =>
+                n.Data["subscriptionId"] == subId.ToString() &&
+                n.Data["reason"] == "trial ended" &&
+                n.Type == "BundleSubscription"
+            ),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RefundIssuedConsumer_DeliversCorrectly()
+    {
+        _dedupMock.Setup(x => x.TryClaimAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var deliveryMock = new Mock<INotificationDeliveryService>();
+        var consumer = new RefundIssuedConsumer(
+            deliveryMock.Object, _dedupMock.Object,
+            new Mock<ILogger<RefundIssuedConsumer>>().Object);
+
+        var participantId = Guid.NewGuid();
+        var evt = new RefundIssuedEvent(Guid.NewGuid(), participantId, 1500L);
+        var ctx = CreateContext(evt);
+
+        await consumer.Consume(ctx.Object);
+
+        deliveryMock.Verify(x => x.DeliverAsync(
+            It.Is<Notification>(n =>
+                n.RecipientId == participantId.ToString() &&
+                n.Type == "Refund" &&
+                n.Data["amountCents"] == "1500"
+            ),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SellerBannedConsumer_DeliversCorrectly()
+    {
+        _dedupMock.Setup(x => x.TryClaimAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var deliveryMock = new Mock<INotificationDeliveryService>();
+        var consumer = new SellerBannedConsumer(
+            deliveryMock.Object, _dedupMock.Object,
+            new Mock<ILogger<SellerBannedConsumer>>().Object);
+
+        var sellerId = Guid.NewGuid();
+        var evt = new SellerBannedEvent(sellerId, "Fraud");
+        var ctx = CreateContext(evt);
+
+        await consumer.Consume(ctx.Object);
+
+        deliveryMock.Verify(x => x.DeliverAsync(
+            It.Is<Notification>(n =>
+                n.RecipientId == sellerId.ToString() &&
+                n.Type == "SellerAccount" &&
+                n.Title == "Account Banned" &&
+                n.Data["reason"] == "Fraud"
+            ),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SellerWindingDownConsumer_DeliversCorrectly()
+    {
+        _dedupMock.Setup(x => x.TryClaimAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var deliveryMock = new Mock<INotificationDeliveryService>();
+        var consumer = new SellerWindingDownConsumer(
+            deliveryMock.Object, _dedupMock.Object,
+            new Mock<ILogger<SellerWindingDownConsumer>>().Object);
+
+        var sellerId = Guid.NewGuid();
+        var evt = new SellerWindingDownEvent(sellerId, "Retiring");
+        var ctx = CreateContext(evt);
+
+        await consumer.Consume(ctx.Object);
+
+        deliveryMock.Verify(x => x.DeliverAsync(
+            It.Is<Notification>(n =>
+                n.RecipientId == sellerId.ToString() &&
+                n.Type == "SellerAccount" &&
+                n.Data["reason"] == "Retiring"
+            ),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SellerUnfrozenConsumer_DeliversCorrectly()
+    {
+        _dedupMock.Setup(x => x.TryClaimAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var deliveryMock = new Mock<INotificationDeliveryService>();
+        var consumer = new SellerUnfrozenConsumer(
+            deliveryMock.Object, _dedupMock.Object,
+            new Mock<ILogger<SellerUnfrozenConsumer>>().Object);
+
+        var sellerId = Guid.NewGuid();
+        var evt = new SellerUnfrozenEvent(sellerId);
+        var ctx = CreateContext(evt);
+
+        await consumer.Consume(ctx.Object);
+
+        deliveryMock.Verify(x => x.DeliverAsync(
+            It.Is<Notification>(n =>
+                n.RecipientId == sellerId.ToString() &&
+                n.Type == "SellerAccount" &&
+                n.Title == "Account Unfrozen"
+            ),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task PlatformActivatedConsumer_DeliversCorrectly()
+    {
+        _dedupMock.Setup(x => x.TryClaimAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var deliveryMock = new Mock<INotificationDeliveryService>();
+        var consumer = new PlatformActivatedConsumer(
+            deliveryMock.Object, _dedupMock.Object,
+            new Mock<ILogger<PlatformActivatedConsumer>>().Object);
+
+        var userId = Guid.NewGuid();
+        var evt = new PlatformActivatedEvent(userId, "PREMIUM", "active");
+        var ctx = CreateContext(evt);
+
+        await consumer.Consume(ctx.Object);
+
+        deliveryMock.Verify(x => x.DeliverAsync(
+            It.Is<Notification>(n =>
+                n.RecipientId == userId.ToString() &&
+                n.Type == "PlanChange" &&
+                n.Data["planCode"] == "PREMIUM"
+            ),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task PlatformExpiredConsumer_DeliversCorrectly()
+    {
+        _dedupMock.Setup(x => x.TryClaimAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var deliveryMock = new Mock<INotificationDeliveryService>();
+        var consumer = new PlatformExpiredConsumer(
+            deliveryMock.Object, _dedupMock.Object,
+            new Mock<ILogger<PlatformExpiredConsumer>>().Object);
+
+        var userId = Guid.NewGuid();
+        var evt = new PlatformExpiredEvent(userId, "PREMIUM");
+        var ctx = CreateContext(evt);
+
+        await consumer.Consume(ctx.Object);
+
+        deliveryMock.Verify(x => x.DeliverAsync(
+            It.Is<Notification>(n =>
+                n.RecipientId == userId.ToString() &&
+                n.Type == "PlanChange"
+            ),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ReceiptIssuedConsumer_DeliversCorrectly()
+    {
+        _dedupMock.Setup(x => x.TryClaimAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var deliveryMock = new Mock<INotificationDeliveryService>();
+        var consumer = new ReceiptIssuedConsumer(
+            deliveryMock.Object, _dedupMock.Object,
+            new Mock<ILogger<ReceiptIssuedConsumer>>().Object);
+
+        var participantId = Guid.NewGuid();
+        var evt = new ReceiptIssuedEvent(Guid.NewGuid(), participantId, 2999L, "USD");
+        var ctx = CreateContext(evt);
+
+        await consumer.Consume(ctx.Object);
+
+        deliveryMock.Verify(x => x.DeliverAsync(
+            It.Is<Notification>(n =>
+                n.RecipientId == participantId.ToString() &&
+                n.Type == "Receipt" &&
+                n.Data["amountCents"] == "2999"
+            ),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task RenewalPromptConsumer_ContainsCorrectData()
     {
         _dedupMock.Setup(x => x.TryClaimAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))

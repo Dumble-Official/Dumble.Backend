@@ -39,7 +39,7 @@ public class MongoDbContext
             Builders<DeviceToken>.IndexKeys.Ascending(d => d.UserId)));
 
         DedupEvents.Indexes.CreateOne(new CreateIndexModel<DedupEventEntry>(
-            Builders<DedupEventEntry>.IndexKeys.Ascending(e => e.ConsumedAt),
-            new CreateIndexOptions { ExpireAfter = TimeSpan.FromDays(7) }));
+            Builders<DedupEventEntry>.IndexKeys.Ascending(e => e.ExpiresAt),
+            new CreateIndexOptions { ExpireAfter = TimeSpan.Zero }));
     }
 }
