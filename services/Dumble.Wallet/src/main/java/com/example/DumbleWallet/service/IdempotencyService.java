@@ -12,6 +12,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -171,6 +172,18 @@ public class IdempotencyService {
             throw new IdempotencyConflictException("Idempotency-Key in flight; please retry");
         }
         IdempotencyKey row = rowOpt.get();
+        // The PK on idempotency_keys is `key` alone — a second user reusing
+        // the same key would otherwise be served the original caller's
+        // cached response (cross-user IDOR). The body-hash check below ONLY
+        // protects when request bodies differ; identical-body endpoints
+        // (POST /wallet/me/withdrawals has no userId in the body, so two
+        // users posting the same amount + destination collide on hash too)
+        // still leak. Treat any key-collision across users as a 409 — same
+        // fix shipped on Subscription's IdempotencyService.
+        if (!Objects.equals(row.getUserId(), userId)) {
+            throw new IdempotencyConflictException(
+                    "Idempotency-Key already used by a different caller; pick a fresh key");
+        }
         // Strict variant of Decision 3.2: if the stored body hash differs from
         // the new request's hash, refuse the replay. Rows written before V3
         // (or with a null incoming body) skip the comparison so the migration
