@@ -31,8 +31,12 @@ public class EditMessageCommandHandler(
         if (DateTime.UtcNow - message.CreatedAt > EditWindow)
             throw new InvalidOperationException("Messages can only be edited within 24 hours of sending");
 
+        // Compute editedAt once and pass the same value to BOTH the
+        // persistence and the hub broadcast — otherwise the persisted record
+        // returned by later GetMessages calls would disagree with the
+        // real-time MessageEdited payload by a few milliseconds.
         var editedAt = DateTime.UtcNow;
-        await messageRepository.EditAsync(request.MessageId, request.NewContent, cancellationToken);
+        await messageRepository.EditAsync(request.MessageId, request.NewContent, editedAt, cancellationToken);
 
         await chatHubService.NotifyMessageEditedAsync(
             message.ConversationId, request.MessageId, request.NewContent, editedAt, cancellationToken);

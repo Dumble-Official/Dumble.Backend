@@ -13,16 +13,20 @@ public class MongoDbContext
     {
         _database = client.GetDatabase(databaseName);
         _logger = logger;
-        // Index creation runs at startup but tolerates transient Mongo
-        // unavailability — a brief broker hiccup shouldn't crash the service.
-        // CreateOne is idempotent so retrying on first real use is safe.
+        // Best-effort: a brief Mongo outage at startup shouldn't crash the
+        // service. We log and continue — but we do NOT retry on first use,
+        // so the TTL / unique indexes will be missing for the rest of this
+        // process lifetime if this catch fires. Operator action required:
+        // restart the service once Mongo is healthy. (CreateOne is
+        // idempotent on subsequent boots; no risk of duplicate index.)
         try
         {
             ConfigureIndexes();
         }
         catch (MongoException ex)
         {
-            _logger?.LogWarning(ex, "Index configuration failed at startup; collections will retry on first use");
+            _logger?.LogWarning(ex,
+                "MongoDB index creation failed at startup; collections will run WITHOUT their TTL / unique indexes for this process. Restart the service once Mongo is reachable to register them.");
         }
     }
 

@@ -24,10 +24,17 @@ public class EditMessageEndpoint : Endpoint<EditMessageRequest>
     {
         var messageId = Route<string>("messageId")!;
         // The userId claim is mandatory for this endpoint (registered via
-        // Claims("userId")), but a JWT minted without it would otherwise throw
-        // a raw NullReferenceException and surface as 500 instead of 401.
-        var userId = User.FindFirst("userId")?.Value
-            ?? throw new UnauthorizedAccessException("Token is missing the userId claim");
+        // Claims("userId")), but a JWT minted without it would otherwise
+        // throw NullReferenceException and surface as 500. Issue 401 here
+        // — the global ExceptionMapping maps UnauthorizedAccessException
+        // to 403 (used for "authenticated but lacks permission"), which is
+        // semantically wrong for "token doesn't identify a user".
+        var userId = User.FindFirst("userId")?.Value;
+        if (userId is null)
+        {
+            await SendUnauthorizedAsync(ct);
+            return;
+        }
         await _mediator.Send(new EditMessageCommand(messageId, userId, req.Content), ct);
         await SendNoContentAsync(ct);
     }

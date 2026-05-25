@@ -52,12 +52,17 @@ public class MessageRepository : IMessageRepository
         await _context.Messages.UpdateOneAsync(m => m.Id == messageId, update, cancellationToken: ct);
     }
 
-    public async Task EditAsync(string messageId, string newContent, CancellationToken ct = default)
+    public async Task EditAsync(string messageId, string newContent, DateTime editedAt, CancellationToken ct = default)
     {
+        // editedAt is supplied by the caller so the value persisted here
+        // matches the value broadcast on the SignalR "MessageEdited" event.
+        // Computing DateTime.UtcNow independently in two places would let
+        // the persisted record and the real-time broadcast disagree by
+        // milliseconds.
         var update = Builders<Message>.Update
             .Set(m => m.Content, newContent)
             .Set(m => m.IsEdited, true)
-            .Set(m => m.EditedAt, DateTime.UtcNow);
+            .Set(m => m.EditedAt, editedAt);
 
         await _context.Messages.UpdateOneAsync(m => m.Id == messageId, update, cancellationToken: ct);
     }

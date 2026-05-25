@@ -8,5 +8,5 @@ public interface IMessageRepository
     Task<List<Message>> GetByConversationIdAsync(string conversationId, DateTime? cursor, int limit, CancellationToken ct = default);
     Task CreateAsync(Message message, CancellationToken ct = default);
     Task SoftDeleteAsync(string messageId, CancellationToken ct = default);
-    Task EditAsync(string messageId, string newContent, CancellationToken ct = default);
+    Task EditAsync(string messageId, string newContent, DateTime editedAt, CancellationToken ct = default);
 }
