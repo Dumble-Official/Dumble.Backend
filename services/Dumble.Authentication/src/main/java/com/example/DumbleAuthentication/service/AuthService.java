@@ -18,6 +18,7 @@ import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -88,7 +89,18 @@ public class AuthService {
         user.setActive(true);
         user.setPfp("https://ui-avatars.com/api/?name=" + user.getFirstName() + "+" + user.getLastName());
 
-        user = userRepository.save(user);
+        // The existsByEmail check above is not race-safe — two concurrent
+        // registrations for the same email can both pass and both reach
+        // save(), and one of them ends up colliding on the unique constraint.
+        // Translate that to the same generic message as the existsByEmail
+        // branch so the response shape stays identical (no enumeration
+        // signal) and the client gets a clean 409 instead of a 500.
+        try {
+            user = userRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException ex) {
+            throw new IllegalArgumentException(
+                    "Registration could not be completed. Try a different email or sign in.");
+        }
 
         return generateAuthResponse(user);
     }
@@ -110,6 +122,7 @@ public class AuthService {
         return generateAuthResponse(user);
     }
 
+    @Transactional
     public AuthResponse refreshToken(String refreshTokenValue) {
         RefreshToken refreshToken = jwtService.validateRefreshToken(refreshTokenValue);
         User user = refreshToken.getUser();
@@ -127,7 +140,17 @@ public class AuthService {
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
         String newAccessToken = jwtService.generateAccessToken(userDetails, user);
 
-        return new AuthResponse(newAccessToken, refreshTokenValue, UserResponse.from(user));
+        // ROTATE the refresh token: mint a fresh one and the old one is
+        // implicitly invalidated by JwtService.generateRefreshToken (it
+        // deletes all prior tokens for this user under a pessimistic lock).
+        // Without rotation, a stolen refresh token is usable for the full
+        // 7-day window — and reuse is undetectable. With rotation, the next
+        // call from the legitimate client either succeeds (and invalidates
+        // the attacker's copy) or surfaces as a 403 "Invalid refresh token"
+        // that ops can alert on as a possible compromise signal.
+        RefreshToken rotated = jwtService.generateRefreshToken(user);
+
+        return new AuthResponse(newAccessToken, rotated.getToken(), UserResponse.from(user));
     }
 
     @Transactional
@@ -175,14 +198,26 @@ public class AuthService {
         User user;
         if (existingUser.isPresent()) {
             user = existingUser.get();
-            // Link LOCAL account to Google if not already linked
+            // SECURITY: refuse to silently link a LOCAL account to Google here.
+            // Without this guard an attacker who knows email X exists locally can
+            // submit a Google ID token for X (their own Google account proves
+            // they CAN log in as that email at Google's end, but doesn't prove
+            // they own the LOCAL X account at Dumble) and the service would link
+            // the two — handing the attacker full access to X's profile, plan,
+            // bookings, etc. The user must log in locally first and link from a
+            // dedicated, authenticated endpoint.
             if (user.getAuthProvider() == AuthProvider.LOCAL) {
-                user.setAuthProvider(AuthProvider.GOOGLE);
-                user.setProviderId(googleId);
-                if (picture != null && user.getPfp() == null) {
-                    user.setPfp(picture);
-                }
-                user = userRepository.save(user);
+                throw new IllegalArgumentException(
+                        "An account already exists for this email with a password. "
+                                + "Please log in with your password first to link Google.");
+            }
+            // Existing GOOGLE-linked account: providerId must match what Google
+            // told us. A mismatch means the inbound token belongs to a different
+            // Google account that happens to share the same email — refuse,
+            // don't silently re-link.
+            if (!googleId.equals(user.getProviderId())) {
+                throw new IllegalArgumentException(
+                        "Google account does not match the one originally linked to this email.");
             }
             if (!user.isActive()) {
                 throw new IllegalStateException("Account is deactivated");
