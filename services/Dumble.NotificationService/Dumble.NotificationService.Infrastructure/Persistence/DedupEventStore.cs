@@ -18,8 +18,15 @@ public class DedupEventStore : IDedupEventStore
     {
         try
         {
+            var now = DateTime.UtcNow;
             await _collection.InsertOneAsync(
-                new DedupEventEntry { MessageId = messageId, ConsumerType = consumerType, ConsumedAt = DateTime.UtcNow },
+                new DedupEventEntry
+                {
+                    MessageId = messageId,
+                    ConsumerType = consumerType,
+                    ConsumedAt = now,
+                    ExpiresAt = now.Add(Retention)
+                },
                 new InsertOneOptions(), ct);
             return true;
         }
