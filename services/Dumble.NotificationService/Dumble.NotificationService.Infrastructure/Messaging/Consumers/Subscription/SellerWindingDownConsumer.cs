@@ -40,8 +40,7 @@ public class SellerWindingDownConsumer(
                     ["sellerId"] = evt.SellerId.ToString(),
                     ["reason"] = evt.Reason ?? ""
                 },
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddDays(60)
+                CreatedAt = DateTime.UtcNow
             },
             context.CancellationToken);
     }

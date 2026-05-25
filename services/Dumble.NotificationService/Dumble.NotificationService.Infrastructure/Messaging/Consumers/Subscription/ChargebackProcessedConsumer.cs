@@ -40,8 +40,7 @@ public class ChargebackProcessedConsumer(
                     ["lockedCents"] = evt.LockedCents.ToString(),
                     ["partial"] = evt.Partial.ToString()
                 },
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddDays(90)
+                CreatedAt = DateTime.UtcNow
             },
             context.CancellationToken);
     }

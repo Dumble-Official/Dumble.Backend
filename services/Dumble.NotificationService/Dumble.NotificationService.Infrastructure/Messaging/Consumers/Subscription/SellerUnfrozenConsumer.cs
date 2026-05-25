@@ -37,8 +37,7 @@ public class SellerUnfrozenConsumer(
                 {
                     ["sellerId"] = evt.SellerId.ToString()
                 },
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddDays(30)
+                CreatedAt = DateTime.UtcNow
             },
             context.CancellationToken);
     }

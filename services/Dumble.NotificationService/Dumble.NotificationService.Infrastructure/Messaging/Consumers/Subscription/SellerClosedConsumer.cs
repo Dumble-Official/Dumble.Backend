@@ -37,8 +37,7 @@ public class SellerClosedConsumer(
                 {
                     ["sellerId"] = evt.SellerId.ToString()
                 },
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddDays(90)
+                CreatedAt = DateTime.UtcNow
             },
             context.CancellationToken);
     }

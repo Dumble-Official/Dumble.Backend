@@ -40,8 +40,7 @@ public class SellerBannedConsumer(
                     ["sellerId"] = evt.SellerId.ToString(),
                     ["reason"] = evt.Reason ?? ""
                 },
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddDays(90)
+                CreatedAt = DateTime.UtcNow
             },
             context.CancellationToken);
     }

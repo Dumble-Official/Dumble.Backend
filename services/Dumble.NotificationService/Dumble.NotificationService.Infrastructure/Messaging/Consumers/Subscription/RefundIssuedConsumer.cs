@@ -40,8 +40,7 @@ public class RefundIssuedConsumer(
                     ["participantId"] = evt.ParticipantId.ToString(),
                     ["amountCents"] = evt.AmountCents.ToString()
                 },
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddDays(90)
+                CreatedAt = DateTime.UtcNow
             },
             context.CancellationToken);
     }

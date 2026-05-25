@@ -41,8 +41,7 @@ public class SellerFrozenConsumer(
                     ["reason"] = evt.Reason ?? "",
                     ["frozenUntil"] = evt.FrozenUntil?.ToString("O") ?? ""
                 },
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddDays(30)
+                CreatedAt = DateTime.UtcNow
             },
             context.CancellationToken);
     }

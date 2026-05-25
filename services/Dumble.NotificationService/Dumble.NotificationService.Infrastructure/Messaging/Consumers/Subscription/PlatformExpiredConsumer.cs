@@ -38,8 +38,7 @@ public class PlatformExpiredConsumer(
                     ["userId"] = evt.UserId.ToString(),
                     ["reason"] = evt.Reason ?? ""
                 },
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddDays(30)
+                CreatedAt = DateTime.UtcNow
             },
             context.CancellationToken);
     }

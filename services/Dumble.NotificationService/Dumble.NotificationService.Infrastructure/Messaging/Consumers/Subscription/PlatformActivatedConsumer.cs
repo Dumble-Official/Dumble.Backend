@@ -43,8 +43,7 @@ public class PlatformActivatedConsumer(
                     ["planCode"] = evt.PlanCode,
                     ["userId"] = evt.UserId.Value.ToString()
                 },
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddDays(30)
+                CreatedAt = DateTime.UtcNow
             },
             context.CancellationToken);
     }

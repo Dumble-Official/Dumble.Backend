@@ -40,8 +40,7 @@ public class ReceiptIssuedConsumer(
                     ["amountCents"] = evt.AmountCents.ToString(),
                     ["currency"] = evt.Currency
                 },
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddDays(365)
+                CreatedAt = DateTime.UtcNow
             },
             context.CancellationToken);
     }

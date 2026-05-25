@@ -46,8 +46,7 @@ public class PaymentFailedConsumer(
                     ["userId"] = evt.UserId?.ToString() ?? "",
                     ["attempt"] = evt.Attempt.ToString()
                 },
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddDays(30)
+                CreatedAt = DateTime.UtcNow
             },
             context.CancellationToken);
     }

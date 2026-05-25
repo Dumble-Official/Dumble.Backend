@@ -45,8 +45,7 @@ public class PlanChangedConsumer(
                     ["newPlan"] = newPlan,
                     ["userId"] = userId
                 },
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddDays(30)
+                CreatedAt = DateTime.UtcNow
             },
             context.CancellationToken);
     }

@@ -40,8 +40,7 @@ public class BundleActivatedConsumer(
                     ["sellerId"] = evt.SellerId.ToString(),
                     ["durationDays"] = evt.DurationDays.ToString()
                 },
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddDays(30)
+                CreatedAt = DateTime.UtcNow
             },
             context.CancellationToken);
     }

@@ -38,8 +38,7 @@ public class BundleExpiredConsumer(
                     ["subscriptionId"] = evt.SubscriptionId.ToString(),
                     ["reason"] = evt.Reason ?? ""
                 },
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddDays(60)
+                CreatedAt = DateTime.UtcNow
             },
             context.CancellationToken);
     }

@@ -47,8 +47,7 @@ public class RenewalPromptConsumer(
                     ["amountCents"] = evt.AmountCents?.ToString() ?? "",
                     ["currency"] = evt.Currency ?? ""
                 },
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddDays(14)
+                CreatedAt = DateTime.UtcNow
             },
             context.CancellationToken);
     }
