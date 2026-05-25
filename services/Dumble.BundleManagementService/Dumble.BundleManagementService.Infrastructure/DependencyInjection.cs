@@ -5,6 +5,7 @@ using Dumble.BundleManagementService.Infrastructure.Authentication;
 using Dumble.BundleManagementService.Infrastructure.Blobs;
 using Dumble.BundleManagementService.Infrastructure.Persistence.Data;
 using Dumble.BundleManagementService.Infrastructure.Persistence.Repositories;
+using Dumble.BundleManagementService.Infrastructure.Services;
 using Dumble.SharedKernel.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -23,6 +24,9 @@ public static class DependencyInjection
 
         services.AddScoped<ILoggedInUserService, LoggedInUserService>();
         services.AddScoped(typeof(IGenericRepository<,>), typeof(GenericRepository<,>));
+        services.AddScoped<IAdminActionRepository, AdminActionRepository>();
+        services.Configure<AdminBypassRateLimiterOptions>(configuration.GetSection("AdminBypassRateLimiter"));
+        services.AddSingleton<IAdminBypassRateLimiter, InMemoryAdminBypassRateLimiter>();
 
         services.Configure<CloudinarySettings>(cs =>
         {

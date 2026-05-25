@@ -1,3 +1,4 @@
+using Dumble.BundleManagementService.Application.Contracts;
 using Dumble.BundleManagementService.Application.Contracts.Repositories;
 using Dumble.BundleManagementService.Application.Identity;
 using Dumble.BundleManagementService.Domain.BundleAggregate;
@@ -15,6 +16,8 @@ namespace Dumble.BundleManagementService.Application.Features.Bundles.Commands.U
 internal sealed class UpdateBundleCommandHandler(
     IGenericRepository<Bundle, BundleId> bundlesRepository,
     ILoggedInUserService loggedInUserService,
+    IAdminActionRepository adminActionRepository,
+    IAdminBypassRateLimiter rateLimiter,
     ILogger<UpdateBundleCommandHandler> logger) : IRequestHandler<UpdateBundleCommand>
 {
     public async Task Handle(UpdateBundleCommand request, CancellationToken cancellationToken)
@@ -34,9 +37,19 @@ internal sealed class UpdateBundleCommandHandler(
             throw new UnauthorizedAccessException("You can only update your own bundles");
 
         if (isAdmin && !isOwner)
+        {
+            if (!rateLimiter.IsAllowed(loggedInUser.Id, "BundleUpdated"))
+                throw new InvalidOperationException("Admin bypass rate limit exceeded. Try again later.");
+
+            await adminActionRepository.RecordAsync(
+                loggedInUser.Id, "BundleUpdated", "Bundle",
+                bundle.Id.Value.ToString(), bundle.OwnerId.Value.ToString(),
+                $"Updated by admin (owner: {bundle.OwnerId.Value})", cancellationToken);
+
             logger.LogWarning(
                 "Admin {AdminId} updated bundle {BundleId} owned by {OwnerId}",
                 loggedInUser.Id, bundle.Id.Value, bundle.OwnerId.Value);
+        }
 
         // Apply each non-null field through the aggregate's Modify method.
         // The previous implementation called Update(bundle) on an unchanged

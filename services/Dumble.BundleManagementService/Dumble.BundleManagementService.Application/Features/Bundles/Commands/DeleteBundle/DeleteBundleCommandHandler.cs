@@ -14,6 +14,8 @@ internal sealed class DeleteBundleCommandHandler(
     IFileService fileService,
     IGenericRepository<Bundle, BundleId> bundlesRepository,
     ILoggedInUserService loggedInUserService,
+    IAdminActionRepository adminActionRepository,
+    IAdminBypassRateLimiter rateLimiter,
     ILogger<DeleteBundleCommandHandler> logger) : IRequestHandler<DeleteBundleCommand>
 {
     public async Task Handle(DeleteBundleCommand request, CancellationToken cancellationToken)
@@ -33,9 +35,19 @@ internal sealed class DeleteBundleCommandHandler(
             throw new UnauthorizedAccessException("You can only delete your own bundles");
 
         if (isAdmin && !isOwner)
+        {
+            if (!rateLimiter.IsAllowed(loggedInUser.Id, "BundleDeleted"))
+                throw new InvalidOperationException("Admin bypass rate limit exceeded. Try again later.");
+
+            await adminActionRepository.RecordAsync(
+                loggedInUser.Id, "BundleDeleted", "Bundle",
+                bundle.Id.Value.ToString(), bundle.OwnerId.Value.ToString(),
+                $"Deleted by admin (owner: {bundle.OwnerId.Value})", cancellationToken);
+
             logger.LogWarning(
                 "Admin {AdminId} deleted bundle {BundleId} owned by {OwnerId}",
                 loggedInUser.Id, bundle.Id.Value, bundle.OwnerId.Value);
+        }
 
         var tasks = bundle.Images.Select(img => fileService.DeleteAsync(img.Value));
         await Task.WhenAll(tasks);
