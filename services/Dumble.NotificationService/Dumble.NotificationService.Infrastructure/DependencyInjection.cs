@@ -180,7 +180,7 @@ public static class DependencyInjection
                 {
                     e.UseRawJsonSerializer();
                     e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
-                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.#.renewal-prompt"; });
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.*.renewal-prompt"; });
                     e.ConfigureConsumer<RenewalPromptConsumer>(context);
                 });
                 cfg.ReceiveEndpoint("notification-service.seller-banned", e =>
