@@ -28,9 +28,14 @@ public class ChatHubService : IChatHubService
         return Task.CompletedTask;
     }
 
-    public Task NotifyMessageEditedAsync(string conversationId, string messageId, string newContent, CancellationToken ct = default)
+    public Task NotifyMessageEditedAsync(string conversationId, string messageId, string newContent, DateTime editedAt, CancellationToken ct = default)
     {
-        _ = _hubContext.Clients.Group(conversationId).SendAsync("MessageEdited", new { messageId, conversationId, content = newContent }, ct);
+        // Carries isEdited + editedAt so receiving clients can render the
+        // "edited" indicator in real time instead of waiting for the next
+        // GetMessages refresh. Without these fields the frontend's
+        // .msg.edited::after CSS rule can't fire on the broadcast.
+        _ = _hubContext.Clients.Group(conversationId).SendAsync("MessageEdited",
+            new { messageId, conversationId, content = newContent, isEdited = true, editedAt }, ct);
         return Task.CompletedTask;
     }
 

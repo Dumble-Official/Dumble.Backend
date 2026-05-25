@@ -105,8 +105,14 @@ builder.Services.Configure<ForwardedHeadersOptions>(opt =>
     }
 });
 
+// Production must explicitly declare allowed origins via configuration —
+// silently falling back to a dev-only origin would 4xx every real browser.
+// Dev / Staging may use the localhost default.
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? ["http://localhost:5173"];
+    ?? (builder.Environment.IsProduction()
+        ? throw new InvalidOperationException(
+            "Cors:AllowedOrigins is required in production")
+        : ["http://localhost:5173"]);
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>

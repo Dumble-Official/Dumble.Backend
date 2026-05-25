@@ -31,9 +31,10 @@ public class EditMessageCommandHandler(
         if (DateTime.UtcNow - message.CreatedAt > EditWindow)
             throw new InvalidOperationException("Messages can only be edited within 24 hours of sending");
 
+        var editedAt = DateTime.UtcNow;
         await messageRepository.EditAsync(request.MessageId, request.NewContent, cancellationToken);
 
         await chatHubService.NotifyMessageEditedAsync(
-            message.ConversationId, request.MessageId, request.NewContent, cancellationToken);
+            message.ConversationId, request.MessageId, request.NewContent, editedAt, cancellationToken);
     }
 }

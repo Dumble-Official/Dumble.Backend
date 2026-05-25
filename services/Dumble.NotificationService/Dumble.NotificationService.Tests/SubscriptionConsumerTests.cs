@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
 using Dumble.NotificationService.Application.Contracts;
+using Dumble.NotificationService.Domain.Constants;
 using Dumble.NotificationService.Domain.Models;
 using Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 using Dumble.SharedKernel.Events.Subscription;
@@ -47,7 +48,7 @@ public class SubscriptionConsumerTests
         _deliveryMock.Verify(x => x.DeliverAsync(
             It.Is<Notification>(n =>
                 n.RecipientId == sellerId.ToString() &&
-                n.Type == "SellerAccount" &&
+                n.Type == NotificationTypes.SellerAccount &&
                 n.Title == "Account Frozen" &&
                 n.Body.Contains("Violation of terms") &&
                 n.Data["sellerId"] == sellerId.ToString() &&
@@ -105,7 +106,7 @@ public class SubscriptionConsumerTests
         deliveryMock.Verify(x => x.DeliverAsync(
             It.Is<Notification>(n =>
                 n.RecipientId == participantId.ToString() &&
-                n.Type == "BundleSubscription" &&
+                n.Type == NotificationTypes.BundleSubscription &&
                 n.Data["subscriptionId"] == subId.ToString() &&
                 n.Data["sellerId"] == sellerId.ToString() &&
                 n.Data["bundleName"] == "Pro Plan" &&
@@ -134,7 +135,7 @@ public class SubscriptionConsumerTests
         deliveryMock.Verify(x => x.DeliverAsync(
             It.Is<Notification>(n =>
                 n.RecipientId == participantId.ToString() &&
-                n.Type == "Chargeback" &&
+                n.Type == NotificationTypes.Chargeback &&
                 n.Data["chargebackCents"] == "2500" &&
                 n.Data["lockedCents"] == "10000" &&
                 n.Data["partial"] == "True"
@@ -228,7 +229,7 @@ public class SubscriptionConsumerTests
         deliveryMock.Verify(x => x.DeliverAsync(
             It.Is<Notification>(n =>
                 n.RecipientId == sellerId.ToString() &&
-                n.Type == "SellerAccount" &&
+                n.Type == NotificationTypes.SellerAccount &&
                 n.Title == "Account Closed"
             ),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -253,7 +254,7 @@ public class SubscriptionConsumerTests
         deliveryMock.Verify(x => x.DeliverAsync(
             It.Is<Notification>(n =>
                 n.RecipientId == userId.ToString() &&
-                n.Type == "PaymentIssue" &&
+                n.Type == NotificationTypes.PaymentIssue &&
                 n.Title == "Payment Failed \u2014 Subscription Expired" &&
                 n.Data["subscriptionId"] == evt.SubscriptionId.ToString()
             ),
@@ -280,7 +281,7 @@ public class SubscriptionConsumerTests
             It.Is<Notification>(n =>
                 n.Data["subscriptionId"] == subId.ToString() &&
                 n.Data["reason"] == "trial ended" &&
-                n.Type == "BundleSubscription"
+                n.Type == NotificationTypes.BundleSubscription
             ),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -304,7 +305,7 @@ public class SubscriptionConsumerTests
         deliveryMock.Verify(x => x.DeliverAsync(
             It.Is<Notification>(n =>
                 n.RecipientId == participantId.ToString() &&
-                n.Type == "Refund" &&
+                n.Type == NotificationTypes.Refund &&
                 n.Data["amountCents"] == "1500"
             ),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -329,7 +330,7 @@ public class SubscriptionConsumerTests
         deliveryMock.Verify(x => x.DeliverAsync(
             It.Is<Notification>(n =>
                 n.RecipientId == sellerId.ToString() &&
-                n.Type == "SellerAccount" &&
+                n.Type == NotificationTypes.SellerAccount &&
                 n.Title == "Account Banned" &&
                 n.Data["reason"] == "Fraud"
             ),
@@ -355,7 +356,7 @@ public class SubscriptionConsumerTests
         deliveryMock.Verify(x => x.DeliverAsync(
             It.Is<Notification>(n =>
                 n.RecipientId == sellerId.ToString() &&
-                n.Type == "SellerAccount" &&
+                n.Type == NotificationTypes.SellerAccount &&
                 n.Data["reason"] == "Retiring"
             ),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -380,7 +381,7 @@ public class SubscriptionConsumerTests
         deliveryMock.Verify(x => x.DeliverAsync(
             It.Is<Notification>(n =>
                 n.RecipientId == sellerId.ToString() &&
-                n.Type == "SellerAccount" &&
+                n.Type == NotificationTypes.SellerAccount &&
                 n.Title == "Account Unfrozen"
             ),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -405,7 +406,7 @@ public class SubscriptionConsumerTests
         deliveryMock.Verify(x => x.DeliverAsync(
             It.Is<Notification>(n =>
                 n.RecipientId == userId.ToString() &&
-                n.Type == "PlanChange" &&
+                n.Type == NotificationTypes.PlanChange &&
                 n.Data["planCode"] == "PREMIUM"
             ),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -430,7 +431,7 @@ public class SubscriptionConsumerTests
         deliveryMock.Verify(x => x.DeliverAsync(
             It.Is<Notification>(n =>
                 n.RecipientId == userId.ToString() &&
-                n.Type == "PlanChange"
+                n.Type == NotificationTypes.PlanChange
             ),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -454,7 +455,7 @@ public class SubscriptionConsumerTests
         deliveryMock.Verify(x => x.DeliverAsync(
             It.Is<Notification>(n =>
                 n.RecipientId == participantId.ToString() &&
-                n.Type == "Receipt" &&
+                n.Type == NotificationTypes.Receipt &&
                 n.Data["amountCents"] == "2999"
             ),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -481,7 +482,7 @@ public class SubscriptionConsumerTests
         deliveryMock.Verify(x => x.DeliverAsync(
             It.Is<Notification>(n =>
                 n.RecipientId == userId.ToString() &&
-                n.Type == "Renewal" &&
+                n.Type == NotificationTypes.Renewal &&
                 n.Data["subscriptionId"] == subId.ToString() &&
                 n.Data["amountCents"] == "2999" &&
                 n.Data["currency"] == "USD"
