@@ -75,3 +75,8 @@ tests/postman/node_modules/
 .env.test
 appsettings.Development.json
 .claude
+
+# Service logs
+*.err
+*.log
+*.pid
