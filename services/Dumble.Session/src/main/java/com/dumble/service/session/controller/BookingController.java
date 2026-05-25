@@ -6,30 +6,28 @@ import com.dumble.service.session.service.BookingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/session/bookings")
+@RequestMapping("/bookings")
 @RequiredArgsConstructor
 @Slf4j
 public class BookingController {
 
     private final BookingService bookingService;
-
-    @PostMapping
+    @PostMapping("/book")
     public ResponseEntity<BookingResponse> createBooking(
             @Valid @RequestBody BookingCreateRequest request,
             Authentication authentication) {
 
-
         UUID participantId = UUID.fromString(authentication.getName());
-//        UUID participantId = UUID.fromString("22222222-2222-2222-2222-222222222222");
         log.info("Secure booking request received from Participant ID: {} for Session ID: {}", participantId, request.getSessionId());
 
         BookingResponse response = bookingService.createBooking(request, participantId);
@@ -37,27 +35,40 @@ public class BookingController {
     }
 
     @GetMapping("/{bookingId}")
-    public ResponseEntity<BookingResponse> getBookingDetails(@PathVariable UUID bookingId) {
-        return ResponseEntity.ok(bookingService.getBookingDetails(bookingId));
+    public ResponseEntity<BookingResponse> getBookingDetails(
+            @PathVariable UUID bookingId,
+            Authentication authentication) {
+
+        UUID callerId = UUID.fromString(authentication.getName());
+        return ResponseEntity.ok(bookingService.getBookingDetailsSecure(bookingId, callerId));
     }
 
     @GetMapping("/my-bookings")
-    public ResponseEntity<List<BookingResponse>> getMyBookings(Authentication authentication) {
+    public ResponseEntity<Page<BookingResponse>> getMyBookings(
+            Authentication authentication,
+            Pageable pageable) {
+
         UUID participantId = UUID.fromString(authentication.getName());
-        return ResponseEntity.ok(bookingService.getParticipantBookings(participantId));
+        return ResponseEntity.ok(bookingService.getParticipantBookingsPage(participantId, pageable));
     }
 
-    @PostMapping("/{bookingId}/cancel")
-    public ResponseEntity<Void> cancelBooking(@PathVariable UUID bookingId) {
-        log.info("Cancel request received for booking ID: {}", bookingId);
-        bookingService.cancelBooking(bookingId);
-        return ResponseEntity.noContent().build();
+    @PostMapping("/cancel/{bookingId}")
+    public ResponseEntity<Void> cancelBooking(
+            @PathVariable UUID bookingId,
+            Authentication authentication) {
+
+        log.info("Secure cancel request received from participant for booking ID: {}", bookingId);
+        UUID callerId = UUID.fromString(authentication.getName());
+
+        bookingService.cancelBookingSecure(bookingId, callerId);
+        return ResponseEntity.noContent().build(); // 204 No Content
     }
 
-    @PostMapping("/{bookingId}/confirm-test")
-    public ResponseEntity<String> confirmPaymentTest(@PathVariable UUID bookingId) {
-        log.info("Manual trigger for confirming payment for booking ID: {}", bookingId);
-        bookingService.confirmPayment(bookingId);
-        return ResponseEntity.ok("Payment confirmation triggered successfully!");
-    }
+
+//    @PostMapping("/{bookingId}/confirm-test")
+//    public ResponseEntity<String> confirmPaymentTest(@PathVariable UUID bookingId) {
+//        log.info("Manual trigger for confirming payment for booking ID: {}", bookingId);
+//        bookingService.confirmPayment(bookingId);
+//        return ResponseEntity.ok("Payment confirmation triggered successfully!");
+//    }
 }

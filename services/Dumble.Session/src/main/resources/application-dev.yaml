@@ -9,10 +9,13 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   rabbitmq:
-    host: localhost
-    port: 5672
-    username: guest
-    password: guest
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    publisher-confirm-type: correlated
+    publisher-returns: true
 
   jpa:
     hibernate:
@@ -36,14 +39,14 @@ springdoc:
     path: /swagger-ui.html
 
 service-jwt:
-  signing-key: ${SERVICE_JWT_SIGNING_KEY:Y2hvb29vc2UtYS1zdHJvbmctYmFzZTY0LXNlY3JldC1rZXktZm9yLWRldmVsb3BtZW50LW9ubHk=}
-  issuer: payment
-  ttl-seconds: 60
+  signing-key: ${SERVICE_JWT_SIGNING_KEY:K0Q6NCGDFncmftENnNLP9r9lzaJbvOFCnznXqP0PrI4ag5D8tl5kHpFfoM7tDNjo}
+  issuer: dumble-auth   # غيرناها من payment لـ dumble-auth عشان تطابق التوكن
+  ttl-seconds: 900000
 
 feign:
   client:
     config:
       payment-service:
-        url: http://localhost:8183/api
+        url: http://localhost:8080/api
 
 

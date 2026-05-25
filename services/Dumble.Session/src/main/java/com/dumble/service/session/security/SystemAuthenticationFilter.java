@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -36,6 +37,7 @@ public class SystemAuthenticationFilter extends OncePerRequestFilter {
                                     @NonNull HttpServletResponse response,
                                     @NonNull FilterChain chain) throws ServletException, IOException {
         String header = request.getHeader("Authorization");
+
         if (header != null && header.startsWith("Bearer ")) {
             try {
                 Claims claims = verifier.verify(header);
@@ -44,23 +46,40 @@ public class SystemAuthenticationFilter extends OncePerRequestFilter {
                 List<SimpleGrantedAuthority> authorities = new ArrayList<>(3);
                 authorities.add(new SimpleGrantedAuthority("ROLE_SERVICE"));
                 authorities.add(new SimpleGrantedAuthority("ROLE_SERVICE_" + issuer.toUpperCase()));
+
                 if (ADMIN_ISSUER.equalsIgnoreCase(issuer)) {
                     authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
                 }
 
-                var auth = new UsernamePasswordAuthenticationToken(issuer, null, authorities);
+                String principalName = claims.get("userId", String.class);
+                if (principalName == null) {
+                    principalName = claims.getSubject() != null ? claims.getSubject() : issuer;
+                }
+
+                List<?> roles = claims.get("roles", List.class);
+                if (roles != null) {
+                    for (Object role : roles) {
+                        authorities.add(new SimpleGrantedAuthority(role.toString()));
+                    }
+                }
+
+                var auth = new UsernamePasswordAuthenticationToken(principalName, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(auth);
+
             } catch (UnauthorizedAccessException ex) {
                 log.warn("System JWT validation failed (path={}): {}", request.getRequestURI(), ex.getMessage());
                 SecurityContextHolder.clearContext();
+
+                writeUnauthorizedResponse(response, ex.getMessage());
+                return;
             }
         }
-//        String mockParticipantId = "22222222-2222-2222-2222-222222222222";
-//        var authorities = List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_PARTICIPANT"));
-//
-//        var auth = new UsernamePasswordAuthenticationToken(mockParticipantId, null, authorities);
-//        SecurityContextHolder.getContext().setAuthentication(auth);
-
         chain.doFilter(request, response);
+    }
+
+    private void writeUnauthorizedResponse(HttpServletResponse response, String message) throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.getWriter().write("{\"status\":401,\"message\":\"Unauthorized - " + message + "\"}");
     }
 }

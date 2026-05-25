@@ -2,6 +2,8 @@ package com.dumble.service.session.repository;
 
 import com.dumble.service.session.domain.entity.Booking;
 import com.dumble.service.session.domain.enumuration.PaymentStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -23,7 +25,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             List<PaymentStatus> statuses
     );
 
-    List<Booking> findByParticipantId(UUID participantId);
+    Page<Booking> findByParticipantId(UUID participantId, Pageable pageable);
 
     long countBySessionIdAndPaymentStatus(UUID sessionId, PaymentStatus status);
 }

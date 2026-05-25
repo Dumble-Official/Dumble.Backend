@@ -7,9 +7,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,13 +27,14 @@ public interface SessionRepository extends JpaRepository<Session, UUID> {
 
     Page<Session> findByStatus(SessionStatus status, Pageable pageable);
 
-    @Query("SELECT s FROM Session s WHERE s.status IN ('DRAFT', 'PUBLISHED') ORDER BY s.startTime ASC")
+    @Query("SELECT s FROM Session s WHERE s.status = 'PUBLISHED' ORDER BY s.startTime ASC")
     List<Session> findActiveSessions();
 
     Page<Session> findByTitleContainingIgnoreCase(String title, Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM Session s WHERE s.id = :id")
+    @Transactional
     Optional<Session> findByIdForUpdate(@Param("id") UUID id);
 
     @Query("SELECT s FROM Session s WHERE s.currentParticipants < s.maxCapacity AND s.status = 'PUBLISHED'")
@@ -55,4 +58,13 @@ public interface SessionRepository extends JpaRepository<Session, UUID> {
                              @Param("trainerId") UUID trainerId,
                              @Param("weekStart") LocalDateTime weekStart,
                              @Param("weekEnd") LocalDateTime weekEnd);
+
+    @Modifying
+    @Query("UPDATE Session s SET s.currentParticipants = s.currentParticipants + 1 WHERE s.id = :id AND s.currentParticipants < s.maxCapacity")
+    int incrementParticipants(@Param("id") UUID id);
+
+    @Modifying
+    @Query("UPDATE Session s SET s.currentParticipants = s.currentParticipants - 1 " +
+            "WHERE s.id = :id AND s.currentParticipants > 0")
+    int decrementParticipants(@Param("id") UUID id);
 }

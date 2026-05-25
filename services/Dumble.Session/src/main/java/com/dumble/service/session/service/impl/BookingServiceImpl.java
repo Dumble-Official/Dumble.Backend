@@ -16,55 +16,68 @@ import com.dumble.service.session.exception.ResourceNotFoundException;
 import com.dumble.service.session.repository.BookingRepository;
 import com.dumble.service.session.repository.SessionRepository;
 import com.dumble.service.session.service.BookingService;
+import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
-import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
-@Transactional(readOnly = true) // M12: Default read-only to save resources
+@Transactional(readOnly = true)
 public class BookingServiceImpl implements BookingService {
 
     private final BookingRepository bookingRepository;
     private final SessionRepository sessionRepository;
     private final BookingMapper bookingMapper;
     private final PaymentClient paymentClient;
+    private final TransactionTemplate transactionTemplate;
 
     @Override
-    @Transactional
+    @Transactional(readOnly = false)
     public BookingResponse createBooking(BookingCreateRequest request, UUID participantId) {
 
-        Booking booking = savePendingBookingInTx(request, participantId);
+        Booking booking = transactionTemplate.execute(status -> savePendingBookingInTx(request, participantId));
+
+        if (booking == null) {
+            throw new BadRequestException("Could not initiate booking.");
+        }
 
         String idempotencyKey = "session-booking-" + booking.getId();
+        long cents = booking.getAmountPaid()
+                .movePointRight(2)
+                .setScale(0, RoundingMode.HALF_EVEN)
+                .longValueExact();
 
         ChargeRequest chargeReq = new ChargeRequest();
         chargeReq.setUserId(participantId);
-        chargeReq.setAmountCents(booking.getAmountPaid().multiply(new BigDecimal(100)).longValue()); // تحويل القرش/السنت لو السيستم شغال كده
+        chargeReq.setAmountCents(cents);
         chargeReq.setCurrency("EGP");
         chargeReq.setDescription("Booking for Session ID: " + request.getSessionId());
-        chargeReq.setCallerReference(booking.getId().toString()); // Decision 3.1
+        chargeReq.setCallerReference(booking.getId().toString());
 
         try {
-            log.info("Dispatching charge request to payment service for booking: {}", booking.getId());
+            log.info("Dispatching charge request outside database transaction for booking: {}", booking.getId());
             ChargeResponse chargeRes = paymentClient.charge(idempotencyKey, chargeReq);
 
-            return updateBookingAfterChargeResponse(booking.getId(), chargeRes);
+            return transactionTemplate.execute(status -> updateBookingAfterChargeResponse(booking.getId(), chargeRes));
 
-        } catch (Exception e) {
+        } catch (FeignException e) {
             log.error("Payment service communication failed for booking: {}. Leaving PENDING for webhook async fallback.", booking.getId(), e);
             return bookingMapper.toResponse(booking);
         }
     }
 
-    @Transactional
+    @Transactional(readOnly = false)
     public Booking savePendingBookingInTx(BookingCreateRequest request, UUID participantId) {
         Session session = sessionRepository.findByIdForUpdate(request.getSessionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Session not found"));
@@ -87,10 +100,13 @@ public class BookingServiceImpl implements BookingService {
                 .paymentStatus(PaymentStatus.PENDING)
                 .build();
 
-        return bookingRepository.save(booking);
+        try {
+            return bookingRepository.saveAndFlush(booking);
+        } catch (DataIntegrityViolationException ex) {
+            throw new DuplicateResourceException("Concurrent booking detected. You already have an active booking.");
+        }
     }
 
-    @Transactional
     public BookingResponse updateBookingAfterChargeResponse(UUID bookingId, ChargeResponse chargeRes) {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking not found"));
@@ -100,9 +116,11 @@ public class BookingServiceImpl implements BookingService {
         if ("Succeeded".equalsIgnoreCase(chargeRes.getStatus())) {
             booking.setPaymentStatus(PaymentStatus.CONFIRMED);
 
-            Session session = booking.getSession();
-            session.setCurrentParticipants(session.getCurrentParticipants() + 1);
-            sessionRepository.save(session);
+            int updatedRows = sessionRepository.incrementParticipants(booking.getSession().getId());
+            if (updatedRows == 0) {
+                booking.setPaymentStatus(PaymentStatus.CANCELLED);
+                log.warn("Session full at final verification. Flipping booking {} to CANCELLED.", bookingId);
+            }
 
         } else if ("Failed".equalsIgnoreCase(chargeRes.getStatus())) {
             booking.setPaymentStatus(PaymentStatus.CANCELLED);
@@ -111,36 +129,38 @@ public class BookingServiceImpl implements BookingService {
         return bookingMapper.toResponse(bookingRepository.save(booking));
     }
 
-    @Override
-    public BookingResponse getBookingDetails(UUID bookingId) {
-        return bookingRepository.findById(bookingId)
-                .map(bookingMapper::toResponse)
-                .orElseThrow(() -> new ResourceNotFoundException("Booking not found"));
-    }
-
-    @Override
-    public List<BookingResponse> getParticipantBookings(UUID participantId) {
-        return bookingRepository.findByParticipantId(participantId)
-                .stream()
-                .map(bookingMapper::toResponse)
-                .collect(Collectors.toList());
+    public Page<BookingResponse> getParticipantBookingsPage(UUID participantId, Pageable pageable) {
+        return bookingRepository.findByParticipantId(participantId, pageable)
+                .map(bookingMapper::toResponse);
     }
 
     @Override
     @Transactional
-    public void cancelBooking(UUID bookingId) {
+    public void cancelBookingSecure(UUID bookingId, UUID callerId) {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking not found"));
 
+        if (!booking.getParticipantId().equals(callerId)) {
+            throw new ResourceNotFoundException("Booking not found");
+        }
+
+        if (booking.getPaymentStatus() == PaymentStatus.CANCELLED) {
+            log.info("Booking {} is already CANCELLED. Skipping duplicate logic.", bookingId);
+            return;
+        }
+
         if (booking.getPaymentStatus() == PaymentStatus.CONFIRMED) {
-            Session session = booking.getSession();
-            session.setCurrentParticipants(Math.max(0, session.getCurrentParticipants() - 1));
-            sessionRepository.save(session);
+            sessionRepository.decrementParticipants(booking.getSession().getId());
 
             try {
+                long cents = booking.getAmountPaid()
+                        .movePointRight(2)
+                        .setScale(0, RoundingMode.HALF_EVEN)
+                        .longValueExact();
+
                 RefundRequest refundReq = new RefundRequest();
                 refundReq.setChargeId(booking.getPaymentId());
-                refundReq.setAmountCents(booking.getAmountPaid().multiply(new BigDecimal(100)).longValue());
+                refundReq.setAmountCents(cents);
                 refundReq.setDestination("WALLET");
                 refundReq.setReason("Cancelled by participant");
 
@@ -148,7 +168,8 @@ public class BookingServiceImpl implements BookingService {
                 paymentClient.refund(refundIdemKey, refundReq);
                 log.info("Refund request dispatched successfully for booking: {}", bookingId);
             } catch (Exception e) {
-                log.error("Failed to trigger automatic refund for booking: {}", bookingId, e);
+                log.error("Failed to trigger automatic refund. Rolling back status to prevent money loss.", e);
+                throw new BadRequestException("Refund failed. Please try again later or contact support.");
             }
         }
 
@@ -163,20 +184,40 @@ public class BookingServiceImpl implements BookingService {
                 .orElseThrow(() -> new ResourceNotFoundException("Booking from Async Webhook not found"));
 
         if (booking.getPaymentStatus() == PaymentStatus.CONFIRMED) {
-            log.info("Booking {} already confirmed synchronously. Skipping async confirmation.", bookingId);
             return;
         }
 
         if (booking.getPaymentStatus() == PaymentStatus.PENDING) {
             booking.setPaymentStatus(PaymentStatus.CONFIRMED);
 
-            Session session = booking.getSession();
-            session.setCurrentParticipants(session.getCurrentParticipants() + 1);
-            sessionRepository.save(session);
-
+            sessionRepository.incrementParticipants(booking.getSession().getId());
             bookingRepository.save(booking);
             log.info("Booking {} successfully CONFIRMED via Async Event.", bookingId);
-
         }
+    }
+
+    @Override
+    @Transactional
+    public void failPayment(UUID bookingId) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Booking from Async Webhook not found"));
+
+        if (booking.getPaymentStatus() == PaymentStatus.PENDING) {
+            booking.setPaymentStatus(PaymentStatus.CANCELLED);
+            bookingRepository.save(booking);
+            log.info("Booking {} successfully CANCELLED via Async Failure Event.", bookingId);
+        }
+    }
+
+    @Override
+    public BookingResponse getBookingDetailsSecure(UUID bookingId, UUID callerId) { // 💡 شيلنا الـ isAdmin
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Booking not found"));
+
+        if (!booking.getParticipantId().equals(callerId)) {
+            throw new BadRequestException("You are not authorized to view this booking.");
+        }
+
+        return bookingMapper.toResponse(booking);
     }
 }

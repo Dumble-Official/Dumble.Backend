@@ -8,19 +8,19 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
-import io.jsonwebtoken.security.Keys; // لو مفيش كلاس SystemSigningKey جاهز
-import java.nio.charset.StandardCharsets;
+import io.jsonwebtoken.security.Keys;
+import java.util.Base64;
 import java.util.Collection;
 
 @Component
 public class SystemTokenVerifier {
 
-    private static final String EXPECTED_AUDIENCE = "session";
-
+    private static final String EXPECTED_AUDIENCE = "dumble-app";
     private final SecretKey signingKey;
 
     public SystemTokenVerifier(@Value("${service-jwt.signing-key}") String secret) {
-        this.signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        byte[] keyBytes = Base64.getDecoder().decode(secret.trim());
+        this.signingKey = Keys.hmacShaKeyFor(keyBytes);
     }
 
     public Claims verify(String authHeader) {
@@ -43,7 +43,10 @@ public class SystemTokenVerifier {
                 throw new UnauthorizedAccessException("System token aud does not include 'session'");
             }
             return claims;
-        } catch (JwtException | IllegalArgumentException ex) {
+        } catch (JwtException ex) {
+            System.out.println("JWT Verification Failed! Reason: " + ex.getMessage());
+            ex.printStackTrace();
+
             throw new UnauthorizedAccessException("Invalid or expired system token");
         }
     }

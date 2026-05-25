@@ -15,4 +15,6 @@ public interface SessionService {
     Page<SessionResponse> getAllSessions(Pageable pageable);
     Page<SessionResponse> searchByTitle(String title, Pageable pageable);
     void deleteSession(UUID id);
+    SessionResponse updateSessionSecure(UUID id, SessionUpdateRequest request, UUID callerId);
+    void deleteSessionSecure(UUID id, UUID callerId);
 }

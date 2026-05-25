@@ -4,12 +4,14 @@ import com.dumble.service.session.domain.dto.request.SessionCreateRequest;
 import com.dumble.service.session.domain.dto.request.SessionUpdateRequest;
 import com.dumble.service.session.domain.dto.response.SessionResponse;
 import com.dumble.service.session.domain.entity.Session;
+import com.dumble.service.session.domain.enumuration.SessionStatus;
 import com.dumble.service.session.domain.mapper.SessionMapper;
 import com.dumble.service.session.exception.BadRequestException;
 import com.dumble.service.session.exception.ResourceNotFoundException;
 import com.dumble.service.session.repository.SessionRepository;
 import com.dumble.service.session.service.SessionService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -23,6 +25,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class SessionServiceImpl implements SessionService {
     private final SessionRepository sessionRepository;
     private final SessionMapper sessionMapper;
@@ -87,4 +90,44 @@ public class SessionServiceImpl implements SessionService {
                 .orElseThrow(() -> new ResourceNotFoundException("Session not found with id: " + id));
         sessionRepository.delete(session);
     }
+
+    @Override
+    @Transactional
+    public SessionResponse updateSessionSecure(UUID id, SessionUpdateRequest request, UUID callerId) {
+        Session session = sessionRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Session not found"));
+
+        if (!callerId.equals(session.getTrainerId()) && !callerId.equals(session.getGymId())) {
+            log.warn("IDOR attempt! User {} tried to update session {}", callerId, id);
+            throw new ResourceNotFoundException("Session not found");
+        }
+
+        if (request.getMaxCapacity() != null && request.getMaxCapacity() < session.getCurrentParticipants()) {
+            throw new BadRequestException("Cannot reduce capacity below the current number of active participants.");
+        }
+
+        sessionMapper.updateEntityFromDto(request, session);
+        return sessionMapper.toResponse(sessionRepository.save(session));
+    }
+
+    @Override
+    @Transactional
+    public void deleteSessionSecure(UUID id, UUID callerId) {
+        Session session = sessionRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Session not found"));
+
+        if (!callerId.equals(session.getTrainerId()) && !callerId.equals(session.getGymId())) {
+            log.warn("IDOR attempt! User {} tried to delete session {}", callerId, id);
+            throw new ResourceNotFoundException("Session not found");
+        }
+
+        if (session.getCurrentParticipants() > 0) {
+            log.info("Session {} has active bookings. Flipping status to CANCELLED (Soft Delete).", id);
+            session.setStatus(SessionStatus.CANCELLED);
+            sessionRepository.save(session);
+        } else {
+            sessionRepository.delete(session);
+        }
+    }
+
 }
