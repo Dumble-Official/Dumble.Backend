@@ -23,7 +23,11 @@ public class EditMessageEndpoint : Endpoint<EditMessageRequest>
     public override async Task HandleAsync(EditMessageRequest req, CancellationToken ct)
     {
         var messageId = Route<string>("messageId")!;
-        var userId = User.FindFirst("userId")!.Value;
+        // The userId claim is mandatory for this endpoint (registered via
+        // Claims("userId")), but a JWT minted without it would otherwise throw
+        // a raw NullReferenceException and surface as 500 instead of 401.
+        var userId = User.FindFirst("userId")?.Value
+            ?? throw new UnauthorizedAccessException("Token is missing the userId claim");
         await _mediator.Send(new EditMessageCommand(messageId, userId, req.Content), ct);
         await SendNoContentAsync(ct);
     }

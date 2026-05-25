@@ -4,6 +4,7 @@ using MassTransit;
 using MongoDB.Driver;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Infrastructure.Configuration;
 using Dumble.NotificationService.Infrastructure.Messaging.Consumers;
@@ -23,7 +24,10 @@ public static class DependencyInjection
         var databaseName = configuration["MongoDb:DatabaseName"] ?? "dumble_notifications";
 
         services.AddSingleton<IMongoClient>(new MongoClient(connectionString));
-        services.AddSingleton(sp => new MongoDbContext(sp.GetRequiredService<IMongoClient>(), databaseName));
+        services.AddSingleton(sp => new MongoDbContext(
+            sp.GetRequiredService<IMongoClient>(),
+            databaseName,
+            sp.GetService<ILogger<MongoDbContext>>()));
 
         // Repositories
         services.AddScoped<INotificationRepository, NotificationRepository>();
@@ -41,7 +45,12 @@ public static class DependencyInjection
         }
         services.AddScoped<IPushNotificationService, FirebasePushNotificationService>();
 
-        // Dedup + notification delivery
+        // Dedup + notification delivery.
+        // IDedupEventStore is intentionally singleton: it holds an IMongoCollection
+        // handle, which is documented thread-safe by the MongoDB C# driver and
+        // safe to share across requests. Don't lower this to Scoped without
+        // changing the implementation — the surrounding NotificationDeliveryService
+        // is scoped because it composes per-request repositories.
         services.AddSingleton<IDedupEventStore, DedupEventStore>();
         services.AddScoped<INotificationDeliveryService, NotificationDeliveryService>();
         services.Configure<NotificationSettings>(configuration.GetSection(NotificationSettings.SectionName));
