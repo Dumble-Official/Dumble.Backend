@@ -76,6 +76,9 @@ tests/postman/node_modules/
 appsettings.Development.json
 .claude
 
+# Temp / generated files
+commit_msg.txt
+
 # Service logs
 *.err
 *.log
