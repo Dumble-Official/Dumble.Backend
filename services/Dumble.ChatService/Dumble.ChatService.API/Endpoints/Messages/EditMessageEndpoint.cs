@@ -23,18 +23,15 @@ public class EditMessageEndpoint : Endpoint<EditMessageRequest>
     public override async Task HandleAsync(EditMessageRequest req, CancellationToken ct)
     {
         var messageId = Route<string>("messageId")!;
-        // The userId claim is mandatory for this endpoint (registered via
-        // Claims("userId")), but a JWT minted without it would otherwise
-        // throw NullReferenceException and surface as 500. Issue 401 here
-        // — the global ExceptionMapping maps UnauthorizedAccessException
-        // to 403 (used for "authenticated but lacks permission"), which is
-        // semantically wrong for "token doesn't identify a user".
-        var userId = User.FindFirst("userId")?.Value;
-        if (userId is null)
-        {
-            await SendUnauthorizedAsync(ct);
-            return;
-        }
+        // Null-safe claim lookup. A JWT minted without the userId claim
+        // would otherwise NPE → 500. The throw falls through to the
+        // service-wide ExceptionMapping, which maps
+        // UnauthorizedAccessException to 403 — same status as every other
+        // auth-layer rejection in this service. If the team later decides
+        // missing-claim cases should be 401 specifically, that's a single
+        // change in ExceptionMapping.cs, not a per-endpoint override.
+        var userId = User.FindFirst("userId")?.Value
+            ?? throw new UnauthorizedAccessException("Token is missing the userId claim");
         await _mediator.Send(new EditMessageCommand(messageId, userId, req.Content), ct);
         await SendNoContentAsync(ct);
     }
