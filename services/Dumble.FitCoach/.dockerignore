@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Environment & secrets
+.env
+.env.*
+
+# Git
+.git/
+.gitignore
+
+# Dev/test files
+*.log
+test_*.py
+*_test.py
+
+# Memory data (user data — never bake into image)
+memory_data/
+
+# UI (served separately)
+fitcoach_ui.html
+
+# IDE
+.vscode/
+.idea/
+*.swp

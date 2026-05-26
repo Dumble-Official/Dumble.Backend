@@ -1,0 +1,16 @@
+# Test-only compose override that exposes the FitCoach Python container on
+# host port 18000 so tests/postman/coach_security.js can bypass the gateway
+# and probe FitCoach's own auth layer directly (anti-IDOR, anti-forgery, the
+# X-User-Id requirement).
+#
+# Apply alongside the main compose:
+#   docker compose -f release/docker-compose.yml \
+#                  -f release/docker-compose.test.fitcoach.yml up -d
+#
+# The compose.override.yml in release/ is gitignored (developer-local port
+# remaps); this file is committed so a fresh checkout can run the test suite
+# without first hand-rolling an override.
+services:
+  fitcoach:
+    ports:
+      - "18000:8000"
