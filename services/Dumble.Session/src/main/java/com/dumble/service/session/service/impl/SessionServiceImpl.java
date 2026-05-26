@@ -77,13 +77,20 @@ public class SessionServiceImpl implements SessionService {
 
     @Override
     @Transactional
-    public SessionResponse updateSessionSecure(UUID id, SessionUpdateRequest request, UUID callerId) {
+    public SessionResponse updateSessionSecure(UUID id, SessionUpdateRequest request, UUID callerId, boolean isAdmin) {
         Session session = sessionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Session not found"));
 
-        if (!callerId.equals(session.getTrainerId()) && !callerId.equals(session.getGymId())) {
+        // Ownership check is bypassed for ADMIN (moderation use case); the
+        // admin action is logged so it shows up in audit trails.
+        boolean isOwner = callerId.equals(session.getTrainerId()) || callerId.equals(session.getGymId());
+        if (!isOwner && !isAdmin) {
             log.warn("IDOR attempt! User {} tried to update session {}", callerId, id);
             throw new ResourceNotFoundException("Session not found");
+        }
+        if (isAdmin && !isOwner) {
+            log.warn("Admin {} updated session {} (trainerId={}, gymId={})",
+                    callerId, id, session.getTrainerId(), session.getGymId());
         }
 
         if (request.getMaxCapacity() != null && request.getMaxCapacity() < session.getCurrentParticipants()) {
@@ -96,13 +103,18 @@ public class SessionServiceImpl implements SessionService {
 
     @Override
     @Transactional
-    public void deleteSessionSecure(UUID id, UUID callerId) {
+    public void deleteSessionSecure(UUID id, UUID callerId, boolean isAdmin) {
         Session session = sessionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Session not found"));
 
-        if (!callerId.equals(session.getTrainerId()) && !callerId.equals(session.getGymId())) {
+        boolean isOwner = callerId.equals(session.getTrainerId()) || callerId.equals(session.getGymId());
+        if (!isOwner && !isAdmin) {
             log.warn("IDOR attempt! User {} tried to delete session {}", callerId, id);
             throw new ResourceNotFoundException("Session not found");
+        }
+        if (isAdmin && !isOwner) {
+            log.warn("Admin {} deleted session {} (trainerId={}, gymId={})",
+                    callerId, id, session.getTrainerId(), session.getGymId());
         }
 
         if (session.getCurrentParticipants() > 0) {

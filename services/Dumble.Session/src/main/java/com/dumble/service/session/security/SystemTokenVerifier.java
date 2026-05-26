@@ -21,7 +21,12 @@ public class SystemTokenVerifier {
     private static final String EXPECTED_AUDIENCE = "dumble-app";
     private final SecretKey signingKey;
 
-    public SystemTokenVerifier(@Value("${service-jwt.signing-key}") String secret) {
+    public SystemTokenVerifier(@Value("${jwt.secret}") String secret) {
+        // Verifier validates USER tokens issued by Auth (signed with
+        // JWT_SECRET, aud=dumble-app) — same key/audience convention every
+        // other Dumble service uses for user-facing endpoints. The
+        // SystemTokenMinter (outbound to Payment) uses the separate
+        // SERVICE_JWT_SIGNING_KEY for system-to-system tokens.
         byte[] keyBytes = Base64.getDecoder().decode(secret.trim());
         this.signingKey = Keys.hmacShaKeyFor(keyBytes);
     }

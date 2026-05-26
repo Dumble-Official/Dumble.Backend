@@ -44,14 +44,16 @@ public class SessionController {
     }
 
     @PutMapping("/update/{id}")
-    @PreAuthorize("hasAnyRole('TRAINER', 'GYM_OWNER')")
+    @PreAuthorize("hasAnyRole('TRAINER', 'GYM_OWNER', 'ADMIN')")
     public ResponseEntity<SessionResponse> updateSession(
             @PathVariable UUID id,
             @Valid @RequestBody SessionUpdateRequest request,
             Authentication authentication) {
 
         UUID callerId = UUID.fromString(authentication.getName());
-        return ResponseEntity.ok(sessionService.updateSessionSecure(id, request, callerId));
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        return ResponseEntity.ok(sessionService.updateSessionSecure(id, request, callerId, isAdmin));
     }
 
     @GetMapping("/{id}")
@@ -72,11 +74,13 @@ public class SessionController {
     }
 
     @DeleteMapping("/delete/{id}")
-    @PreAuthorize("hasAnyRole('TRAINER', 'GYM_OWNER')")
+    @PreAuthorize("hasAnyRole('TRAINER', 'GYM_OWNER', 'ADMIN')")
     public ResponseEntity<Void> deleteSession(@PathVariable UUID id, Authentication authentication) {
 
         UUID callerId = UUID.fromString(authentication.getName());
-        sessionService.deleteSessionSecure(id, callerId);
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        sessionService.deleteSessionSecure(id, callerId, isAdmin);
         return ResponseEntity.noContent().build(); // 204 No Content
     }
 }

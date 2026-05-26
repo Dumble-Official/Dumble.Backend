@@ -98,6 +98,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-amqp</artifactId>
         </dependency>
+        <!-- Exposes /actuator/health (+ /info) for k8s liveness / readiness
+             probes. SecurityConfig permits /actuator/health/** + /actuator/info
+             unauthenticated; everything else stays behind auth. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
         <!-- Security -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
