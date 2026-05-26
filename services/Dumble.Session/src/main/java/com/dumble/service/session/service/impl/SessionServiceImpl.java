@@ -17,9 +17,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.DayOfWeek;
-import java.time.LocalDateTime;
-import java.time.temporal.TemporalAdjusters;
 import java.util.UUID;
 
 @Service
@@ -34,19 +31,6 @@ public class SessionServiceImpl implements SessionService {
 
     @Override
     public SessionResponse createSession(SessionCreateRequest request) {
-
-//        LocalDateTime weekStart = request.getStartTime()
-//                .with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
-//                .withHour(0).withMinute(0).withSecond(0);
-//        LocalDateTime weekEnd = weekStart.plusDays(6)
-//                .withHour(23).withMinute(59).withSecond(59);
-//
-//        long sessionCount = sessionRepository.countSessionsInWeek(request.getGymId(), request.getTrainerId(), weekStart, weekEnd);
-//        int freeLimit = 4;
-//        if(sessionCount >= freeLimit) {
-//            throw new RuntimeException("Maximum weekly limit reached (4 sessions).");
-//        }
-
         if(request.getGymId() != null) {
             long overlapping = sessionRepository.countConcurrentSessions(request.getGymId(), request.getStartTime(), request.getEndTime());
             if(overlapping >= 3) {

@@ -4,17 +4,20 @@ import com.dumble.service.session.exception.UnauthorizedAccessException;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
-import io.jsonwebtoken.security.Keys;
 import java.util.Base64;
 import java.util.Collection;
 
 @Component
 public class SystemTokenVerifier {
 
+    private static final Logger log = LoggerFactory.getLogger(SystemTokenVerifier.class);
     private static final String EXPECTED_AUDIENCE = "dumble-app";
     private final SecretKey signingKey;
 
@@ -44,9 +47,10 @@ public class SystemTokenVerifier {
             }
             return claims;
         } catch (JwtException ex) {
-            System.out.println("JWT Verification Failed! Reason: " + ex.getMessage());
-            ex.printStackTrace();
-
+            // Slf4j keeps this in the structured log pipeline; the previous
+            // System.out.println + ex.printStackTrace() bypassed log levels
+            // and rotation, dumping straight to stderr.
+            log.warn("System JWT verification failed: {}", ex.getMessage());
             throw new UnauthorizedAccessException("Invalid or expired system token");
         }
     }

@@ -40,7 +40,7 @@ public interface SessionRepository extends JpaRepository<Session, UUID> {
     @Query("SELECT s FROM Session s WHERE s.currentParticipants < s.maxCapacity AND s.status = 'PUBLISHED'")
     Page<Session> findSessionsWithAvailableSpots(Pageable pageable);
 
-    // مسموح للجيم يكون شغال كام سيشن في نفس الوقت (Overlapping Sessions)
+    // How many sessions a gym is running concurrently (used for room-cap check).
     @Query("SELECT COUNT(s) FROM Session s WHERE s.gymId = :gymId " +
             "AND s.status NOT IN ('CANCELLED') " +
             "AND (s.startTime < :endTime AND s.endTime > :startTime)")
@@ -48,7 +48,7 @@ public interface SessionRepository extends JpaRepository<Session, UUID> {
                                  @Param("startTime") LocalDateTime startTime,
                                  @Param("endTime") LocalDateTime endTime);
 
-    // الجيم او الترينر يكون مسموحله يعمل عدد سيشنز معين في الاسبوع
+    // Per-gym / per-trainer weekly session count (for free-tier limit checks).
     @Query("SELECT COUNT(s) FROM Session s WHERE " +
             "(:gymId IS NULL OR s.gymId = :gymId) AND " +
             "(:trainerId IS NULL OR s.trainerId = :trainerId) AND " +

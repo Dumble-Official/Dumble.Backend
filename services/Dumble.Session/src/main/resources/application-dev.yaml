@@ -47,6 +47,10 @@ feign:
   client:
     config:
       payment-service:
-        url: http://localhost:8080/api
+        # Direct system-to-system call to Payment, not via the gateway —
+        # bypasses the gateway's user-JWT gate. In docker-compose this
+        # resolves to the payment container; locally it falls back to
+        # localhost:8183 (Payment's exposed port).
+        url: ${PAYMENT_SERVICE_URL:http://localhost:8183/api}
 
 
