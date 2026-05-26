@@ -1,0 +1,22 @@
+# Upper bounds added on every dep so a rebuild months from now can't
+# silently pull a major-version bump and break frame extraction /
+# embeddings / Gemini compat. Lower bounds match what the AI team
+# shipped against; raise them when you upgrade.
+fastapi>=0.115.0,<1.0
+uvicorn>=0.30.6,<1.0
+pydantic>=2.8.2,<3.0
+requests>=2.32.3,<3.0
+numpy>=2.1.0,<3.0
+mediapipe>=0.10,<0.12
+opencv-python-headless>=4.10,<5.0
+httpx>=0.27,<1.0
+Pillow>=10,<12
+faiss-cpu>=1.8,<2.0
+python-dotenv>=1.0,<2.0
+python-multipart>=0.0.9,<1.0
+sentence-transformers>=3.0,<6.0
+
+# Optional: local Whisper fallback (used if Gemini + Whisper API both fail)
+# Uncomment one of the following if you want offline transcription support:
+# faster-whisper>=1.0,<2.0   ← recommended (faster, lower memory)
+# openai-whisper>=20240930   ← alternative

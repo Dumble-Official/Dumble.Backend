@@ -211,6 +211,10 @@ services:
       WALLET_SERVICE_URL: http://wallet:8184
       PAYMENT_SERVICE_URL: http://payment:8183
       SUBSCRIPTION_SERVICE_URL: http://subscription:8182
+      FITCOACH_SERVICE_URL: http://fitcoach:8000
+      # Shared HMAC the gateway signs the X-Internal-Secret header with on
+      # /api/coach/** proxies. FitCoach refuses anything else.
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?INTERNAL_API_SECRET must be set in release/.env}
       # Comma-separated list of allowed CORS origins (no wildcard in production)
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS must be set in release/.env}
       # Comma-separated CIDR list of trusted reverse-proxy hops that may set X-Forwarded-*
@@ -420,6 +424,35 @@ services:
       wallet:
         condition: service_started
 
+  # ── AI chatbot (Python FastAPI) ─────────────────────────────────────
+  # Identity model is Option B: the gateway verifies the user JWT, checks
+  # the daily counter and Subscription entitlements, then proxies with
+  # X-User-Id + X-Internal-Secret injected. FitCoach never sees the JWT
+  # and trusts only the shared HMAC + gateway-set X-User-Id header.
+  fitcoach:
+    build:
+      context: ../services/Dumble.FitCoach
+      dockerfile: Dockerfile
+    expose:
+      - "8000"
+    environment:
+      GEMINI_API_KEYS: ${GEMINI_API_KEYS:?GEMINI_API_KEYS must be set in release/.env}
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?INTERNAL_API_SECRET must be set in release/.env}
+      # CORS is enforced at the gateway; FitCoach is only reachable on the
+      # internal compose network, so this stays empty to fall back to "*"
+      # for the few direct-from-LAN dev probes.
+      ALLOWED_ORIGINS: ${FITCOACH_ALLOWED_ORIGINS:-}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    volumes:
+      # Per-user memory files live on a named volume so chat history
+      # survives container rebuilds. memory_store writes per-user JSON.
+      - fitcoachmemory:/app/memory_data
+
 volumes:
   redisdata:
   pgdata:
@@ -435,3 +468,4 @@ volumes:
   mongodb_data:
   redis_data:
   rabbitmq_data:
+  fitcoachmemory:
