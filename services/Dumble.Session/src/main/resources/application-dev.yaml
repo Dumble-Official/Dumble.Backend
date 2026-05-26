@@ -38,15 +38,25 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
+# JWT_SECRET — signs user JWTs from Auth (aud=dumble-app). Used by
+# SystemTokenVerifier to validate inbound user-facing traffic.
+jwt:
+  secret: ${JWT_SECRET:K0Q6NCGDFncmftENnNLP9r9lzaJbvOFCnznXqP0PrI4ag5D8tl5kHpFfoM7tDNjo}
+
+# SERVICE_JWT_SIGNING_KEY — signs system tokens for service-to-service
+# calls. Used by SystemTokenMinter for outbound calls to Payment.
 service-jwt:
   signing-key: ${SERVICE_JWT_SIGNING_KEY:K0Q6NCGDFncmftENnNLP9r9lzaJbvOFCnznXqP0PrI4ag5D8tl5kHpFfoM7tDNjo}
-  issuer: dumble-auth   # غيرناها من payment لـ dumble-auth عشان تطابق التوكن
   ttl-seconds: 900000
 
 feign:
   client:
     config:
       payment-service:
-        url: http://localhost:8080/api
+        # Direct system-to-system call to Payment, not via the gateway —
+        # bypasses the gateway's user-JWT gate. In docker-compose this
+        # resolves to the payment container; locally it falls back to
+        # localhost:8183 (Payment's exposed port).
+        url: ${PAYMENT_SERVICE_URL:http://localhost:8183/api}
 
 

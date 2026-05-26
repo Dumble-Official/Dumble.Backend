@@ -30,7 +30,7 @@ public class Booking {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private PaymentStatus paymentStatus = PaymentStatus.PENDING;;
+    private PaymentStatus paymentStatus = PaymentStatus.PENDING;
 
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal amountPaid;

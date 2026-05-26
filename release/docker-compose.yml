@@ -371,10 +371,14 @@ services:
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
       SERVICES_AUTH_URL: http://authentication:8081
+      PAYMENT_SERVICE_URL: http://payment:8183/api
+      SERVICE_JWT_SIGNING_KEY: ${SERVICE_JWT_SIGNING_KEY:?SERVICE_JWT_SIGNING_KEY must be set in release/.env}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
     depends_on:
       session-db:
         condition: service_healthy
+      payment:
+        condition: service_started
 
   payment:
     build:

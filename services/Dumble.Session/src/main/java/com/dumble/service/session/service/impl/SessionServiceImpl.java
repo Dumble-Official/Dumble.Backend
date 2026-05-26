@@ -17,9 +17,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.DayOfWeek;
-import java.time.LocalDateTime;
-import java.time.temporal.TemporalAdjusters;
 import java.util.UUID;
 
 @Service
@@ -34,19 +31,6 @@ public class SessionServiceImpl implements SessionService {
 
     @Override
     public SessionResponse createSession(SessionCreateRequest request) {
-
-//        LocalDateTime weekStart = request.getStartTime()
-//                .with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
-//                .withHour(0).withMinute(0).withSecond(0);
-//        LocalDateTime weekEnd = weekStart.plusDays(6)
-//                .withHour(23).withMinute(59).withSecond(59);
-//
-//        long sessionCount = sessionRepository.countSessionsInWeek(request.getGymId(), request.getTrainerId(), weekStart, weekEnd);
-//        int freeLimit = 4;
-//        if(sessionCount >= freeLimit) {
-//            throw new RuntimeException("Maximum weekly limit reached (4 sessions).");
-//        }
-
         if(request.getGymId() != null) {
             long overlapping = sessionRepository.countConcurrentSessions(request.getGymId(), request.getStartTime(), request.getEndTime());
             if(overlapping >= 3) {
@@ -93,13 +77,20 @@ public class SessionServiceImpl implements SessionService {
 
     @Override
     @Transactional
-    public SessionResponse updateSessionSecure(UUID id, SessionUpdateRequest request, UUID callerId) {
+    public SessionResponse updateSessionSecure(UUID id, SessionUpdateRequest request, UUID callerId, boolean isAdmin) {
         Session session = sessionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Session not found"));
 
-        if (!callerId.equals(session.getTrainerId()) && !callerId.equals(session.getGymId())) {
+        // Ownership check is bypassed for ADMIN (moderation use case); the
+        // admin action is logged so it shows up in audit trails.
+        boolean isOwner = callerId.equals(session.getTrainerId()) || callerId.equals(session.getGymId());
+        if (!isOwner && !isAdmin) {
             log.warn("IDOR attempt! User {} tried to update session {}", callerId, id);
             throw new ResourceNotFoundException("Session not found");
+        }
+        if (isAdmin && !isOwner) {
+            log.warn("Admin {} updated session {} (trainerId={}, gymId={})",
+                    callerId, id, session.getTrainerId(), session.getGymId());
         }
 
         if (request.getMaxCapacity() != null && request.getMaxCapacity() < session.getCurrentParticipants()) {
@@ -112,13 +103,18 @@ public class SessionServiceImpl implements SessionService {
 
     @Override
     @Transactional
-    public void deleteSessionSecure(UUID id, UUID callerId) {
+    public void deleteSessionSecure(UUID id, UUID callerId, boolean isAdmin) {
         Session session = sessionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Session not found"));
 
-        if (!callerId.equals(session.getTrainerId()) && !callerId.equals(session.getGymId())) {
+        boolean isOwner = callerId.equals(session.getTrainerId()) || callerId.equals(session.getGymId());
+        if (!isOwner && !isAdmin) {
             log.warn("IDOR attempt! User {} tried to delete session {}", callerId, id);
             throw new ResourceNotFoundException("Session not found");
+        }
+        if (isAdmin && !isOwner) {
+            log.warn("Admin {} deleted session {} (trainerId={}, gymId={})",
+                    callerId, id, session.getTrainerId(), session.getGymId());
         }
 
         if (session.getCurrentParticipants() > 0) {

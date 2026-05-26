@@ -24,7 +24,6 @@ import java.util.List;
 public class SystemAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(SystemAuthenticationFilter.class);
-    private static final String ADMIN_ISSUER = "admin";
 
     private final SystemTokenVerifier verifier;
 
@@ -41,19 +40,20 @@ public class SystemAuthenticationFilter extends OncePerRequestFilter {
         if (header != null && header.startsWith("Bearer ")) {
             try {
                 Claims claims = verifier.verify(header);
-                String issuer = claims.getIssuer() == null ? "unknown" : claims.getIssuer();
 
+                // Roles are derived ONLY from the `roles` claim Auth puts in
+                // the user JWT — never from the `iss` value. The previous
+                // shape granted ROLE_ADMIN to any token whose `iss` claim
+                // equalled "admin"; since `iss` is a freely-set payload
+                // field, anyone holding JWT_SECRET could mint themselves an
+                // admin token. Trust only what Auth signs into `roles`.
                 List<SimpleGrantedAuthority> authorities = new ArrayList<>(3);
-                authorities.add(new SimpleGrantedAuthority("ROLE_SERVICE"));
-                authorities.add(new SimpleGrantedAuthority("ROLE_SERVICE_" + issuer.toUpperCase()));
-
-                if (ADMIN_ISSUER.equalsIgnoreCase(issuer)) {
-                    authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
-                }
 
                 String principalName = claims.get("userId", String.class);
                 if (principalName == null) {
-                    principalName = claims.getSubject() != null ? claims.getSubject() : issuer;
+                    principalName = claims.getSubject() != null
+                            ? claims.getSubject()
+                            : (claims.getIssuer() == null ? "unknown" : claims.getIssuer());
                 }
 
                 List<?> roles = claims.get("roles", List.class);
