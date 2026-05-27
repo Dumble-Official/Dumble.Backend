@@ -1,0 +1,70 @@
+package com.dumble.service.session.repository;
+
+import com.dumble.service.session.domain.entity.Session;
+import com.dumble.service.session.domain.enumuration.SessionStatus;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface SessionRepository extends JpaRepository<Session, UUID> {
+
+    Page<Session> findByGymId(UUID gymId, Pageable pageable);
+
+    Page<Session> findByTrainerId(UUID trainerId, Pageable pageable);
+
+    Page<Session> findByStatus(SessionStatus status, Pageable pageable);
+
+    @Query("SELECT s FROM Session s WHERE s.status = 'PUBLISHED' ORDER BY s.startTime ASC")
+    List<Session> findActiveSessions();
+
+    Page<Session> findByTitleContainingIgnoreCase(String title, Pageable pageable);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM Session s WHERE s.id = :id")
+    @Transactional
+    Optional<Session> findByIdForUpdate(@Param("id") UUID id);
+
+    @Query("SELECT s FROM Session s WHERE s.currentParticipants < s.maxCapacity AND s.status = 'PUBLISHED'")
+    Page<Session> findSessionsWithAvailableSpots(Pageable pageable);
+
+    // How many sessions a gym is running concurrently (used for room-cap check).
+    @Query("SELECT COUNT(s) FROM Session s WHERE s.gymId = :gymId " +
+            "AND s.status NOT IN ('CANCELLED') " +
+            "AND (s.startTime < :endTime AND s.endTime > :startTime)")
+    long countConcurrentSessions(@Param("gymId") UUID gymId,
+                                 @Param("startTime") LocalDateTime startTime,
+                                 @Param("endTime") LocalDateTime endTime);
+
+    // Per-gym / per-trainer weekly session count (for free-tier limit checks).
+    @Query("SELECT COUNT(s) FROM Session s WHERE " +
+            "(:gymId IS NULL OR s.gymId = :gymId) AND " +
+            "(:trainerId IS NULL OR s.trainerId = :trainerId) AND " +
+            "s.status NOT IN ('CANCELLED') AND " +
+            "s.startTime >= :weekStart AND s.startTime <= :weekEnd")
+    long countSessionsInWeek(@Param("gymId") UUID gymId,
+                             @Param("trainerId") UUID trainerId,
+                             @Param("weekStart") LocalDateTime weekStart,
+                             @Param("weekEnd") LocalDateTime weekEnd);
+
+    @Modifying
+    @Query("UPDATE Session s SET s.currentParticipants = s.currentParticipants + 1 WHERE s.id = :id AND s.currentParticipants < s.maxCapacity")
+    int incrementParticipants(@Param("id") UUID id);
+
+    @Modifying
+    @Query("UPDATE Session s SET s.currentParticipants = s.currentParticipants - 1 " +
+            "WHERE s.id = :id AND s.currentParticipants > 0")
+    int decrementParticipants(@Param("id") UUID id);
+}
