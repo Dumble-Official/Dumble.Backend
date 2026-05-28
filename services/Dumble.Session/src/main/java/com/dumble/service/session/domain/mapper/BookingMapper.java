@@ -15,7 +15,6 @@ public interface BookingMapper {
     @Mapping(target = "paymentStatus", constant = "PENDING")
     @Mapping(target = "amountPaid", ignore = true)
     @Mapping(target = "paymentId", ignore = true)
-    @Mapping(target = "transactionRef", ignore = true)
     @Mapping(target = "bookingDate", ignore = true)
     Booking toEntity(BookingCreateRequest request);
 

@@ -37,8 +37,6 @@ public class Booking {
 
     private UUID paymentId;
 
-    private String transactionRef;
-
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime bookingDate;

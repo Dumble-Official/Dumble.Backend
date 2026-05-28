@@ -34,7 +34,7 @@ public interface SessionRepository extends JpaRepository<Session, UUID> {
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM Session s WHERE s.id = :id")
-    @Transactional
+//    @Transactional
     Optional<Session> findByIdForUpdate(@Param("id") UUID id);
 
     @Query("SELECT s FROM Session s WHERE s.currentParticipants < s.maxCapacity AND s.status = 'PUBLISHED'")
@@ -67,4 +67,9 @@ public interface SessionRepository extends JpaRepository<Session, UUID> {
     @Query("UPDATE Session s SET s.currentParticipants = s.currentParticipants - 1 " +
             "WHERE s.id = :id AND s.currentParticipants > 0")
     int decrementParticipants(@Param("id") UUID id);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE Session s SET s.status = 'COMPLETED' WHERE s.status = 'PUBLISHED' AND s.endTime < :now")
+    int updateExpiredSessionsToCompleted(@Param("now") LocalDateTime now);
 }

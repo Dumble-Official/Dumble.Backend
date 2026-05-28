@@ -43,7 +43,7 @@ public class BookingServiceImpl implements BookingService {
     private final TransactionTemplate transactionTemplate;
 
     @Override
-    @Transactional(readOnly = false)
+//    @Transactional(readOnly = false)
     public BookingResponse createBooking(BookingCreateRequest request, UUID participantId) {
 
         Booking booking = transactionTemplate.execute(status -> savePendingBookingInTx(request, participantId));
@@ -93,6 +93,11 @@ public class BookingServiceImpl implements BookingService {
             throw new DuplicateResourceException("You already have an active booking for this session.");
         }
 
+        int updatedRows = sessionRepository.incrementParticipants(session.getId());
+        if (updatedRows == 0) {
+            throw new BadRequestException("Sorry, this session just hit full capacity.");
+        }
+
         Booking booking = Booking.builder()
                 .session(session)
                 .participantId(participantId)
@@ -103,6 +108,7 @@ public class BookingServiceImpl implements BookingService {
         try {
             return bookingRepository.saveAndFlush(booking);
         } catch (DataIntegrityViolationException ex) {
+            sessionRepository.decrementParticipants(session.getId());
             throw new DuplicateResourceException("Concurrent booking detected. You already have an active booking.");
         }
     }
@@ -116,16 +122,11 @@ public class BookingServiceImpl implements BookingService {
         if ("Succeeded".equalsIgnoreCase(chargeRes.getStatus())) {
             booking.setPaymentStatus(PaymentStatus.CONFIRMED);
 
-            int updatedRows = sessionRepository.incrementParticipants(booking.getSession().getId());
-            if (updatedRows == 0) {
-                booking.setPaymentStatus(PaymentStatus.CANCELLED);
-                log.warn("Session full at final verification. Flipping booking {} to CANCELLED.", bookingId);
-            }
-
         } else if ("Failed".equalsIgnoreCase(chargeRes.getStatus())) {
             booking.setPaymentStatus(PaymentStatus.CANCELLED);
-        }
 
+            sessionRepository.decrementParticipants(booking.getSession().getId());
+        }
         return bookingMapper.toResponse(bookingRepository.save(booking));
     }
 
@@ -205,12 +206,15 @@ public class BookingServiceImpl implements BookingService {
         if (booking.getPaymentStatus() == PaymentStatus.PENDING) {
             booking.setPaymentStatus(PaymentStatus.CANCELLED);
             bookingRepository.save(booking);
-            log.info("Booking {} successfully CANCELLED via Async Failure Event.", bookingId);
+
+            sessionRepository.decrementParticipants(booking.getSession().getId());
+
+            log.info("Booking {} successfully CANCELLED via Async Failure Event and seat released.", bookingId);
         }
     }
 
     @Override
-    public BookingResponse getBookingDetailsSecure(UUID bookingId, UUID callerId) { // 💡 شيلنا الـ isAdmin
+    public BookingResponse getBookingDetailsSecure(UUID bookingId, UUID callerId) {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking not found"));
 
