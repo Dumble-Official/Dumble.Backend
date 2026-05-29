@@ -3,9 +3,12 @@ using Dumble.RecommendationService.API.Authentication;
 using Dumble.RecommendationService.API.Errors;
 using Dumble.RecommendationService.Application;
 using Dumble.RecommendationService.Infrastructure;
+using Dumble.RecommendationService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -60,9 +63,21 @@ builder.Services.Configure<ForwardedHeadersOptions>(opt =>
     }
 });
 
-builder.Services.AddHealthChecks();
+// Readiness includes the database; liveness must not (a DB blip should not get the
+// container killed — only restarted out of the load-balancer rotation).
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<RecommendationDbContext>(name: "database", tags: new[] { "ready" });
 
 var app = builder.Build();
+
+// Apply migrations on startup in every environment: the service owns its schema
+// and there is no separate migration step in the compose deployment. Fails fast if
+// the database is unreachable, which is the desired behaviour behind depends_on.
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<RecommendationDbContext>();
+    db.Database.Migrate();
+}
 
 app.UseForwardedHeaders();
 app.UseExceptionMapping();
@@ -70,8 +85,8 @@ app.UseExceptionMapping();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapHealthChecks("/health/live");
-app.MapHealthChecks("/health/ready");
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
 
 // NOTE: FastEndpoints (and its FluentValidation + Swagger wiring) is registered
 // in the PR that introduces the first endpoint — its startup discovery throws
