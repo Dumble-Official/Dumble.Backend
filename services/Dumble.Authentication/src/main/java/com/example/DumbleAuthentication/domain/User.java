@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Email;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -49,8 +50,11 @@ public class User {
     @Column(precision = 5, scale = 2)
     private BigDecimal height;
 
+    // Multiple goals (e.g. ["MUSCLE_GAIN","ENDURANCE"]) — persisted to the same
+    // fitness_goals VARCHAR column as a comma-joined string by StringListConverter.
     @Column(name = "fitness_goals", length = 500)
-    private String fitnessGoals;
+    @Convert(converter = StringListConverter.class)
+    private List<String> fitnessGoals;
 
     @Column(length = 512)
     private String pfp;
@@ -163,11 +167,11 @@ public class User {
         this.height = height;
     }
 
-    public String getFitnessGoals() {
+    public List<String> getFitnessGoals() {
         return fitnessGoals;
     }
 
-    public void setFitnessGoals(String fitnessGoals) {
+    public void setFitnessGoals(List<String> fitnessGoals) {
         this.fitnessGoals = fitnessGoals;
     }
 

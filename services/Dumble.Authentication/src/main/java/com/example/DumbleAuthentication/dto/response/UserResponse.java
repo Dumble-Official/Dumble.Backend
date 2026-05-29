@@ -6,6 +6,7 @@ import com.example.DumbleAuthentication.domain.UserType;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 public class UserResponse {
@@ -20,7 +21,7 @@ public class UserResponse {
     private String gender;
     private BigDecimal weight;
     private BigDecimal height;
-    private String fitnessGoals;
+    private List<String> fitnessGoals;
     private String bio;
     private String injuries;
     private UserType userType;
@@ -68,8 +69,8 @@ public class UserResponse {
     public void setWeight(BigDecimal weight) { this.weight = weight; }
     public BigDecimal getHeight() { return height; }
     public void setHeight(BigDecimal height) { this.height = height; }
-    public String getFitnessGoals() { return fitnessGoals; }
-    public void setFitnessGoals(String fitnessGoals) { this.fitnessGoals = fitnessGoals; }
+    public List<String> getFitnessGoals() { return fitnessGoals; }
+    public void setFitnessGoals(List<String> fitnessGoals) { this.fitnessGoals = fitnessGoals; }
     public String getBio() { return bio; }
     public void setBio(String bio) { this.bio = bio; }
     public String getInjuries() { return injuries; }

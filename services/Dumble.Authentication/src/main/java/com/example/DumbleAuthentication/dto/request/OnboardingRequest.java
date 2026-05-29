@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 public class OnboardingRequest {
 
@@ -25,8 +26,8 @@ public class OnboardingRequest {
     @DecimalMax("250")
     private BigDecimal height;
 
-    @Size(max = 500)
-    private String fitnessGoals;
+    @Size(max = 20, message = "At most 20 fitness goals")
+    private List<@Size(max = 50) String> fitnessGoals;
 
     public LocalDate getDateOfBirth() { return dateOfBirth; }
     public void setDateOfBirth(LocalDate dateOfBirth) { this.dateOfBirth = dateOfBirth; }
@@ -36,6 +37,6 @@ public class OnboardingRequest {
     public void setWeight(BigDecimal weight) { this.weight = weight; }
     public BigDecimal getHeight() { return height; }
     public void setHeight(BigDecimal height) { this.height = height; }
-    public String getFitnessGoals() { return fitnessGoals; }
-    public void setFitnessGoals(String fitnessGoals) { this.fitnessGoals = fitnessGoals; }
+    public List<String> getFitnessGoals() { return fitnessGoals; }
+    public void setFitnessGoals(List<String> fitnessGoals) { this.fitnessGoals = fitnessGoals; }
 }
