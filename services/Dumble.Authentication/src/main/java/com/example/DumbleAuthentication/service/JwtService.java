@@ -23,6 +23,7 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -130,6 +131,16 @@ public class JwtService {
         }
 
         return refreshToken;
+    }
+
+    /**
+     * Non-throwing lookup for idempotent flows like logout: returns the row if
+     * present (regardless of expiry) without raising when it's absent. Unlike
+     * {@link #validateRefreshToken}, a missing token is a normal outcome here,
+     * not an error.
+     */
+    public Optional<RefreshToken> findRefreshToken(String token) {
+        return refreshTokenRepository.findByToken(token);
     }
 
     @Transactional

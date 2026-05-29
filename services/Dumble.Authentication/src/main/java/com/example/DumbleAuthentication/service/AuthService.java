@@ -155,13 +155,18 @@ public class AuthService {
 
     @Transactional
     public void logout(String refreshTokenValue, String email) {
-        RefreshToken refreshToken = jwtService.validateRefreshToken(refreshTokenValue);
-
-        if (!refreshToken.getUser().getEmail().equals(email)) {
-            throw new IllegalArgumentException("Refresh token does not belong to the authenticated user");
-        }
-
-        jwtService.deleteRefreshToken(refreshTokenValue);
+        // Logout is idempotent. If the refresh token is already gone — e.g. the
+        // user just changed their password (which revokes all refresh tokens),
+        // or they already logged out — the session is terminated and there's
+        // nothing to do, so we return success instead of a 403. We only reject a
+        // token that EXISTS but belongs to a different user, so one caller can't
+        // delete another user's session.
+        jwtService.findRefreshToken(refreshTokenValue).ifPresent(refreshToken -> {
+            if (!refreshToken.getUser().getEmail().equals(email)) {
+                throw new IllegalArgumentException("Refresh token does not belong to the authenticated user");
+            }
+            jwtService.deleteRefreshToken(refreshTokenValue);
+        });
     }
 
     @Transactional
