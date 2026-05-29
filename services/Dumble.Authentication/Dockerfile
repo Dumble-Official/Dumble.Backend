@@ -1,17 +1,20 @@
 # ---- Stage 1: Build ----
-FROM eclipse-temurin:21-jdk AS build
+# Maven is baked into the base image. We deliberately do NOT use the ./mvnw
+# wrapper here: the wrapper's first step is a busybox `wget` of the Maven
+# distribution zip from repo.maven.apache.org, whose TLS handshake is fragile
+# behind some AV/proxy setups and was the failing step on contributor machines.
+# The maven: base sidesteps that bootstrap entirely (same pattern as
+# payment/wallet/subscription).
+FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
 
-# Copy Maven wrapper & pom first (for layer caching)
-COPY mvnw mvnw.cmd pom.xml ./
-COPY .mvn .mvn
-
-# Download dependencies (cached unless pom.xml changes)
-RUN chmod +x mvnw && ./mvnw dependency:go-offline -B
+# Copy pom first so the dependency layer is cached unless pom.xml changes.
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
 
 # Copy source code and build
 COPY src src
-RUN ./mvnw package -DskipTests -B
+RUN mvn package -DskipTests -B
 
 # ---- Stage 2: Runtime ----
 FROM eclipse-temurin:21-jre
