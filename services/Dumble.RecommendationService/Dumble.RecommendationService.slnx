@@ -4,4 +4,5 @@
   <Project Path="Dumble.RecommendationService.Contracts/Dumble.RecommendationService.Contracts.csproj" />
   <Project Path="Dumble.RecommendationService.Domain/Dumble.RecommendationService.Domain.csproj" />
   <Project Path="Dumble.RecommendationService.Infrastructure/Dumble.RecommendationService.Infrastructure.csproj" />
+  <Project Path="Dumble.RecommendationService.Tests/Dumble.RecommendationService.Tests.csproj" />
 </Solution>
