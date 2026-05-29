@@ -1,3 +1,4 @@
+using Dumble.RecommendationService.Application.Contracts;
 using Dumble.RecommendationService.Infrastructure.Authentication;
 using Dumble.RecommendationService.Infrastructure.Persistence;
 using Dumble.SharedKernel.Contracts;
@@ -16,6 +17,8 @@ public static class DependencyInjection
 
         services.AddDbContext<RecommendationDbContext>(options =>
             options.UseNpgsql(connectionString).UseSnakeCaseNamingConvention());
+
+        services.AddScoped<IInteractionOutboxWriter, InteractionOutboxWriter>();
 
         // Current user is resolved from the validated JWT claims forwarded by the
         // gateway — no extra round-trip to the auth service.
