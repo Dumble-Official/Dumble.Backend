@@ -76,6 +76,15 @@ services:
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
+    # Stable node name so the Erlang cookie/node identity is deterministic.
+    hostname: rabbitmq
+    environment:
+      # Pin the Erlang cookie. The image's entrypoint writes it to
+      # /var/lib/rabbitmq/.erlang.cookie with an explicit chmod 600 when this is
+      # set; otherwise the auto-generated cookie can land with permissions the
+      # rabbitmq user can't read on some Docker Desktop / WSL2 hosts, and
+      # prelaunch dies with ".erlang.cookie: eacces". Local-dev value only.
+      RABBITMQ_ERLANG_COOKIE: "dumble-local-dev-cookie"
     expose:
       - "5672"
     healthcheck:
