@@ -5,10 +5,12 @@ import com.example.DumbleAuthentication.dto.request.OnboardingRequest;
 import com.example.DumbleAuthentication.dto.request.UpdateProfileRequest;
 import com.example.DumbleAuthentication.dto.response.UserResponse;
 import com.example.DumbleAuthentication.repository.UserRepository;
+import com.example.DumbleAuthentication.service.AccountDeletionService;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -22,9 +24,11 @@ import jakarta.validation.Valid;
 public class UserController {
 
     private final UserRepository userRepository;
+    private final AccountDeletionService accountDeletionService;
 
-    public UserController(UserRepository userRepository) {
+    public UserController(UserRepository userRepository, AccountDeletionService accountDeletionService) {
         this.userRepository = userRepository;
+        this.accountDeletionService = accountDeletionService;
     }
 
     @GetMapping("/me")
@@ -34,6 +38,17 @@ public class UserController {
             return ResponseEntity.status(401).build();
         }
         return ResponseEntity.ok(UserResponse.from(user));
+    }
+
+    @DeleteMapping("/me")
+    public ResponseEntity<Void> deleteOwnAccount() {
+        User user = currentUser();
+        if (user == null) {
+            return ResponseEntity.status(401).build();
+        }
+        // Right-to-be-forgotten: hard-delete and publish AccountDeleted so other services purge.
+        accountDeletionService.deleteOwnAccount(user);
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/me/onboarding")
