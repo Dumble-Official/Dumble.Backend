@@ -12,7 +12,9 @@ internal sealed class RolesClaimsTransformation : IClaimsTransformation
         if (identity.HasClaim(c => c.Type == ClaimTypes.Role))
             return Task.FromResult(principal);
 
-        foreach (var raw in identity.FindAll("roles"))
+        // Snapshot first: AddClaim mutates identity.Claims, which FindAll enumerates lazily —
+        // iterating the live result while adding throws "Collection was modified".
+        foreach (var raw in identity.FindAll("roles").ToList())
         {
             var name = raw.Value.StartsWith("ROLE_", StringComparison.Ordinal) ? raw.Value[5..] : raw.Value;
             identity.AddClaim(new Claim(ClaimTypes.Role, name));

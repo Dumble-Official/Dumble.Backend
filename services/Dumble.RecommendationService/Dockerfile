@@ -33,4 +33,8 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 ENV ASPNETCORE_URLS=http://+:5024
+# The projects target net8.0, but the base image ships the .NET 9 runtime (the version
+# already present on the build/CI hosts — matches the other services' images). Roll the
+# app forward onto it so nothing extra has to be downloaded to run the container.
+ENV DOTNET_ROLL_FORWARD=Major
 ENTRYPOINT ["dotnet", "Dumble.RecommendationService.API.dll"]

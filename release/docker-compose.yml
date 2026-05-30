@@ -221,6 +221,7 @@ services:
       PAYMENT_SERVICE_URL: http://payment:8183
       SUBSCRIPTION_SERVICE_URL: http://subscription:8182
       FITCOACH_SERVICE_URL: http://fitcoach:8000
+      RECOMMENDATION_SERVICE_URL: http://recommendation-service:5024
       # Shared HMAC the gateway signs the X-Internal-Secret header with on
       # /api/coach/** proxies. FitCoach refuses anything else.
       INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?INTERNAL_API_SECRET must be set in release/.env}
@@ -462,6 +463,52 @@ services:
       # survives container rebuilds. memory_store writes per-user JSON.
       - fitcoachmemory:/app/memory_data
 
+  recommendation-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dumble_recommendations
+      POSTGRES_USER: dumble
+      POSTGRES_PASSWORD: ${RECOMMENDATION_DB_PASSWORD:?RECOMMENDATION_DB_PASSWORD must be set in release/.env}
+    expose:
+      - "5432"
+    volumes:
+      - recommendationdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dumble"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  recommendation-service:
+    build:
+      context: ../services
+      dockerfile: Dumble.RecommendationService/Dockerfile
+    expose:
+      - "5024"
+    environment:
+      ASPNETCORE_URLS: http://+:5024
+      ConnectionStrings__RecommendationDb: Host=recommendation-db;Port=5432;Database=dumble_recommendations;Username=dumble;Password=${RECOMMENDATION_DB_PASSWORD:?RECOMMENDATION_DB_PASSWORD must be set in release/.env}
+      ConnectionStrings__Redis: redis:6379
+      RabbitMQ__Host: rabbitmq
+      Services__PostService: http://post-service:5134
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
+      # Recombee — server-side private token only (never the public/client token).
+      # Leave blank to run without Recombee: interactions still buffer to the outbox
+      # and explore falls back to recent posts; flush + recommendations stay disabled.
+      RECOMBEE_DATABASE_ID: ${RECOMBEE_DATABASE_ID:-}
+      RECOMBEE_PRIVATE_TOKEN: ${RECOMBEE_PRIVATE_TOKEN:-}
+      RECOMBEE_REGION: ${RECOMBEE_REGION:-}
+      ASPNETCORE_ENVIRONMENT: Production
+    depends_on:
+      recommendation-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      post-service:
+        condition: service_started
+
 volumes:
   redisdata:
   pgdata:
@@ -478,3 +525,4 @@ volumes:
   redis_data:
   rabbitmq_data:
   fitcoachmemory:
+  recommendationdata:
