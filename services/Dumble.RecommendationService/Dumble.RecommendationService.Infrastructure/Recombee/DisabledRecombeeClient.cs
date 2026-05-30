@@ -22,4 +22,10 @@ public sealed class DisabledRecombeeClient : IRecombeeClient
             "Recombee is not configured; ignoring a request to send {Count} interactions", interactions.Count);
         return Task.CompletedTask;
     }
+
+    public Task UpsertItemAsync(RecombeeItemUpsert item, CancellationToken ct = default) => Task.CompletedTask;
+
+    public Task DeleteItemAsync(string itemId, CancellationToken ct = default) => Task.CompletedTask;
+
+    public Task EnsureSchemaAsync(CancellationToken ct = default) => Task.CompletedTask;
 }
