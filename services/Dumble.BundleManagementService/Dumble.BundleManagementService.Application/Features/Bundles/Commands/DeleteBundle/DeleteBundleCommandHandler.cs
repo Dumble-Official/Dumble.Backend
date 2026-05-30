@@ -6,13 +6,17 @@ using Dumble.BundleManagementService.Domain.BundleAggregate.ValueObjects;
 using Dumble.SharedKernel.Contracts;
 using Dumble.SharedKernel.Enums;
 using MediatR;
+using Microsoft.Extensions.Logging;
 
 namespace Dumble.BundleManagementService.Application.Features.Bundles.Commands.DeleteBundle;
 
 internal sealed class DeleteBundleCommandHandler(
     IFileService fileService,
     IGenericRepository<Bundle, BundleId> bundlesRepository,
-    ILoggedInUserService loggedInUserService) : IRequestHandler<DeleteBundleCommand>
+    ILoggedInUserService loggedInUserService,
+    IAdminActionRepository adminActionRepository,
+    IAdminBypassRateLimiter rateLimiter,
+    ILogger<DeleteBundleCommandHandler> logger) : IRequestHandler<DeleteBundleCommand>
 {
     public async Task Handle(DeleteBundleCommand request, CancellationToken cancellationToken)
     {
@@ -23,9 +27,27 @@ internal sealed class DeleteBundleCommandHandler(
 
         var currentUserAccountId = AccountId.Create(AccountIdentity.ToAccountGuid(loggedInUser.Id));
 
+        var isAdmin = loggedInUser.IsInRole(UserType.Admin);
+        var isOwner = currentUserAccountId.Equals(bundle.OwnerId);
+
         // ADMIN can delete any bundle; other roles can only delete their own.
-        if (!loggedInUser.IsInRole(UserType.Admin) && !currentUserAccountId.Equals(bundle.OwnerId))
+        if (!isAdmin && !isOwner)
             throw new UnauthorizedAccessException("You can only delete your own bundles");
+
+        if (isAdmin && !isOwner)
+        {
+            if (!rateLimiter.IsAllowed(loggedInUser.Id, "BundleDeleted"))
+                throw new InvalidOperationException("Admin bypass rate limit exceeded. Try again later.");
+
+            await adminActionRepository.RecordAsync(
+                loggedInUser.Id, "BundleDeleted", "Bundle",
+                bundle.Id.Value.ToString(), bundle.OwnerId.Value.ToString(),
+                $"Deleted by admin (owner: {bundle.OwnerId.Value})", cancellationToken);
+
+            logger.LogWarning(
+                "Admin {AdminId} deleted bundle {BundleId} owned by {OwnerId}",
+                loggedInUser.Id, bundle.Id.Value, bundle.OwnerId.Value);
+        }
 
         var tasks = bundle.Images.Select(img => fileService.DeleteAsync(img.Value));
         await Task.WhenAll(tasks);

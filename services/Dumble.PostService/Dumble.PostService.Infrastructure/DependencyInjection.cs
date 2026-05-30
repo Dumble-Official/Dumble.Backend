@@ -18,7 +18,8 @@ public static class DependencyInjection
     {
         var connectionString = configuration.GetConnectionString("PostDb")
             ?? throw new InvalidOperationException("ConnectionStrings:PostDb is required");
-        services.AddDbContext<PostDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddDbContext<PostDbContext>(options => options
+            .UseNpgsql(connectionString));
 
         services.AddScoped<IPostRepository, PostRepository>();
         services.AddScoped<IReactionRepository, ReactionRepository>();

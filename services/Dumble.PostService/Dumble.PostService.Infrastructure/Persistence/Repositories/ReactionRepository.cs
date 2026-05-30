@@ -31,10 +31,11 @@ public class ReactionRepository : IReactionRepository
 
     public async Task<Dictionary<string, int>> GetCountsByPostIdAsync(Guid postId, CancellationToken ct)
     {
-        return await _context.Reactions
+        var groups = await _context.Reactions
             .Where(r => r.PostId == postId)
-            .GroupBy(r => r.Type.ToString())
-            .ToDictionaryAsync(g => g.Key, g => g.Count(), ct);
+            .GroupBy(r => r.Type)
+            .ToListAsync(ct);
+        return groups.ToDictionary(g => g.Key.ToString()!, g => g.Count());
     }
 
     public async Task<Reaction> CreateAsync(Reaction reaction, CancellationToken ct)

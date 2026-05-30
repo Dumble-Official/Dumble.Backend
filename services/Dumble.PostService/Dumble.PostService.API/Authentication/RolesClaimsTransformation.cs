@@ -13,7 +13,8 @@ internal sealed class RolesClaimsTransformation : IClaimsTransformation
         if (identity.HasClaim(c => c.Type == ClaimTypes.Role))
             return Task.FromResult(principal);
 
-        foreach (var raw in identity.FindAll("roles"))
+        var roles = identity.FindAll("roles").ToList();
+        foreach (var raw in roles)
         {
             var name = raw.Value.StartsWith("ROLE_", StringComparison.Ordinal)
                 ? raw.Value[5..]

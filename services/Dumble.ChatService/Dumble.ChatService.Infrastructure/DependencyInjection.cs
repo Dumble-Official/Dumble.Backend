@@ -15,10 +15,13 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         // MongoDB
-        var connectionString = configuration.GetConnectionString("MongoDb") ?? "mongodb://admin:admin123@localhost:27017";
-        var databaseName = configuration["MongoDb:DatabaseName"] ?? "dumble_chat";
+        var mongoConnectionString = configuration.GetConnectionString("MongoDb")
+            ?? throw new InvalidOperationException("ConnectionStrings:MongoDb is required");
+        var databaseName = configuration["MongoDb:DatabaseName"];
+        if (string.IsNullOrEmpty(databaseName))
+            databaseName = "dumble_chat";
 
-        services.AddSingleton<IMongoClient>(new MongoClient(connectionString));
+        services.AddSingleton<IMongoClient>(new MongoClient(mongoConnectionString));
         services.AddSingleton(sp => new MongoDbContext(sp.GetRequiredService<IMongoClient>(), databaseName));
 
         // Repositories
@@ -26,7 +29,9 @@ public static class DependencyInjection
         services.AddScoped<IMessageRepository, MessageRepository>();
 
         // Redis
-        var redisConnection = configuration.GetConnectionString("Redis") ?? "localhost:6379";
+        var redisConnection = configuration.GetConnectionString("Redis");
+        if (string.IsNullOrEmpty(redisConnection))
+            redisConnection = "localhost:6379";
         services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnection));
         services.AddScoped<IPresenceService, RedisPresenceService>();
 
@@ -35,10 +40,16 @@ public static class DependencyInjection
         {
             x.UsingRabbitMq((context, cfg) =>
             {
-                cfg.Host(configuration["RabbitMQ:Host"] ?? "localhost", "/", h =>
+                var rabbitHost = configuration["RabbitMQ:Host"];
+                if (string.IsNullOrEmpty(rabbitHost)) rabbitHost = "localhost";
+                var rabbitUser = configuration["RabbitMQ:Username"];
+                if (string.IsNullOrEmpty(rabbitUser)) rabbitUser = "guest";
+                var rabbitPass = configuration["RabbitMQ:Password"];
+                if (string.IsNullOrEmpty(rabbitPass)) rabbitPass = "guest";
+                cfg.Host(rabbitHost, "/", h =>
                 {
-                    h.Username(configuration["RabbitMQ:Username"] ?? "guest");
-                    h.Password(configuration["RabbitMQ:Password"] ?? "guest");
+                    h.Username(rabbitUser);
+                    h.Password(rabbitPass);
                 });
 
                 cfg.ConfigureEndpoints(context);

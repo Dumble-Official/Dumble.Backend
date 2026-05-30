@@ -29,7 +29,117 @@ services:
       retries: 15
       start_period: 30s
 
+  mongo:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  post-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dumble
+      POSTGRES_PASSWORD: ${POST_DB_PASSWORD}
+      POSTGRES_DB: dumble_posts
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dumble"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  chat-db:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    ports:
+      - "27018:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   # ── .NET Application Services ───────────────────────────────────────
+
+  notification-service:
+    build:
+      context: ../services
+      dockerfile: Dumble.NotificationService/Dockerfile
+    ports:
+      - "5023:5023"
+    environment:
+      ASPNETCORE_URLS: http://+:5023
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__MongoDb: mongodb://admin:${MONGO_PASSWORD}@mongo:27017
+      MongoDb__DatabaseName: dumble_notifications
+      JWT_SECRET: ${JWT_SECRET}
+      RabbitMQ__Host: rabbitmq
+    depends_on:
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  chat-service:
+    build:
+      context: ../services
+      dockerfile: Dumble.ChatService/Dockerfile
+    ports:
+      - "5022:5022"
+    environment:
+      ASPNETCORE_URLS: http://+:5022
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__MongoDb: mongodb://admin:${MONGO_PASSWORD}@chat-db:27017
+      ConnectionStrings__Redis: redis:6379
+      RabbitMQ__Host: rabbitmq
+      JWT_SECRET: ${JWT_SECRET}
+      Jwt__Secret: ${JWT_SECRET}
+    depends_on:
+      chat-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  post-service:
+    build:
+      context: ../services
+      dockerfile: Dumble.PostService/Dockerfile
+    ports:
+      - "5134:5134"
+    environment:
+      ASPNETCORE_URLS: http://+:5134
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__PostDb: Host=post-db;Port=5432;Database=dumble_posts;Username=dumble;Password=${POST_DB_PASSWORD}
+      Cloudinary__Url: ${CLOUDINARY_URL}
+      RabbitMQ__Host: rabbitmq
+      JWT_SECRET: ${JWT_SECRET}
+      Jwt__Secret: ${JWT_SECRET}
+    depends_on:
+      post-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
   bundle-service:
     build:
@@ -41,9 +151,9 @@ services:
       ASPNETCORE_URLS: http://+:5012
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DatabaseConnection: "Server=bundle-db,1433;Database=dumble_bundles;User Id=sa;Password=${BUNDLE_DB_PASSWORD};TrustServerCertificate=True"
-      Cloudinary__CloudName: dojkq9qck
-      Cloudinary__ApiKey: 557475226226361
-      Cloudinary__ApiSecret: drAG_tvUQOhN1sTKMy964G0WRmQ
+      Cloudinary__CloudName: ${CLOUDINARY_CLOUD_NAME}
+      Cloudinary__ApiKey: ${CLOUDINARY_API_KEY}
+      Cloudinary__ApiSecret: ${CLOUDINARY_API_SECRET}
       JWT_SECRET: ${JWT_SECRET}
       Jwt__Secret: ${JWT_SECRET}
     depends_on:
