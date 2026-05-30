@@ -46,6 +46,9 @@ public static class DependencyInjection
             x.AddConsumer<PostReactedConsumer>();
             x.AddConsumer<ReactionRemovedConsumer>();
             x.AddConsumer<CommentCreatedConsumer>();
+            x.AddConsumer<PostCreatedConsumer>();
+            x.AddConsumer<PostUpdatedConsumer>();
+            x.AddConsumer<PostDeletedConsumer>();
 
             x.UsingRabbitMq((context, cfg) =>
             {
@@ -82,6 +85,7 @@ public static class DependencyInjection
         {
             services.AddSingleton<IRecombeeClient, RecombeeClientAdapter>();
             services.AddHostedService<OutboxFlushWorker>();
+            services.AddHostedService<RecombeeSchemaInitializer>();
         }
         else
         {

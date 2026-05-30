@@ -34,6 +34,52 @@ public sealed class RecombeeClientAdapter : IRecombeeClient
         await _client.SendAsync(new Batch(requests));
     }
 
+    public async Task UpsertItemAsync(RecombeeItemUpsert item, CancellationToken ct = default)
+    {
+        // Send only the properties present, so an update touches just what changed.
+        var values = new Dictionary<string, object>();
+        if (item.Author is not null) values["author"] = item.Author;
+        if (item.AuthorType is not null) values["authorType"] = item.AuthorType;
+        if (item.GymId is not null) values["gymId"] = item.GymId;
+        if (item.Hashtags is not null) values["hashtags"] = item.Hashtags.ToArray();
+        if (item.CreatedAt is not null) values["createdAt"] = item.CreatedAt.Value.UtcDateTime;
+
+        if (values.Count == 0)
+            return;
+
+        await _client.SendAsync(new SetItemValues(item.ItemId, values, cascadeCreate: true));
+    }
+
+    public async Task DeleteItemAsync(string itemId, CancellationToken ct = default)
+    {
+        await _client.SendAsync(new DeleteItem(itemId));
+    }
+
+    public async Task EnsureSchemaAsync(CancellationToken ct = default)
+    {
+        foreach (var (name, type) in ItemProperties)
+        {
+            try
+            {
+                await _client.SendAsync(new AddItemProperty(name, type));
+            }
+            catch (ResponseException)
+            {
+                // Property already exists — AddItemProperty is not idempotent, so this is expected.
+            }
+        }
+    }
+
+    // The item profile Recombee ranks on (design D11).
+    private static readonly (string Name, string Type)[] ItemProperties =
+    {
+        ("author", "string"),
+        ("authorType", "string"),
+        ("gymId", "string"),
+        ("hashtags", "set"),
+        ("createdAt", "timestamp")
+    };
+
     private static Request ToRequest(OutboxInteraction i)
     {
         var timestamp = i.OccurredAt.UtcDateTime;

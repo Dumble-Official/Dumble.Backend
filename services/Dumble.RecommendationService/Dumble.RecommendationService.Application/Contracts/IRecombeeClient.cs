@@ -3,8 +3,8 @@ using Dumble.RecommendationService.Domain.Outbox;
 namespace Dumble.RecommendationService.Application.Contracts;
 
 /// <summary>
-/// Sends buffered interactions to Recombee. The single seam through which the service
-/// talks to the recommendation engine, so the rest of the code never references the SDK.
+/// The only seam through which the service talks to Recombee — interactions and the item
+/// catalog. Keeps the SDK out of the rest of the codebase.
 /// </summary>
 public interface IRecombeeClient
 {
@@ -13,4 +13,13 @@ public interface IRecombeeClient
     /// can leave the rows buffered and retry; a no-op for an empty list.
     /// </summary>
     Task SendInteractionsAsync(IReadOnlyList<OutboxInteraction> interactions, CancellationToken ct = default);
+
+    /// <summary>Create or partially update an item's properties (cascadeCreate).</summary>
+    Task UpsertItemAsync(RecombeeItemUpsert item, CancellationToken ct = default);
+
+    /// <summary>Hard-delete an item so it can never be recommended again (D11).</summary>
+    Task DeleteItemAsync(string itemId, CancellationToken ct = default);
+
+    /// <summary>Idempotently ensure the item property schema exists. Safe to call repeatedly.</summary>
+    Task EnsureSchemaAsync(CancellationToken ct = default);
 }

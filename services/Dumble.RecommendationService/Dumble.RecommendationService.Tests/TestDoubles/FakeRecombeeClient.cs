@@ -17,4 +17,10 @@ internal sealed class FakeRecombeeClient : IRecombeeClient
             throw ThrowOnSend;
         return Task.CompletedTask;
     }
+
+    public Task UpsertItemAsync(RecombeeItemUpsert item, CancellationToken ct = default) => Task.CompletedTask;
+
+    public Task DeleteItemAsync(string itemId, CancellationToken ct = default) => Task.CompletedTask;
+
+    public Task EnsureSchemaAsync(CancellationToken ct = default) => Task.CompletedTask;
 }
