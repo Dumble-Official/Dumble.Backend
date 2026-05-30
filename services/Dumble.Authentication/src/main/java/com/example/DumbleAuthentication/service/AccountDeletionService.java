@@ -12,8 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -63,11 +61,11 @@ public class AccountDeletionService {
 
         // Announce via the outbox, in this same transaction: if the delete rolls back the event row
         // rolls back with it, and once committed a background worker delivers it even if the broker
-        // is momentarily down. camelCase keys match the .NET AccountDeletedEvent wire format.
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("userId", userId.toString());
-        payload.put("deletedAt", Instant.now().toString());
-        outboxWriter.write("AccountDeleted", RabbitMQConfig.ACCOUNT_DELETED_ROUTING_KEY, payload);
+        // is momentarily down. camelCase keys match the .NET AccountDeletedEvent wire format; both
+        // values (a UUID and an ISO-8601 instant) are JSON-safe without escaping.
+        String payloadJson = String.format(
+                "{\"userId\":\"%s\",\"deletedAt\":\"%s\"}", userId, Instant.now().toString());
+        outboxWriter.write("AccountDeleted", RabbitMQConfig.ACCOUNT_DELETED_ROUTING_KEY, payloadJson);
 
         log.info("Deleted account {} ({})", user.getEmail(), userId);
     }
