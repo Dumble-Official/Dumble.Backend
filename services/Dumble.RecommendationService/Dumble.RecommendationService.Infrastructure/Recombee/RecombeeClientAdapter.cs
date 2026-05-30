@@ -36,18 +36,43 @@ public sealed class RecombeeClientAdapter : IRecombeeClient
 
     public async Task UpsertItemAsync(RecombeeItemUpsert item, CancellationToken ct = default)
     {
-        // Send only the properties present, so an update touches just what changed.
+        var values = ToValues(item);
+        if (values.Count == 0)
+            return;
+
+        await _client.SendAsync(new SetItemValues(item.ItemId, values, cascadeCreate: true));
+    }
+
+    public async Task UpsertItemsAsync(IReadOnlyList<RecombeeItemUpsert> items, CancellationToken ct = default)
+    {
+        if (items.Count == 0)
+            return;
+
+        var requests = new List<Request>(items.Count);
+        foreach (var item in items)
+        {
+            var values = ToValues(item);
+            if (values.Count == 0)
+                continue;
+            requests.Add(new SetItemValues(item.ItemId, values, cascadeCreate: true));
+        }
+
+        if (requests.Count == 0)
+            return;
+
+        await _client.SendAsync(new Batch(requests));
+    }
+
+    // Send only the properties present, so an update touches just what changed.
+    private static Dictionary<string, object> ToValues(RecombeeItemUpsert item)
+    {
         var values = new Dictionary<string, object>();
         if (item.Author is not null) values["author"] = item.Author;
         if (item.AuthorType is not null) values["authorType"] = item.AuthorType;
         if (item.GymId is not null) values["gymId"] = item.GymId;
         if (item.Hashtags is not null) values["hashtags"] = item.Hashtags.ToArray();
         if (item.CreatedAt is not null) values["createdAt"] = item.CreatedAt.Value.UtcDateTime;
-
-        if (values.Count == 0)
-            return;
-
-        await _client.SendAsync(new SetItemValues(item.ItemId, values, cascadeCreate: true));
+        return values;
     }
 
     public async Task DeleteItemAsync(string itemId, CancellationToken ct = default)

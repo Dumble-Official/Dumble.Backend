@@ -17,6 +17,12 @@ public interface IRecombeeClient
     /// <summary>Create or partially update an item's properties (cascadeCreate).</summary>
     Task UpsertItemAsync(RecombeeItemUpsert item, CancellationToken ct = default);
 
+    /// <summary>
+    /// Upsert a page of items in a single batch — used by the catalog reconcile to heal drift
+    /// efficiently. Throws on failure so the caller can retry the page; a no-op for an empty list.
+    /// </summary>
+    Task UpsertItemsAsync(IReadOnlyList<RecombeeItemUpsert> items, CancellationToken ct = default);
+
     /// <summary>Hard-delete an item so it can never be recommended again (D11).</summary>
     Task DeleteItemAsync(string itemId, CancellationToken ct = default);
 

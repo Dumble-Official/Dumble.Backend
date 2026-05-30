@@ -20,6 +20,16 @@ internal sealed class FakeRecombeeClient : IRecombeeClient
 
     public Task UpsertItemAsync(RecombeeItemUpsert item, CancellationToken ct = default) => Task.CompletedTask;
 
+    public List<RecombeeItemUpsert> UpsertedItems { get; } = new();
+    public int UpsertBatchCalls { get; private set; }
+
+    public Task UpsertItemsAsync(IReadOnlyList<RecombeeItemUpsert> items, CancellationToken ct = default)
+    {
+        UpsertBatchCalls++;
+        UpsertedItems.AddRange(items);
+        return Task.CompletedTask;
+    }
+
     public Task DeleteItemAsync(string itemId, CancellationToken ct = default) => Task.CompletedTask;
 
     public Task EnsureSchemaAsync(CancellationToken ct = default) => Task.CompletedTask;
