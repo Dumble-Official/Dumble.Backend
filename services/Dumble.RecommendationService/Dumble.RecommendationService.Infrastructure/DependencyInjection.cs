@@ -1,6 +1,7 @@
 using Dumble.RecommendationService.Application.Contracts;
 using Dumble.RecommendationService.Application.Outbox;
 using Dumble.RecommendationService.Infrastructure.Authentication;
+using Dumble.RecommendationService.Infrastructure.ExternalServices;
 using Dumble.RecommendationService.Infrastructure.Messaging.Consumers;
 using Dumble.RecommendationService.Infrastructure.Outbox;
 using Dumble.RecommendationService.Infrastructure.Persistence;
@@ -11,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using StackExchange.Redis;
 
 namespace Dumble.RecommendationService.Infrastructure;
 
@@ -33,8 +35,25 @@ public static class DependencyInjection
 
         AddRecombee(services, configuration);
         AddMessaging(services, configuration);
+        AddServing(services, configuration);
 
         return services;
+    }
+
+    private static void AddServing(IServiceCollection services, IConfiguration configuration)
+    {
+        // Redis holds the rebuildable read-side projections + the explore cache (design D9).
+        var redisConnection = configuration.GetConnectionString("Redis") ?? "localhost:6379";
+        services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnection));
+        services.AddSingleton<IRecentPostsStore, RedisRecentPostsStore>();
+        services.AddSingleton<IExploreFeedCache, RedisExploreFeedCache>();
+
+        // Hydration: ranked ids -> renderable posts from PostService (forwarding the user JWT).
+        services.AddHttpClient<IPostHydrator, PostServiceClient>(client =>
+        {
+            client.BaseAddress = new Uri(configuration["Services:PostService"] ?? "http://localhost:5134");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
     }
 
     private static void AddMessaging(IServiceCollection services, IConfiguration configuration)

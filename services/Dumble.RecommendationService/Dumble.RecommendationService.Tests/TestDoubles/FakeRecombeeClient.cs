@@ -23,4 +23,16 @@ internal sealed class FakeRecombeeClient : IRecombeeClient
     public Task DeleteItemAsync(string itemId, CancellationToken ct = default) => Task.CompletedTask;
 
     public Task EnsureSchemaAsync(CancellationToken ct = default) => Task.CompletedTask;
+
+    public IReadOnlyList<string> RecommendResult { get; set; } = Array.Empty<string>();
+    public Exception? ThrowOnRecommend { get; set; }
+    public int RecommendCalls { get; private set; }
+
+    public Task<IReadOnlyList<string>> RecommendItemsToUserAsync(string userId, int count, CancellationToken ct = default)
+    {
+        RecommendCalls++;
+        if (ThrowOnRecommend is not null)
+            throw ThrowOnRecommend;
+        return Task.FromResult(RecommendResult);
+    }
 }

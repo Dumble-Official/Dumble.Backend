@@ -28,4 +28,7 @@ public sealed class DisabledRecombeeClient : IRecombeeClient
     public Task DeleteItemAsync(string itemId, CancellationToken ct = default) => Task.CompletedTask;
 
     public Task EnsureSchemaAsync(CancellationToken ct = default) => Task.CompletedTask;
+
+    public Task<IReadOnlyList<string>> RecommendItemsToUserAsync(string userId, int count, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
 }
