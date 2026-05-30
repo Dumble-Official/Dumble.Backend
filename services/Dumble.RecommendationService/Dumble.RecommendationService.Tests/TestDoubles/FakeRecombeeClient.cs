@@ -30,7 +30,18 @@ internal sealed class FakeRecombeeClient : IRecombeeClient
         return Task.CompletedTask;
     }
 
-    public Task DeleteItemAsync(string itemId, CancellationToken ct = default) => Task.CompletedTask;
+    public List<string> DeletedItems { get; } = new();
+
+    public Task DeleteItemAsync(string itemId, CancellationToken ct = default)
+    {
+        DeletedItems.Add(itemId);
+        return Task.CompletedTask;
+    }
+
+    public List<string> ItemIds { get; set; } = new();
+
+    public Task<IReadOnlyList<string>> ListItemIdsAsync(CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<string>>(ItemIds.ToList());
 
     public Task EnsureSchemaAsync(CancellationToken ct = default) => Task.CompletedTask;
 

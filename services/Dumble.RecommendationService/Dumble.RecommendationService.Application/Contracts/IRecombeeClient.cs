@@ -26,6 +26,12 @@ public interface IRecombeeClient
     /// <summary>Hard-delete an item so it can never be recommended again (D11).</summary>
     Task DeleteItemAsync(string itemId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Every item id currently in the catalog — used by the orphan sweep to find items that
+    /// outlived their source post (e.g. a dropped delete event). Paged internally.
+    /// </summary>
+    Task<IReadOnlyList<string>> ListItemIdsAsync(CancellationToken ct = default);
+
     /// <summary>Idempotently ensure the item property schema exists. Safe to call repeatedly.</summary>
     Task EnsureSchemaAsync(CancellationToken ct = default);
 

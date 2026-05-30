@@ -22,4 +22,10 @@ internal sealed class FakePostCatalogSource : IPostCatalogSource
         var nextCursor = index + 1 < _pages.Count ? (index + 1).ToString() : null;
         return Task.FromResult(new PostCatalogPage(items, nextCursor));
     }
+
+    /// <summary>Ids PostService still considers live; only these are echoed back from a batch confirm.</summary>
+    public HashSet<string> LiveIds { get; set; } = new();
+
+    public Task<IReadOnlySet<string>> GetExistingIdsAsync(IReadOnlyList<string> ids, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlySet<string>>(ids.Where(LiveIds.Contains).ToHashSet());
 }

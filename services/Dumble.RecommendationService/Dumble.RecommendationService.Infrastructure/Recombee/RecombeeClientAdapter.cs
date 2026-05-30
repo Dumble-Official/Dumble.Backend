@@ -80,6 +80,29 @@ public sealed class RecombeeClientAdapter : IRecombeeClient
         await _client.SendAsync(new DeleteItem(itemId));
     }
 
+    public async Task<IReadOnlyList<string>> ListItemIdsAsync(CancellationToken ct = default)
+    {
+        // Page through the whole catalog; ids only (no properties), so each page stays light.
+        const int pageSize = 1000;
+        var ids = new List<string>();
+        long offset = 0;
+
+        while (!ct.IsCancellationRequested)
+        {
+            var page = (await _client.SendAsync(new ListItems(count: pageSize, offset: offset))).ToList();
+            if (page.Count == 0)
+                break;
+
+            ids.AddRange(page.Select(i => i.ItemId));
+            if (page.Count < pageSize)
+                break;
+
+            offset += page.Count;
+        }
+
+        return ids;
+    }
+
     public async Task<IReadOnlyList<string>> RecommendItemsToUserAsync(string userId, int count, CancellationToken ct = default)
     {
         var response = await _client.SendAsync(new RecommendItemsToUser(userId, count));
