@@ -1,7 +1,8 @@
 package com.example.DumbleAuthentication.service;
 
+import com.example.DumbleAuthentication.config.RabbitMQConfig;
 import com.example.DumbleAuthentication.domain.User;
-import com.example.DumbleAuthentication.event.AccountEventPublisher;
+import com.example.DumbleAuthentication.event.OutboxWriter;
 import com.example.DumbleAuthentication.repository.UserRepository;
 
 import org.slf4j.Logger;
@@ -11,6 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -18,6 +21,10 @@ import java.util.UUID;
  * what they hold about the user. Hard delete — not the {@code isActive=false} flag, which means
  * "banned" — genuinely removes the PII from Auth. Only refresh tokens reference the user row, and
  * those are revoked first.
+ *
+ * <p>The announcement is written to the transactional outbox in the same transaction as the delete,
+ * so a rolled-back deletion publishes nothing and a committed one cannot lose its event to a broker
+ * outage — {@link OutboxWriter} / {@link com.example.DumbleAuthentication.event.OutboxPublisher}.
  */
 @Service
 public class AccountDeletionService {
@@ -28,16 +35,16 @@ public class AccountDeletionService {
     private final UserRepository userRepository;
     private final JwtService jwtService;
     private final StringRedisTemplate redisTemplate;
-    private final AccountEventPublisher eventPublisher;
+    private final OutboxWriter outboxWriter;
 
     public AccountDeletionService(UserRepository userRepository,
                                   JwtService jwtService,
                                   StringRedisTemplate redisTemplate,
-                                  AccountEventPublisher eventPublisher) {
+                                  OutboxWriter outboxWriter) {
         this.userRepository = userRepository;
         this.jwtService = jwtService;
         this.redisTemplate = redisTemplate;
-        this.eventPublisher = eventPublisher;
+        this.outboxWriter = outboxWriter;
     }
 
     @Transactional
@@ -54,9 +61,13 @@ public class AccountDeletionService {
         // Remove the PII. Refresh tokens are the only rows that FK to the user, handled above.
         userRepository.delete(user);
 
-        // Announce inside the transaction: if the broker is unreachable the publish throws and the
-        // whole delete rolls back, so we never erase the account without telling other services.
-        eventPublisher.publishAccountDeleted(userId, Instant.now());
+        // Announce via the outbox, in this same transaction: if the delete rolls back the event row
+        // rolls back with it, and once committed a background worker delivers it even if the broker
+        // is momentarily down. camelCase keys match the .NET AccountDeletedEvent wire format.
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("userId", userId.toString());
+        payload.put("deletedAt", Instant.now().toString());
+        outboxWriter.write("AccountDeleted", RabbitMQConfig.ACCOUNT_DELETED_ROUTING_KEY, payload);
 
         log.info("Deleted account {} ({})", user.getEmail(), userId);
     }

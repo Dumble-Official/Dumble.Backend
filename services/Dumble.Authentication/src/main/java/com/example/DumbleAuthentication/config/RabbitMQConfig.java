@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Configuration;
 public class RabbitMQConfig {
 
     public static final String DUMBLE_EVENTS_EXCHANGE = "dumble.events";
+    public static final String ACCOUNT_DELETED_ROUTING_KEY = "account.deleted";
 
     @Bean
     public TopicExchange dumbleEventsExchange() {
