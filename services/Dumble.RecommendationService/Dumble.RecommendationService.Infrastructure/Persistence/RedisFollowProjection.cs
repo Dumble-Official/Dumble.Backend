@@ -22,6 +22,9 @@ public sealed class RedisFollowProjection : IFollowProjection
     public Task RemoveFollowAsync(string followerId, string followeeId, CancellationToken ct = default)
         => _db.SetRemoveAsync(KeyFor(followerId), followeeId);
 
+    public Task RemoveUserAsync(string userId, CancellationToken ct = default)
+        => _db.KeyDeleteAsync(KeyFor(userId));
+
     public async Task<IReadOnlyCollection<string>> GetFolloweesAsync(string userId, CancellationToken ct = default)
     {
         var members = await _db.SetMembersAsync(KeyFor(userId));

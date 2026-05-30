@@ -9,4 +9,7 @@ public interface IUserProfileProjection
 {
     Task SetAsync(string userId, string displayName, string? profileImage, CancellationToken ct = default);
     Task<IReadOnlyDictionary<string, UserProfile>> GetManyAsync(IReadOnlyCollection<string> userIds, CancellationToken ct = default);
+
+    /// <summary>Forget a user's cached profile (display name + avatar) — right-to-be-forgotten.</summary>
+    Task RemoveAsync(string userId, CancellationToken ct = default);
 }

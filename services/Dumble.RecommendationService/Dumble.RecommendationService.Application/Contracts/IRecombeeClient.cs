@@ -27,6 +27,12 @@ public interface IRecombeeClient
     Task DeleteItemAsync(string itemId, CancellationToken ct = default);
 
     /// <summary>
+    /// Hard-delete a user and all of their interactions — right-to-be-forgotten (RTBF). After this
+    /// the user contributes nothing to the model and can never be recommended.
+    /// </summary>
+    Task DeleteUserAsync(string userId, CancellationToken ct = default);
+
+    /// <summary>
     /// Every item id currently in the catalog — used by the orphan sweep to find items that
     /// outlived their source post (e.g. a dropped delete event). Paged internally.
     /// </summary>
