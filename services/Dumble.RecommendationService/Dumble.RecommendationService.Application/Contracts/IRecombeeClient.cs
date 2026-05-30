@@ -25,4 +25,7 @@ public interface IRecombeeClient
 
     /// <summary>Personalized post recommendations for a user — returns ranked item ids only.</summary>
     Task<IReadOnlyList<string>> RecommendItemsToUserAsync(string userId, int count, CancellationToken ct = default);
+
+    /// <summary>Recommend users to follow — returns ranked user ids, by interaction similarity.</summary>
+    Task<IReadOnlyList<string>> RecommendUsersToUserAsync(string userId, int count, CancellationToken ct = default);
 }

@@ -35,4 +35,14 @@ internal sealed class FakeRecombeeClient : IRecombeeClient
             throw ThrowOnRecommend;
         return Task.FromResult(RecommendResult);
     }
+
+    public IReadOnlyList<string> RecommendUsersResult { get; set; } = Array.Empty<string>();
+    public Exception? ThrowOnRecommendUsers { get; set; }
+
+    public Task<IReadOnlyList<string>> RecommendUsersToUserAsync(string userId, int count, CancellationToken ct = default)
+    {
+        if (ThrowOnRecommendUsers is not null)
+            throw ThrowOnRecommendUsers;
+        return Task.FromResult(RecommendUsersResult);
+    }
 }
