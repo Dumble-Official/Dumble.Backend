@@ -1,6 +1,9 @@
+using Dumble.RecommendationService.Application.Authentication;
+using Dumble.RecommendationService.Application.Catalog;
 using Dumble.RecommendationService.Application.Contracts;
 using Dumble.RecommendationService.Application.Outbox;
 using Dumble.RecommendationService.Infrastructure.Authentication;
+using Dumble.RecommendationService.Infrastructure.Catalog;
 using Dumble.RecommendationService.Infrastructure.ExternalServices;
 using Dumble.RecommendationService.Infrastructure.Messaging.Consumers;
 using Dumble.RecommendationService.Infrastructure.Outbox;
@@ -97,7 +100,9 @@ public static class DependencyInjection
             PrivateToken = section["PrivateToken"] ?? configuration["RECOMBEE_PRIVATE_TOKEN"] ?? "",
             Region = section["Region"] ?? configuration["RECOMBEE_REGION"] ?? "",
             FlushBatchSize = int.TryParse(section["FlushBatchSize"], out var batch) ? batch : 100,
-            FlushIntervalSeconds = int.TryParse(section["FlushIntervalSeconds"], out var interval) ? interval : 5
+            FlushIntervalSeconds = int.TryParse(section["FlushIntervalSeconds"], out var interval) ? interval : 5,
+            ReconcileEnabled = !bool.TryParse(section["ReconcileEnabled"], out var recEnabled) || recEnabled,
+            ReconcileIntervalHours = int.TryParse(section["ReconcileIntervalHours"], out var recHours) ? recHours : 24
         };
         services.AddSingleton(Options.Create(options));
 
@@ -109,6 +114,7 @@ public static class DependencyInjection
             services.AddSingleton<IRecombeeClient, RecombeeClientAdapter>();
             services.AddHostedService<OutboxFlushWorker>();
             services.AddHostedService<RecombeeSchemaInitializer>();
+            AddCatalogReconcile(services, configuration, options);
         }
         else
         {
@@ -116,5 +122,32 @@ public static class DependencyInjection
             // service still boots locally (matches SocialService's optional-dependency style).
             services.AddSingleton<IRecombeeClient, DisabledRecombeeClient>();
         }
+    }
+
+    private static void AddCatalogReconcile(IServiceCollection services, IConfiguration configuration, RecombeeOptions options)
+    {
+        // The reconcile calls PostService directly (no gateway, no user in flight), so it mints
+        // its own service token signed with the shared JWT secret every service validates against.
+        var serviceAuth = new ServiceAuthOptions
+        {
+            Secret = configuration["Jwt:Secret"] ?? configuration["JWT_SECRET"] ?? "",
+            ServiceUserId = configuration["Reconcile:ServiceUserId"] ?? new ServiceAuthOptions().ServiceUserId,
+            TokenLifetimeMinutes = int.TryParse(configuration["Reconcile:TokenLifetimeMinutes"], out var ttl) ? ttl : 5
+        };
+        services.AddSingleton(serviceAuth);
+        services.AddSingleton<IServiceTokenProvider, ServiceTokenProvider>();
+
+        services.AddHttpClient<IPostCatalogSource, PostCatalogClient>(client =>
+        {
+            client.BaseAddress = new Uri(configuration["Services:PostService"] ?? "http://localhost:5134");
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+
+        services.AddScoped<CatalogReconciler>();
+
+        // Skip the periodic worker if the secret is missing (it could never authenticate) or it
+        // has been turned off; the reconciler stays registered so it can still be triggered/tested.
+        if (options.ReconcileEnabled && serviceAuth.IsConfigured)
+            services.AddHostedService<CatalogReconcileWorker>();
     }
 }
