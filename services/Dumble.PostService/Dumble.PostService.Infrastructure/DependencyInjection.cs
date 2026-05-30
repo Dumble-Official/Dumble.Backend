@@ -54,7 +54,11 @@ public static class DependencyInjection
 
                 cfg.ReceiveEndpoint("post-service.account-deleted", e =>
                 {
-                    e.UseRawJsonSerializer();
+                    // Raw JSON only for DESERIALIZING the inbound Java event. Using the full
+                    // UseRawJsonSerializer would also make the PostDeletedEvent this consumer
+                    // publishes go out as raw JSON (no envelope), which the recommendation
+                    // service's PostDeleted consumer then can't deserialize.
+                    e.UseRawJsonDeserializer();
                     e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
                     e.Bind("dumble.events", b =>
                     {
