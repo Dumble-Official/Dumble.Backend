@@ -1,10 +1,12 @@
 using Dumble.RecommendationService.Application.Contracts;
 using Dumble.RecommendationService.Application.Outbox;
 using Dumble.RecommendationService.Infrastructure.Authentication;
+using Dumble.RecommendationService.Infrastructure.Messaging.Consumers;
 using Dumble.RecommendationService.Infrastructure.Outbox;
 using Dumble.RecommendationService.Infrastructure.Persistence;
 using Dumble.RecommendationService.Infrastructure.Recombee;
 using Dumble.SharedKernel.Contracts;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,8 +32,32 @@ public static class DependencyInjection
         services.AddScoped<ILoggedInUserService, LoggedInUserService>();
 
         AddRecombee(services, configuration);
+        AddMessaging(services, configuration);
 
         return services;
+    }
+
+    private static void AddMessaging(IServiceCollection services, IConfiguration configuration)
+    {
+        // Channel 2: consume existing domain events off the bus. Each consumer gets its own
+        // queue via ConfigureEndpoints, so subscribing takes no messages from other services.
+        services.AddMassTransit(x =>
+        {
+            x.AddConsumer<PostReactedConsumer>();
+            x.AddConsumer<ReactionRemovedConsumer>();
+            x.AddConsumer<CommentCreatedConsumer>();
+
+            x.UsingRabbitMq((context, cfg) =>
+            {
+                cfg.Host(configuration["RabbitMQ:Host"] ?? "localhost", "/", h =>
+                {
+                    h.Username(configuration["RabbitMQ:Username"] ?? "guest");
+                    h.Password(configuration["RabbitMQ:Password"] ?? "guest");
+                });
+
+                cfg.ConfigureEndpoints(context);
+            });
+        });
     }
 
     private static void AddRecombee(IServiceCollection services, IConfiguration configuration)
