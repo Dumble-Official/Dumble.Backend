@@ -4,6 +4,8 @@ using Dumble.RecommendationService.API.Errors;
 using Dumble.RecommendationService.Application;
 using Dumble.RecommendationService.Infrastructure;
 using Dumble.RecommendationService.Infrastructure.Persistence;
+using FastEndpoints;
+using FastEndpoints.Swagger;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -17,6 +19,20 @@ builder.WebHost.ConfigureKestrel(opt => opt.AddServerHeader = false);
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+
+builder.Services.AddFastEndpoints();
+
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.SwaggerDocument(o =>
+    {
+        o.DocumentSettings = s =>
+        {
+            s.Title = "Dumble Recommendation Service API";
+            s.Version = "v1";
+        };
+    });
+}
 
 // User tokens are signed by the auth service with a shared base64 HS256 key.
 // The gateway has already validated + ban-checked the token; we re-validate the
@@ -88,9 +104,12 @@ app.UseAuthorization();
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
 
-// NOTE: FastEndpoints (and its FluentValidation + Swagger wiring) is registered
-// in the PR that introduces the first endpoint — its startup discovery throws
-// when no endpoints exist yet, so it does not belong in the bare skeleton.
+app.UseFastEndpoints(c => c.Errors.UseProblemDetails());
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwaggerGen();
+}
 
 app.Run();
 
