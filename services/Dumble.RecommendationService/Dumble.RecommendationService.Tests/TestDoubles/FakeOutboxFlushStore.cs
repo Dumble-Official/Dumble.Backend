@@ -35,4 +35,8 @@ internal sealed class FakeOutboxFlushStore : IOutboxFlushStore
         ReturnedToPending.AddRange(failed);
         return Task.CompletedTask;
     }
+
+    public OutboxBacklog Backlog { get; set; } = new(0, null);
+
+    public Task<OutboxBacklog> GetBacklogAsync(CancellationToken ct = default) => Task.FromResult(Backlog);
 }
