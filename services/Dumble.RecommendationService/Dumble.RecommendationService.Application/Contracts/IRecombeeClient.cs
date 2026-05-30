@@ -22,4 +22,7 @@ public interface IRecombeeClient
 
     /// <summary>Idempotently ensure the item property schema exists. Safe to call repeatedly.</summary>
     Task EnsureSchemaAsync(CancellationToken ct = default);
+
+    /// <summary>Personalized post recommendations for a user — returns ranked item ids only.</summary>
+    Task<IReadOnlyList<string>> RecommendItemsToUserAsync(string userId, int count, CancellationToken ct = default);
 }
