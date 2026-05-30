@@ -19,6 +19,12 @@ public sealed class RecombeeOptions
     /// <summary>Delay between flush cycles when the queue is not full.</summary>
     public int FlushIntervalSeconds { get; set; } = 5;
 
+    /// <summary>Whether the periodic catalog reconcile worker runs (D17 drift-healing safety net).</summary>
+    public bool ReconcileEnabled { get; set; } = true;
+
+    /// <summary>Hours between catalog reconcile sweeps. Low frequency by design — this is a backstop.</summary>
+    public int ReconcileIntervalHours { get; set; } = 24;
+
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(DatabaseId) && !string.IsNullOrWhiteSpace(PrivateToken);
 }
