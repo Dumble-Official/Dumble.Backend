@@ -26,6 +26,9 @@ public sealed class RedisUserProfileProjection : IUserProfileProjection
             new HashEntry(ImageField, profileImage ?? string.Empty)
         });
 
+    public Task RemoveAsync(string userId, CancellationToken ct = default)
+        => _db.KeyDeleteAsync(KeyFor(userId));
+
     public async Task<IReadOnlyDictionary<string, UserProfile>> GetManyAsync(
         IReadOnlyCollection<string> userIds, CancellationToken ct = default)
     {

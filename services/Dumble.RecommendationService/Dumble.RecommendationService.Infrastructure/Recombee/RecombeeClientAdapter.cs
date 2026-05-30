@@ -80,6 +80,12 @@ public sealed class RecombeeClientAdapter : IRecombeeClient
         await _client.SendAsync(new DeleteItem(itemId));
     }
 
+    public async Task DeleteUserAsync(string userId, CancellationToken ct = default)
+    {
+        // Recombee removes the user along with all of their interactions.
+        await _client.SendAsync(new DeleteUser(userId));
+    }
+
     public async Task<IReadOnlyList<string>> ListItemIdsAsync(CancellationToken ct = default)
     {
         // Page through the whole catalog; ids only (no properties), so each page stays light.

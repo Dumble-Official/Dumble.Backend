@@ -1,3 +1,4 @@
+using Dumble.RecommendationService.Application.Accounts;
 using Dumble.RecommendationService.Application.Authentication;
 using Dumble.RecommendationService.Application.Catalog;
 using Dumble.RecommendationService.Application.Contracts;
@@ -63,6 +64,9 @@ public static class DependencyInjection
 
     private static void AddMessaging(IServiceCollection services, IConfiguration configuration)
     {
+        // Right-to-be-forgotten orchestration, resolved per-message by the consumer.
+        services.AddScoped<AccountForgetter>();
+
         // Channel 2: consume existing domain events off the bus. Each consumer gets its own
         // queue via ConfigureEndpoints, so subscribing takes no messages from other services.
         services.AddMassTransit(x =>
@@ -76,6 +80,11 @@ public static class DependencyInjection
             x.AddConsumer<UserFollowedConsumer>();
             x.AddConsumer<UserUnfollowedConsumer>();
 
+            // Account deletion comes from the Java Auth service as raw JSON on the shared
+            // "dumble.events" topic exchange — not a MassTransit-typed exchange — so it is wired
+            // explicitly below and excluded from the convention-based ConfigureEndpoints.
+            x.AddConsumer<AccountDeletedConsumer>().ExcludeFromConfigureEndpoints();
+
             x.UsingRabbitMq((context, cfg) =>
             {
                 cfg.Host(configuration["RabbitMQ:Host"] ?? "localhost", "/", h =>
@@ -85,6 +94,21 @@ public static class DependencyInjection
                 });
 
                 cfg.ConfigureEndpoints(context);
+
+                // Java -> .NET: raw JSON, bound to the topic exchange by routing key (mirrors how
+                // NotificationService consumes the Subscription service's events).
+                cfg.ReceiveEndpoint("recommendation-service.account-deleted", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b =>
+                    {
+                        b.ExchangeType = "topic";
+                        b.Durable = true;
+                        b.RoutingKey = "account.deleted";
+                    });
+                    e.ConfigureConsumer<AccountDeletedConsumer>(context);
+                });
             });
         });
     }

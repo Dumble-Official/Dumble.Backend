@@ -20,6 +20,14 @@ internal sealed class FakeFollowProjection : IFollowProjection
         return Task.CompletedTask;
     }
 
+    public Task RemoveUserAsync(string userId, CancellationToken ct = default)
+    {
+        _follows.Remove(userId);
+        return Task.CompletedTask;
+    }
+
+    public bool Contains(string userId) => _follows.ContainsKey(userId);
+
     public Task<IReadOnlyCollection<string>> GetFolloweesAsync(string userId, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyCollection<string>>(
             _follows.TryGetValue(userId, out var set) ? set : new HashSet<string>());

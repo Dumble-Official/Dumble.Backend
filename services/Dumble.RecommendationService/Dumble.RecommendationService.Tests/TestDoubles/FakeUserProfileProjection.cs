@@ -15,6 +15,14 @@ internal sealed class FakeUserProfileProjection : IUserProfileProjection
         return Task.CompletedTask;
     }
 
+    public bool Contains(string userId) => _profiles.ContainsKey(userId);
+
+    public Task RemoveAsync(string userId, CancellationToken ct = default)
+    {
+        _profiles.Remove(userId);
+        return Task.CompletedTask;
+    }
+
     public Task<IReadOnlyDictionary<string, UserProfile>> GetManyAsync(
         IReadOnlyCollection<string> userIds, CancellationToken ct = default)
     {
