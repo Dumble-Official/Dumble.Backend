@@ -47,6 +47,8 @@ public static class DependencyInjection
         services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnection));
         services.AddSingleton<IRecentPostsStore, RedisRecentPostsStore>();
         services.AddSingleton<IExploreFeedCache, RedisExploreFeedCache>();
+        services.AddSingleton<IFollowProjection, RedisFollowProjection>();
+        services.AddSingleton<IUserProfileProjection, RedisUserProfileProjection>();
 
         // Hydration: ranked ids -> renderable posts from PostService (forwarding the user JWT).
         services.AddHttpClient<IPostHydrator, PostServiceClient>(client =>
@@ -68,6 +70,8 @@ public static class DependencyInjection
             x.AddConsumer<PostCreatedConsumer>();
             x.AddConsumer<PostUpdatedConsumer>();
             x.AddConsumer<PostDeletedConsumer>();
+            x.AddConsumer<UserFollowedConsumer>();
+            x.AddConsumer<UserUnfollowedConsumer>();
 
             x.UsingRabbitMq((context, cfg) =>
             {
