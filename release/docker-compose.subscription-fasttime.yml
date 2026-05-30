@@ -1,0 +1,15 @@
+# Temporary overlay used by tests/postman/time_jobs_subscription.js — shortens
+# Subscription's idempotency cleanup cron so the time-based job fires on a
+# test-friendly cadence instead of the production default (02:30 UTC daily).
+#
+# Bring up with:
+#   docker compose -f release/docker-compose.yml \
+#                  -f release/docker-compose.override.yml \
+#                  -f release/docker-compose.subscription-fasttime.yml \
+#                  up -d --force-recreate --no-deps subscription
+#
+# Drop the file from the chain to restore prod defaults.
+services:
+  subscription:
+    environment:
+      SUBSCRIPTION_IDEMPOTENCY_CLEANUP_CRON: "*/15 * * * * *"

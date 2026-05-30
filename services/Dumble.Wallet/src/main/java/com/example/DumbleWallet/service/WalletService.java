@@ -221,12 +221,18 @@ public class WalletService {
         if (raw == null || raw.isBlank()) {
             throw new BusinessRuleViolationException("source is required for " + op);
         }
-        // Accept both SNAKE_CASE (e.g. "BAN_REFUND") and PascalCase (e.g.
-        // "BanRefund") since Subscription's WalletServiceClient sends the
-        // latter and the enum prefers the former.
-        String normalised = raw.contains("_")
-                ? raw.toUpperCase()
-                : raw.replaceAll("(?<!^)([A-Z])", "_$1").toUpperCase();
+        // Accept SNAKE_CASE (e.g. "BAN_REFUND"), all-caps single words
+        // (e.g. "CHARGEBACK"), and PascalCase (e.g. "BanRefund") — Subscription's
+        // WalletServiceClient sends PascalCase and the public contract documents
+        // SNAKE_CASE. We must NOT apply the PascalCase split to a string that's
+        // already all-uppercase, otherwise CHARGEBACK becomes C_H_A_R_G_E_B_A_C_K
+        // and fails enum lookup.
+        String normalised;
+        if (raw.contains("_") || raw.equals(raw.toUpperCase())) {
+            normalised = raw.toUpperCase();
+        } else {
+            normalised = raw.replaceAll("(?<!^)([A-Z])", "_$1").toUpperCase();
+        }
         EntrySource source;
         try {
             source = EntrySource.valueOf(normalised);

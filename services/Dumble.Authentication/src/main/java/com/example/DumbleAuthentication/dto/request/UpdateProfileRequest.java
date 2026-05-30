@@ -5,6 +5,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 public class UpdateProfileRequest {
 
@@ -15,8 +16,8 @@ public class UpdateProfileRequest {
     @Size(max = 500)
     private String injuries;
 
-    @Size(max = 500)
-    private String fitnessGoals;
+    @Size(max = 20, message = "At most 20 fitness goals")
+    private List<@Size(max = 50) String> fitnessGoals;
 
     @Size(max = 150)
     private String displayName;
@@ -31,8 +32,8 @@ public class UpdateProfileRequest {
     public void setWeight(BigDecimal weight) { this.weight = weight; }
     public String getInjuries() { return injuries; }
     public void setInjuries(String injuries) { this.injuries = injuries; }
-    public String getFitnessGoals() { return fitnessGoals; }
-    public void setFitnessGoals(String fitnessGoals) { this.fitnessGoals = fitnessGoals; }
+    public List<String> getFitnessGoals() { return fitnessGoals; }
+    public void setFitnessGoals(List<String> fitnessGoals) { this.fitnessGoals = fitnessGoals; }
     public String getDisplayName() { return displayName; }
     public void setDisplayName(String displayName) { this.displayName = displayName; }
     public String getPfp() { return pfp; }

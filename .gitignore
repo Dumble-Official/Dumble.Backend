@@ -83,3 +83,11 @@ commit_msg.txt
 *.err
 *.log
 *.pid
+
+## Python (FitCoach service)
+__pycache__/
+*.pyc
+*.pyo
+# MediaPipe pose model — ~9MB binary, downloaded at Docker build time, not in source
+services/Dumble.FitCoach/model/*
+!services/Dumble.FitCoach/model/.gitkeep

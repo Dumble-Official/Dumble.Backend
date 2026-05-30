@@ -43,6 +43,17 @@ public class IdempotencyKey {
     @Column(name = "http_status", nullable = false)
     private int httpStatus;
 
+    /**
+     * SHA-256 hex of the request body (strict variant of Decision 3.2,
+     * mirroring Payment service). When present, a replay with the same key
+     * but a DIFFERENT body is rejected with 409 instead of silently returning
+     * the cached response. Existing rows from before V3 stay {@code null}
+     * and are treated as "no recorded hash → skip comparison" so the
+     * migration is backward-safe.
+     */
+    @Column(name = "request_hash", length = 64)
+    private String requestHash;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 

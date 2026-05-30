@@ -1,0 +1,3 @@
+# MediaPipe pose model is downloaded at Docker build time (see Dockerfile).
+# This directory must exist in source so the build context has a target for
+# the COPY layer; the pose_full.task binary itself is gitignored.

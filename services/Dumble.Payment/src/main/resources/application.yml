@@ -9,6 +9,21 @@ spring:
     username: ${PAYMENT_DB_USERNAME:postgres}
     password: ${PAYMENT_DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      # Default pool of 10 is undersized: every business operation now needs
+      # two connections (the main @Transactional plus the AuditLogger's
+      # REQUIRES_NEW boundary). The chaos burst + concurrency suites surfaced
+      # 5xx after the audit-tx fix landed. 20 covers 50 RPS with headroom.
+      maximum-pool-size: ${PAYMENT_HIKARI_MAX_POOL_SIZE:20}
+      minimum-idle: ${PAYMENT_HIKARI_MIN_IDLE:5}
+      # Fast-fail at 5 s instead of waiting the 30 s default — under a real
+      # outage, callers should see a clear 5xx immediately so circuit breakers
+      # upstream open quickly. Without this, the chaos test showed Payment
+      # hanging callers for 30 s before erroring.
+      connection-timeout: ${PAYMENT_HIKARI_CONNECTION_TIMEOUT_MS:5000}
+      validation-timeout: 2000
+      # Surface connection leaks during local dev (off in prod via env).
+      leak-detection-threshold: ${PAYMENT_HIKARI_LEAK_THRESHOLD_MS:60000}
 
   jpa:
     hibernate:

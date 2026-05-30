@@ -70,7 +70,10 @@ public class ReconciliationJob {
                 mismatched++;
                 log.error("Wallet {} balance mismatch: ledgerNet={} availableCents={}",
                         wallet.getUserId(), ledgerNet, wallet.getAvailableCents());
-                auditLogger.log(wallet.getUserId(), "ReconciliationMismatch", "SYSTEM",
+                // logIndependent → REQUIRES_NEW, since this job's parent tx is
+                // @Transactional(readOnly = true). A normal log() would queue
+                // the audit write against a read-only flush and silently drop it.
+                auditLogger.logIndependent(wallet.getUserId(), "ReconciliationMismatch", "SYSTEM",
                         "reconciliation-job", "ledger != cached balance",
                         Map.of("ledgerNet", ledgerNet,
                                "availableCents", wallet.getAvailableCents(),
@@ -88,7 +91,7 @@ public class ReconciliationJob {
         for (UUID userId : walletEntryRepository.findAllUserIdsWithEntries()) {
             if (walletRepository.findById(userId).isEmpty()) {
                 log.error("Orphan ledger entries: wallet row missing for user {}", userId);
-                auditLogger.log(userId, "OrphanLedgerEntries", "SYSTEM",
+                auditLogger.logIndependent(userId, "OrphanLedgerEntries", "SYSTEM",
                         "reconciliation-job", "wallet row missing", null);
             }
         }

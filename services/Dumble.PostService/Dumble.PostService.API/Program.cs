@@ -1,7 +1,6 @@
 using System.Net;
 using Dumble.PostService.API.Authentication;
 using Dumble.PostService.API.Errors;
-using Dumble.PostService.API.Health;
 using Dumble.PostService.Application;
 using Dumble.PostService.Infrastructure;
 using Dumble.PostService.Infrastructure.Persistence;
@@ -101,9 +100,13 @@ builder.Services.Configure<ForwardedHeadersOptions>(opt =>
     }
 });
 
+// MassTransit (v8) auto-registers a "masstransit-bus" health check that
+// reflects real broker connectivity, so we don't hand-roll a RabbitMQ check —
+// the previous custom one inspected ProbeResult.Status, which doesn't exist on
+// MassTransit's ProbeResult and never compiled. Just add the DB check; the
+// bus check is contributed by AddMassTransit and shows up on /health/ready.
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<PostDbContext>(name: "database")
-    .AddCheck<RabbitMqHealthCheck>("rabbitmq");
+    .AddDbContextCheck<PostDbContext>(name: "database");
 
 var app = builder.Build();
 

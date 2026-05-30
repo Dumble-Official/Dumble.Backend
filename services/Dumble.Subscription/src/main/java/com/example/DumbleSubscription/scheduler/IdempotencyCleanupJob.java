@@ -23,10 +23,13 @@ public class IdempotencyCleanupJob {
         this.repository = repository;
     }
 
-    @Scheduled(cron = "0 30 2 * * *")        // 02:30 daily
+    // Externalized so the cadence is tunable in prod and the QA suite can
+    // drive the job on a fast cron without rebuilding the image. Default
+    // still 02:30 daily.
+    @Scheduled(cron = "${subscription.idempotency.cleanup-cron:0 30 2 * * *}")
     @Transactional
     public void purge() {
-        long deleted = repository.deleteByExpiresAtBefore(Instant.now());
+        int deleted = repository.deleteByExpiresAtBefore(Instant.now());
         if (deleted > 0) {
             log.info("Purged {} expired idempotency keys", deleted);
         }
