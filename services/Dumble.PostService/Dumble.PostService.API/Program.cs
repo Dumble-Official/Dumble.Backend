@@ -4,6 +4,7 @@ using Dumble.PostService.API.Errors;
 using Dumble.PostService.Application;
 using Dumble.PostService.Infrastructure;
 using Dumble.PostService.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using FastEndpoints;
 using FastEndpoints.Swagger;
 using FluentValidation;
@@ -109,6 +110,15 @@ builder.Services.AddHealthChecks()
     .AddDbContextCheck<PostDbContext>(name: "database");
 
 var app = builder.Build();
+
+// Provision the schema on startup. The service owns its database and ships no separate
+// migration step, so create the model's tables if they aren't there yet. Fails fast if the
+// database is unreachable, which is the intended behaviour behind depends_on.
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<PostDbContext>();
+    db.Database.EnsureCreated();
+}
 
 app.UseForwardedHeaders();
 app.UseExceptionMapping();
