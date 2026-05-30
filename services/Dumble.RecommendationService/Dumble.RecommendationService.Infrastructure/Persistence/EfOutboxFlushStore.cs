@@ -49,4 +49,14 @@ RETURNING *;";
 
         await _db.SaveChangesAsync(ct);
     }
+
+    public async Task<OutboxBacklog> GetBacklogAsync(CancellationToken ct = default)
+    {
+        var pending = _db.OutboxInteractions.Where(x => x.Status == OutboxStatus.Pending);
+        var count = await pending.CountAsync(ct);
+        DateTimeOffset? oldest = count == 0
+            ? null
+            : await pending.MinAsync(x => (DateTimeOffset?)x.CreatedAt, ct);
+        return new OutboxBacklog(count, oldest);
+    }
 }

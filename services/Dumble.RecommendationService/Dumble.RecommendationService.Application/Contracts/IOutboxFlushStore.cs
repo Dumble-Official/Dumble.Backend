@@ -19,4 +19,7 @@ public interface IOutboxFlushStore
 
     /// <summary>Return a failed batch to the queue (Processing -> Pending) and count the attempt.</summary>
     Task ReturnToPendingAsync(IReadOnlyList<OutboxInteraction> failed, CancellationToken ct = default);
+
+    /// <summary>Backlog snapshot (pending count + oldest pending time) for the flush-health canary.</summary>
+    Task<OutboxBacklog> GetBacklogAsync(CancellationToken ct = default);
 }

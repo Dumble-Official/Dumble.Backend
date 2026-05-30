@@ -1,6 +1,7 @@
 using System.Net;
 using Dumble.RecommendationService.API.Authentication;
 using Dumble.RecommendationService.API.Errors;
+using Dumble.RecommendationService.API.Health;
 using Dumble.RecommendationService.Application;
 using Dumble.RecommendationService.Infrastructure;
 using Dumble.RecommendationService.Infrastructure.Persistence;
@@ -82,7 +83,8 @@ builder.Services.Configure<ForwardedHeadersOptions>(opt =>
 // Readiness includes the database; liveness must not (a DB blip should not get the
 // container killed — only restarted out of the load-balancer rotation).
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<RecommendationDbContext>(name: "database", tags: new[] { "ready" });
+    .AddDbContextCheck<RecommendationDbContext>(name: "database", tags: new[] { "ready" })
+    .AddCheck<OutboxBacklogHealthCheck>("outbox", tags: new[] { "ready" });
 
 var app = builder.Build();
 
