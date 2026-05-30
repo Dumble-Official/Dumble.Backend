@@ -188,6 +188,11 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/dumble_project
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # RabbitMQ — auth publishes AccountDeleted (right-to-be-forgotten) via its outbox.
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: guest
+      RABBITMQ_PASSWORD: guest
       # First-boot admin bootstrap. Idempotent — once the admin row exists,
       # later boots no-op. Leave enabled with real creds in dev/staging;
       # flip to false in prod after the first deploy.
@@ -198,6 +203,8 @@ services:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
   gateway:
