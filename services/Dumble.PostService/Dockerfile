@@ -33,4 +33,7 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 ENV ASPNETCORE_URLS=http://+:5134
+# The app targets net8 but the base image ships the net9 runtime; roll forward so it
+# runs on the installed major version (matches the recommendation service).
+ENV DOTNET_ROLL_FORWARD=Major
 ENTRYPOINT ["dotnet", "Dumble.PostService.API.dll"]
