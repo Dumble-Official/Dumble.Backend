@@ -57,11 +57,14 @@ public class OutboxInteractionTests
     }
 
     [Fact]
-    public void RecordFailedAttempt_increments_attempts()
+    public void MarkPendingRetry_requeues_and_counts_the_attempt()
     {
         var i = OutboxInteraction.Create("u1", "p1", OutboxOperation.AddDetailView, T, T);
-        i.RecordFailedAttempt();
-        i.RecordFailedAttempt();
-        Assert.Equal(2, i.Attempts);
+        i.MarkSent();
+
+        i.MarkPendingRetry();
+
+        Assert.Equal(OutboxStatus.Pending, i.Status);
+        Assert.Equal(1, i.Attempts);
     }
 }

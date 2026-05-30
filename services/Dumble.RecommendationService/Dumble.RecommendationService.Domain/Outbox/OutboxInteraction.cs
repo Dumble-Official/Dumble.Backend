@@ -69,6 +69,10 @@ public sealed class OutboxInteraction
     /// <summary>Mark as flushed after Recombee acknowledges the batch.</summary>
     public void MarkSent() => Status = OutboxStatus.Sent;
 
-    /// <summary>Record a failed flush attempt so retries/backoff can be reasoned about.</summary>
-    public void RecordFailedAttempt() => Attempts++;
+    /// <summary>Return a claimed row to the queue after a failed flush, counting the attempt.</summary>
+    public void MarkPendingRetry()
+    {
+        Status = OutboxStatus.Pending;
+        Attempts++;
+    }
 }
