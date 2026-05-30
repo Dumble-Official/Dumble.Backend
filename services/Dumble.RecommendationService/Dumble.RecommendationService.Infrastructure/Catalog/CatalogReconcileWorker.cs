@@ -51,7 +51,7 @@ public sealed class CatalogReconcileWorker : BackgroundService
             {
                 using var scope = _scopeFactory.CreateScope();
                 var reconciler = scope.ServiceProvider.GetRequiredService<CatalogReconciler>();
-                await reconciler.ReconcileAsync(stoppingToken);
+                await reconciler.ReconcileAsync(_options.OrphanSweepEnabled, _options.OrphanSweepDryRun, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

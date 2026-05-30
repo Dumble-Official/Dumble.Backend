@@ -102,7 +102,9 @@ public static class DependencyInjection
             FlushBatchSize = int.TryParse(section["FlushBatchSize"], out var batch) ? batch : 100,
             FlushIntervalSeconds = int.TryParse(section["FlushIntervalSeconds"], out var interval) ? interval : 5,
             ReconcileEnabled = !bool.TryParse(section["ReconcileEnabled"], out var recEnabled) || recEnabled,
-            ReconcileIntervalHours = int.TryParse(section["ReconcileIntervalHours"], out var recHours) ? recHours : 24
+            ReconcileIntervalHours = int.TryParse(section["ReconcileIntervalHours"], out var recHours) ? recHours : 24,
+            OrphanSweepEnabled = bool.TryParse(section["OrphanSweepEnabled"], out var sweep) && sweep,
+            OrphanSweepDryRun = !bool.TryParse(section["OrphanSweepDryRun"], out var dryRun) || dryRun
         };
         services.AddSingleton(Options.Create(options));
 

@@ -49,9 +49,32 @@ public sealed class PostCatalogClient : IPostCatalogSource
         return new PostCatalogPage(items, page.NextCursor);
     }
 
+    public async Task<IReadOnlySet<string>> GetExistingIdsAsync(IReadOnlyList<string> ids, CancellationToken ct = default)
+    {
+        if (ids.Count == 0)
+            return new HashSet<string>();
+
+        // /api/posts/batch returns only live posts (it filters out soft-deleted), so the ids it
+        // echoes back are exactly the ones that still exist.
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/posts/batch")
+        {
+            Content = JsonContent.Create(new { Ids = ids })
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _tokenProvider.CreateToken());
+
+        var response = await _httpClient.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
+
+        var posts = await response.Content.ReadFromJsonAsync<List<BatchPostDto>>(ct) ?? new List<BatchPostDto>();
+        return posts.Select(p => p.Id.ToString()).ToHashSet();
+    }
+
     // Structural match to PostService's CursorPagedResponse<PostCatalogItem> — kept private so the
     // rec service does not take a project reference on PostService's contracts (same as hydration).
     private sealed record CatalogPageDto(List<CatalogItemDto> Items, string? NextCursor, bool HasMore);
+
+    // We only need the id back from the batch response; other fields are ignored on deserialize.
+    private sealed record BatchPostDto(Guid Id);
 
     private sealed record CatalogItemDto(
         Guid Id,

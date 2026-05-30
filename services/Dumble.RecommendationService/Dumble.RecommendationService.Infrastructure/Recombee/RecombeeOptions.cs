@@ -25,6 +25,18 @@ public sealed class RecombeeOptions
     /// <summary>Hours between catalog reconcile sweeps. Low frequency by design — this is a backstop.</summary>
     public int ReconcileIntervalHours { get; set; } = 24;
 
+    /// <summary>
+    /// Whether the reconcile also sweeps orphans (Recombee items whose source post is gone).
+    /// Off by default — deletes are destructive, so this is opt-in.
+    /// </summary>
+    public bool OrphanSweepEnabled { get; set; } = false;
+
+    /// <summary>
+    /// When the orphan sweep runs, only report what it would delete instead of deleting. Defaults
+    /// to true so an operator can watch the logs before enabling real deletes.
+    /// </summary>
+    public bool OrphanSweepDryRun { get; set; } = true;
+
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(DatabaseId) && !string.IsNullOrWhiteSpace(PrivateToken);
 }
