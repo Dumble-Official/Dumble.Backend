@@ -77,14 +77,33 @@ public sealed class RecombeeClientAdapter : IRecombeeClient
 
     public async Task DeleteItemAsync(string itemId, CancellationToken ct = default)
     {
-        await _client.SendAsync(new DeleteItem(itemId));
+        try
+        {
+            await _client.SendAsync(new DeleteItem(itemId));
+        }
+        catch (ResponseException ex) when (IsNotFound(ex))
+        {
+            // Idempotent: an item that was never in Recombee (or already removed) is already gone.
+        }
     }
 
     public async Task DeleteUserAsync(string userId, CancellationToken ct = default)
     {
         // Recombee removes the user along with all of their interactions.
-        await _client.SendAsync(new DeleteUser(userId));
+        try
+        {
+            await _client.SendAsync(new DeleteUser(userId));
+        }
+        catch (ResponseException ex) when (IsNotFound(ex))
+        {
+            // Idempotent: a user who never interacted was never created in Recombee, so there is
+            // nothing to forget. RTBF deletes must not fail on an already-absent user.
+        }
     }
+
+    // Recombee answers a delete of a missing user/item with 404 + a "... does not exist!" message.
+    private static bool IsNotFound(ResponseException ex) =>
+        ex.Message.Contains("does not exist", StringComparison.OrdinalIgnoreCase);
 
     public async Task<IReadOnlyList<string>> ListItemIdsAsync(CancellationToken ct = default)
     {
