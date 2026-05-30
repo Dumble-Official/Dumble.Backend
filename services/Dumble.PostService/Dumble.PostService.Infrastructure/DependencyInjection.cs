@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Dumble.PostService.Application.Contracts;
 using Dumble.PostService.Infrastructure.Authentication;
 using Dumble.PostService.Infrastructure.Blobs;
+using Dumble.PostService.Infrastructure.Messaging.Consumers;
 using Dumble.PostService.Infrastructure.Persistence;
 using Dumble.PostService.Infrastructure.Persistence.Repositories;
 using Dumble.SharedKernel.Contracts;
@@ -37,6 +38,11 @@ public static class DependencyInjection
 
         services.AddMassTransit(x =>
         {
+            // Account deletion arrives from the Java Auth service as raw JSON on the shared
+            // dumble.events topic exchange, so it is wired explicitly and kept out of the
+            // convention-based ConfigureEndpoints.
+            x.AddConsumer<AccountDeletedConsumer>().ExcludeFromConfigureEndpoints();
+
             x.UsingRabbitMq((context, cfg) =>
             {
                 cfg.Host(configuration["RabbitMQ:Host"] ?? "localhost", "/", h =>
@@ -45,6 +51,19 @@ public static class DependencyInjection
                     h.Password(configuration["RabbitMQ:Password"] ?? "guest");
                 });
                 cfg.ConfigureEndpoints(context);
+
+                cfg.ReceiveEndpoint("post-service.account-deleted", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b =>
+                    {
+                        b.ExchangeType = "topic";
+                        b.Durable = true;
+                        b.RoutingKey = "account.deleted";
+                    });
+                    e.ConfigureConsumer<AccountDeletedConsumer>(context);
+                });
             });
         });
 
