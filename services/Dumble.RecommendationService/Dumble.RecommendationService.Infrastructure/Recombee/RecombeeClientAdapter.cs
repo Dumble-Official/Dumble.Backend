@@ -61,6 +61,12 @@ public sealed class RecombeeClientAdapter : IRecombeeClient
         return response.Recomms.Select(r => r.Id).ToList();
     }
 
+    public async Task<IReadOnlyList<string>> RecommendUsersToUserAsync(string userId, int count, CancellationToken ct = default)
+    {
+        var response = await _client.SendAsync(new RecommendUsersToUser(userId, count));
+        return response.Recomms.Select(r => r.Id).ToList();
+    }
+
     public async Task EnsureSchemaAsync(CancellationToken ct = default)
     {
         foreach (var (name, type) in ItemProperties)
