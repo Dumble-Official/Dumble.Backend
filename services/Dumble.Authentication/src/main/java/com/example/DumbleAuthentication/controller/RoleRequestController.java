@@ -52,6 +52,17 @@ public class RoleRequestController {
         return ResponseEntity.ok(roleRequestService.listMine(user.getId()));
     }
 
+    /** Edit a request the admin sent back for changes, then resubmit it (same id). */
+    @PatchMapping("/{id}")
+    public ResponseEntity<RoleRequestResponse> edit(
+            @PathVariable java.util.UUID id, @Valid @RequestBody CreateRoleRequestRequest request) {
+        User user = currentUser();
+        if (user == null) {
+            return ResponseEntity.status(401).build();
+        }
+        return ResponseEntity.ok(roleRequestService.editMine(user.getId(), id, request));
+    }
+
     private User currentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getPrincipal())) {

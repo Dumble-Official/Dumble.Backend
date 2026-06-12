@@ -78,6 +78,33 @@ public class RoleRequestService {
                 .toList();
     }
 
+    /**
+     * Edit and resubmit a request the admin sent back. Only the owner, and only
+     * while it's in CHANGES_REQUESTED, can edit it. It keeps its id and flips
+     * back to PENDING; the prior admin message and reviewer are kept on the row
+     * so the admin can see this is a resubmission (a PENDING request with a
+     * reviewer already set) and recall what they had asked for.
+     */
+    @Transactional
+    public RoleRequestResponse editMine(UUID userId, UUID requestId, CreateRoleRequestRequest req) {
+        RoleRequest request = roleRequestRepository.findById(requestId)
+                .orElseThrow(() -> new UsernameNotFoundException("Role request not found"));
+        if (!request.getUserId().equals(userId)) {
+            throw new IllegalStateException("This role request does not belong to you");
+        }
+        if (request.getStatus() != RoleRequestStatus.CHANGES_REQUESTED) {
+            throw new IllegalArgumentException(
+                    "Only a request that was sent back for changes can be edited (current status: "
+                            + request.getStatus() + ")");
+        }
+
+        request.setRequestedRole(req.getRequestedRole());
+        request.setDocumentUrls(req.getDocumentUrls());
+        request.setApplicantNote(req.getNote());
+        request.setStatus(RoleRequestStatus.PENDING);
+        return RoleRequestResponse.from(roleRequestRepository.save(request));
+    }
+
     // ── Admin side ──────────────────────────────────────────────────────
 
     /** Admin queue — all requests, or only those in {@code status} when given. */
