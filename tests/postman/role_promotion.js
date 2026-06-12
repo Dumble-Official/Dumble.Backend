@@ -58,12 +58,12 @@ async function call(method, path, token, body) {
   check("register → token", r.status === 201 && !!token, `status=${r.status}`);
 
   r = await call("POST", "/api/users/me/role-requests", token,
-    { requestedRole: "TRAINER", documentUrls: ["https://res.cloudinary.com/x/cert1.pdf"], note: "PT certified" });
+    { requestedRole: "TRAINER", certificateUrl: "https://res.cloudinary.com/x/cert1.pdf", note: "PT certified" });
   const reqId = r.body.id;
   check("submit request → 201 PENDING", r.status === 201 && r.body.status === "PENDING", `status=${r.status} body=${JSON.stringify(r.body).slice(0,120)}`);
 
   r = await call("POST", "/api/users/me/role-requests", token,
-    { requestedRole: "GYM_OWNER", documentUrls: ["https://x/2.pdf"] });
+    { requestedRole: "TRAINER", certificateUrl: "https://x/2.pdf" });
   check("second open request → rejected (one at a time)", r.status === 400, `status=${r.status}`);
 
   r = await call("GET", "/api/users/me/role-requests", token);
@@ -91,7 +91,7 @@ async function call(method, path, token, body) {
   // ── participant edits & resubmits (same id) ───────────────────────
   console.log("\n=== participant edits & resubmits (same id) ===");
   r = await call("PATCH", `/api/users/me/role-requests/${reqId}`, token,
-    { requestedRole: "TRAINER", documentUrls: ["https://res.cloudinary.com/x/cert1-clear.pdf"], note: "clearer scan attached" });
+    { requestedRole: "TRAINER", certificateUrl: "https://res.cloudinary.com/x/cert1-clear.pdf", note: "clearer scan attached" });
   check("edit → back to PENDING, same id", r.status === 200 && r.body.status === "PENDING" && r.body.id === reqId, `status=${r.status} id=${r.body.id}`);
   check("edit kept the admin message (resubmission is traceable)", r.body.adminMessage && r.body.adminMessage.includes("clearer"), `adminMessage=${r.body.adminMessage}`);
 

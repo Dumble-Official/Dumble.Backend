@@ -5,7 +5,6 @@ import com.example.DumbleAuthentication.domain.RoleRequest;
 import com.example.DumbleAuthentication.domain.RoleRequestStatus;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 public class RoleRequestResponse {
@@ -14,7 +13,7 @@ public class RoleRequestResponse {
     private UUID userId;
     private RequestableRole requestedRole;
     private RoleRequestStatus status;
-    private List<String> documentUrls;
+    private String certificateUrl;
     private String applicantNote;
     private String adminMessage;
     private Instant createdAt;
@@ -26,7 +25,7 @@ public class RoleRequestResponse {
         dto.userId = r.getUserId();
         dto.requestedRole = r.getRequestedRole();
         dto.status = r.getStatus();
-        dto.documentUrls = r.getDocumentUrls();
+        dto.certificateUrl = r.getCertificateUrl();
         dto.applicantNote = r.getApplicantNote();
         dto.adminMessage = r.getAdminMessage();
         dto.createdAt = r.getCreatedAt();
@@ -42,8 +41,8 @@ public class RoleRequestResponse {
     public void setRequestedRole(RequestableRole requestedRole) { this.requestedRole = requestedRole; }
     public RoleRequestStatus getStatus() { return status; }
     public void setStatus(RoleRequestStatus status) { this.status = status; }
-    public List<String> getDocumentUrls() { return documentUrls; }
-    public void setDocumentUrls(List<String> documentUrls) { this.documentUrls = documentUrls; }
+    public String getCertificateUrl() { return certificateUrl; }
+    public void setCertificateUrl(String certificateUrl) { this.certificateUrl = certificateUrl; }
     public String getApplicantNote() { return applicantNote; }
     public void setApplicantNote(String applicantNote) { this.applicantNote = applicantNote; }
     public String getAdminMessage() { return adminMessage; }

@@ -3,15 +3,16 @@ package com.example.DumbleAuthentication.domain;
 import jakarta.persistence.*;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 /**
- * A participant's application to be promoted to TRAINER or GYM_OWNER. Reviewed
- * by an admin, who verifies the attached documents (certificate / business
- * licence) before approving. On approval the applicant's {@code userType} is
- * flipped atomically (see RoleRequestService) — the design doc mandates a role
- * column flip, not a row migration.
+ * A participant's application to become a TRAINER. Reviewed by an admin, who
+ * verifies the attached certificate before approving. On approval the
+ * applicant's {@code userType} is flipped atomically (see RoleRequestService) —
+ * the design doc mandates a role column flip, not a row migration.
+ *
+ * (Becoming a GYM_OWNER goes through the gym service's gym-registration flow,
+ * not this one — that one carries the business + branch documents.)
  */
 @Entity
 @Table(name = "role_requests")
@@ -34,14 +35,12 @@ public class RoleRequest {
     private RoleRequestStatus status = RoleRequestStatus.PENDING;
 
     /**
-     * Cloudinary URLs of the supporting documents (cert / licence). Stored as a
-     * comma-joined string in one column via StringListConverter — the same
-     * pattern fitness_goals uses; the client uploads to Cloudinary and passes
-     * the URLs, matching how the rest of auth handles images (e.g. pfp).
+     * Cloudinary URL of the applicant's training certificate. The client uploads
+     * to Cloudinary and passes the URL, matching how the rest of auth handles
+     * images (e.g. pfp).
      */
-    @Column(name = "document_urls", length = 2000)
-    @Convert(converter = StringListConverter.class)
-    private List<String> documentUrls;
+    @Column(name = "certificate_url", length = 512)
+    private String certificateUrl;
 
     /** Optional note from the applicant. */
     @Column(name = "applicant_note", length = 1000)
@@ -87,8 +86,8 @@ public class RoleRequest {
     public RoleRequestStatus getStatus() { return status; }
     public void setStatus(RoleRequestStatus status) { this.status = status; }
 
-    public List<String> getDocumentUrls() { return documentUrls; }
-    public void setDocumentUrls(List<String> documentUrls) { this.documentUrls = documentUrls; }
+    public String getCertificateUrl() { return certificateUrl; }
+    public void setCertificateUrl(String certificateUrl) { this.certificateUrl = certificateUrl; }
 
     public String getApplicantNote() { return applicantNote; }
     public void setApplicantNote(String applicantNote) { this.applicantNote = applicantNote; }

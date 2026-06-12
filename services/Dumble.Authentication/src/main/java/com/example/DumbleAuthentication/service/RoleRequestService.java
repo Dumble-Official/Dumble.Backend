@@ -64,7 +64,7 @@ public class RoleRequestService {
         request.setUserId(applicant.getId());
         request.setRequestedRole(req.getRequestedRole());
         request.setStatus(RoleRequestStatus.PENDING);
-        request.setDocumentUrls(req.getDocumentUrls());
+        request.setCertificateUrl(req.getCertificateUrl());
         request.setApplicantNote(req.getNote());
 
         return RoleRequestResponse.from(roleRequestRepository.save(request));
@@ -99,7 +99,7 @@ public class RoleRequestService {
         }
 
         request.setRequestedRole(req.getRequestedRole());
-        request.setDocumentUrls(req.getDocumentUrls());
+        request.setCertificateUrl(req.getCertificateUrl());
         request.setApplicantNote(req.getNote());
         request.setStatus(RoleRequestStatus.PENDING);
         return RoleRequestResponse.from(roleRequestRepository.save(request));
