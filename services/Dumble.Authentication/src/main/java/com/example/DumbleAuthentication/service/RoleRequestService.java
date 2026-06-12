@@ -7,7 +7,11 @@ import com.example.DumbleAuthentication.domain.UserType;
 import com.example.DumbleAuthentication.dto.request.CreateRoleRequestRequest;
 import com.example.DumbleAuthentication.dto.response.RoleRequestResponse;
 import com.example.DumbleAuthentication.repository.RoleRequestRepository;
+import com.example.DumbleAuthentication.repository.UserRepository;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,8 +20,10 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Handles role-promotion applications (TRAINER / GYM_OWNER). Applicant-side
- * operations here; admin review lands in a follow-up slice.
+ * Handles role-promotion applications (TRAINER / GYM_OWNER): applicant submit /
+ * list, and admin review (approve / request-changes / reject). On approval the
+ * applicant's {@code userType} column is flipped atomically — the design doc
+ * mandates a column flip over a row migration.
  */
 @Service
 public class RoleRequestService {
@@ -27,10 +33,15 @@ public class RoleRequestService {
             Set.of(RoleRequestStatus.PENDING, RoleRequestStatus.CHANGES_REQUESTED);
 
     private final RoleRequestRepository roleRequestRepository;
+    private final UserRepository userRepository;
 
-    public RoleRequestService(RoleRequestRepository roleRequestRepository) {
+    public RoleRequestService(RoleRequestRepository roleRequestRepository,
+                              UserRepository userRepository) {
         this.roleRequestRepository = roleRequestRepository;
+        this.userRepository = userRepository;
     }
+
+    // ── Applicant side ──────────────────────────────────────────────────
 
     /**
      * Submit a new promotion request. Only a PARTICIPANT can apply, and only one
@@ -65,5 +76,71 @@ public class RoleRequestService {
         return roleRequestRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
                 .map(RoleRequestResponse::from)
                 .toList();
+    }
+
+    // ── Admin side ──────────────────────────────────────────────────────
+
+    /** Admin queue — all requests, or only those in {@code status} when given. */
+    @Transactional(readOnly = true)
+    public Page<RoleRequestResponse> listForAdmin(RoleRequestStatus status, Pageable pageable) {
+        Page<RoleRequest> page = (status == null)
+                ? roleRequestRepository.findAll(pageable)
+                : roleRequestRepository.findByStatus(status, pageable);
+        return page.map(RoleRequestResponse::from);
+    }
+
+    /**
+     * Approve a pending request: flip the applicant's userType to the requested
+     * role and mark the request APPROVED. The role change and the status change
+     * commit together.
+     */
+    @Transactional
+    public RoleRequestResponse approve(UUID requestId, UUID adminId) {
+        RoleRequest request = pendingOrThrow(requestId);
+
+        User applicant = userRepository.findById(request.getUserId())
+                .orElseThrow(() -> new UsernameNotFoundException("Applicant account no longer exists"));
+        applicant.setUserType(request.getRequestedRole().toUserType());
+        userRepository.save(applicant);
+
+        request.setStatus(RoleRequestStatus.APPROVED);
+        request.setAdminMessage(null);
+        request.setReviewedBy(adminId);
+        return RoleRequestResponse.from(roleRequestRepository.save(request));
+    }
+
+    /** Send a pending request back to the applicant with a message to fix. */
+    @Transactional
+    public RoleRequestResponse requestChanges(UUID requestId, UUID adminId, String message) {
+        RoleRequest request = pendingOrThrow(requestId);
+        request.setStatus(RoleRequestStatus.CHANGES_REQUESTED);
+        request.setAdminMessage(message);
+        request.setReviewedBy(adminId);
+        return RoleRequestResponse.from(roleRequestRepository.save(request));
+    }
+
+    /** Reject a pending request, keeping the row + reason for the record. */
+    @Transactional
+    public RoleRequestResponse reject(UUID requestId, UUID adminId, String message) {
+        RoleRequest request = pendingOrThrow(requestId);
+        request.setStatus(RoleRequestStatus.REJECTED);
+        request.setAdminMessage(message);
+        request.setReviewedBy(adminId);
+        return RoleRequestResponse.from(roleRequestRepository.save(request));
+    }
+
+    /**
+     * Load a request that's reviewable. Admin actions only apply to a PENDING
+     * request — a CHANGES_REQUESTED one is back with the applicant and must be
+     * resubmitted before it can be reviewed again.
+     */
+    private RoleRequest pendingOrThrow(UUID requestId) {
+        RoleRequest request = roleRequestRepository.findById(requestId)
+                .orElseThrow(() -> new UsernameNotFoundException("Role request not found"));
+        if (request.getStatus() != RoleRequestStatus.PENDING) {
+            throw new IllegalArgumentException(
+                    "Request is not pending review (current status: " + request.getStatus() + ")");
+        }
+        return request;
     }
 }
