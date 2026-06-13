@@ -63,6 +63,9 @@ public class SecurityConfig {
                         .hasAnyRole("ADMIN", "MODERATOR")
                         .requestMatchers(HttpMethod.GET, "/api/users/banned")
                         .hasAnyRole("ADMIN", "MODERATOR")
+                        // Role-promotion review — ADMIN only.
+                        .requestMatchers("/api/admin/role-requests/**")
+                        .hasRole("ADMIN")
                         // Authenticated endpoints
                         .requestMatchers("/api/auth/logout", "/api/auth/change-password").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/users/me").authenticated()
