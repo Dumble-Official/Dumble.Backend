@@ -124,6 +124,22 @@ services:
       timeout: 3s
       retries: 10
 
+  schedule-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dumble_schedule
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${SCHEDULE_DB_PASSWORD:?SCHEDULE_DB_PASSWORD must be set in release/.env}
+    expose:
+      - "5432"
+    volumes:
+      - scheduledata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   payment-db:
     image: postgres:16-alpine
     environment:
@@ -445,6 +461,30 @@ services:
       wallet:
         condition: service_started
 
+  # ── Schedule (trainer-to-client coaching delivery) — Spring Boot ─────
+  schedule:
+    build:
+      context: ../services/Dumble.Schedule
+      dockerfile: Dockerfile
+    expose:
+      - "8186"
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
+      SCHEDULE_DB_URL: jdbc:postgresql://schedule-db:5432/dumble_schedule
+      SCHEDULE_DB_USERNAME: postgres
+      SCHEDULE_DB_PASSWORD: ${SCHEDULE_DB_PASSWORD:?SCHEDULE_DB_PASSWORD must be set in release/.env}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      SUBSCRIPTION_SERVICE_URL: http://subscription:8182
+      AUTHENTICATION_URL: http://authentication:8081
+      # Shared secret for /api/internal/** (FitCoach writes the schedule for pro clients)
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?INTERNAL_API_SECRET must be set in release/.env}
+    depends_on:
+      schedule-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
   # ── AI chatbot (Python FastAPI) ─────────────────────────────────────
   # Identity model is Option B: the gateway verifies the user JWT, checks
   # the daily counter and Subscription entitlements, then proxies with
@@ -531,6 +571,7 @@ volumes:
   walletdata:
   paymentdata:
   subscriptiondata:
+  scheduledata:
   postgres_social_data:
   mongodb_data:
   redis_data:
