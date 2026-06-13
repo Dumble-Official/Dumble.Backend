@@ -58,6 +58,8 @@ public class SecurityConfig {
                                 "/api/auth/google")
                         .permitAll()
                         .requestMatchers("/error").permitAll()
+                        // Service-to-service endpoints — gated by a shared secret in the controller, not a JWT.
+                        .requestMatchers("/api/internal/**").permitAll()
                         // Ban management — ADMIN and MODERATOR only
                         .requestMatchers(HttpMethod.POST, "/api/users/*/ban", "/api/users/*/unban")
                         .hasAnyRole("ADMIN", "MODERATOR")

@@ -1,5 +1,6 @@
 package com.dumble.service.gym.service.impl;
 
+import com.dumble.service.gym.client.AuthPromotionClient;
 import com.dumble.service.gym.domain.dto.CreateGymRegistrationRequest;
 import com.dumble.service.gym.domain.dto.GymRegistrationResponse;
 import com.dumble.service.gym.domain.dto.UserResponse;
@@ -39,6 +40,7 @@ public class GymRegistrationServiceImpl implements GymRegistrationService {
     private final GymRegistrationRepository registrationRepository;
     private final GymRepository gymRepository;
     private final GymStaffRepository gymStaffRepository;
+    private final AuthPromotionClient authPromotionClient;
     private final TokenExtractor tokenExtractor;
 
     @Override
@@ -161,6 +163,10 @@ public class GymRegistrationServiceImpl implements GymRegistrationService {
             ownerStaff.setRole(StaffRole.GYM);
             gymStaffRepository.save(ownerStaff);
         }
+
+        // Promote the applicant to GYM_OWNER in auth (auth owns userType). Done
+        // after the gyms are created so an approval always yields a real owner.
+        authPromotionClient.promoteToGymOwner(reg.getApplicantId());
 
         reg.setStatus(RegistrationStatus.APPROVED);
         reg.setAdminMessage(null);

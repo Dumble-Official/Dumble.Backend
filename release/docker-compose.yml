@@ -185,6 +185,8 @@ services:
       DATABASEPASS: ${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD must be set in release/.env}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID must be set in release/.env}
+      # Shared secret for /api/internal/** (gym service promotes approved applicants to GYM_OWNER)
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?INTERNAL_API_SECRET must be set in release/.env}
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/dumble_project
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -359,6 +361,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${GYM_DB_PASSWORD:?GYM_DB_PASSWORD must be set in release/.env}
       SERVICES_AUTH_URL: http://authentication:8081
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
+      # Shared secret to call auth's /api/internal promote endpoint on approval
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?INTERNAL_API_SECRET must be set in release/.env}
       CLOUDINARY_URL: ${CLOUDINARY_URL:-cloudinary://placeholder:placeholder@placeholder}
     depends_on:
       gym-db:
