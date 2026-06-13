@@ -14,16 +14,20 @@ import com.dumble.service.gym.domain.enumuration.StaffRole;
 import com.dumble.service.gym.exception.BadRequestException;
 import com.dumble.service.gym.exception.ResourceNotFoundException;
 import com.dumble.service.gym.exception.UnauthorizedAccessException;
+import com.dumble.service.gym.exception.UpstreamServiceException;
 import com.dumble.service.gym.repository.GymRegistrationRepository;
 import com.dumble.service.gym.repository.GymRepository;
 import com.dumble.service.gym.repository.GymStaffRepository;
 import com.dumble.service.gym.service.GymRegistrationService;
 import com.dumble.service.gym.util.TokenExtractor;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
 import java.util.Set;
@@ -42,6 +46,7 @@ public class GymRegistrationServiceImpl implements GymRegistrationService {
     private final GymStaffRepository gymStaffRepository;
     private final AuthPromotionClient authPromotionClient;
     private final TokenExtractor tokenExtractor;
+    private final PlatformTransactionManager txManager;
 
     @Override
     @Transactional
@@ -70,7 +75,16 @@ public class GymRegistrationServiceImpl implements GymRegistrationService {
         registration.setApplicantNote(request.getNote());
         request.getBranches().forEach(b -> registration.addBranch(toBranch(b)));
 
-        return GymRegistrationResponse.from(registrationRepository.save(registration));
+        // The exists() check above is a fast path but not race-safe; a unique key
+        // on the open-state applicant (see GymRegistrationOpenIndexMigration) is
+        // the real guard. A second concurrent submit trips it — surface that as
+        // the same 400 the pre-check gives, not a 500.
+        try {
+            return GymRegistrationResponse.from(registrationRepository.saveAndFlush(registration));
+        } catch (DataIntegrityViolationException dup) {
+            throw new BadRequestException(
+                    "You already have a gym registration in progress; edit it instead of opening a new one");
+        }
     }
 
     @Override
@@ -128,15 +142,35 @@ public class GymRegistrationServiceImpl implements GymRegistrationService {
 
     /**
      * Approve a pending registration: create one ACTIVE, verified Gym per branch
-     * under the applicant, with the owner staff row (keeping Gym.ownerId and the
-     * GYM staff row in agreement). Promotion of the applicant to GYM_OWNER in the
-     * auth service is wired in a follow-up slice.
+     * under the applicant (with the owner staff row, keeping Gym.ownerId and the
+     * GYM staff row in agreement), then promote the applicant to GYM_OWNER in auth.
+     *
+     * The decision is claimed with a compare-and-set (PENDING → APPROVED), which
+     * serializes concurrent reviews on the row and makes "only one terminal action
+     * wins" hold without spanning a lock across the work. The auth promotion is a
+     * cross-service HTTP call, so it runs AFTER the local commit — the DB
+     * transaction never spans network I/O, and because the approval is already
+     * durable a concurrent reject can never leave a promoted-but-rejected
+     * applicant. Promote is idempotent and retried; if it ultimately fails the
+     * registration is approved and the gyms exist but the applicant is not yet
+     * GYM_OWNER — a clear 502, recoverable by re-running the (idempotent) promote.
      */
     @Override
-    @Transactional
     public GymRegistrationResponse approve(String token, UUID registrationId) {
         UserResponse admin = requireAdmin(token);
-        GymRegistration reg = pendingOrThrow(registrationId);
+
+        // Create gyms + claim the approval atomically, off the network path.
+        TransactionTemplate tx = new TransactionTemplate(txManager);
+        GymRegistrationResponse response = tx.execute(status -> finalizeApproval(admin, registrationId));
+
+        // Promote in auth only after the approval is committed.
+        promoteWithRetry(response.getApplicantId());
+        return response;
+    }
+
+    /** The DB side of an approval: one ACTIVE/verified Gym + owner staff row per branch. */
+    private GymRegistrationResponse finalizeApproval(UserResponse admin, UUID registrationId) {
+        GymRegistration reg = claim(registrationId, RegistrationStatus.APPROVED);
 
         for (RegistrationBranch br : reg.getBranches()) {
             Gym gym = new Gym();
@@ -164,11 +198,6 @@ public class GymRegistrationServiceImpl implements GymRegistrationService {
             gymStaffRepository.save(ownerStaff);
         }
 
-        // Promote the applicant to GYM_OWNER in auth (auth owns userType). Done
-        // after the gyms are created so an approval always yields a real owner.
-        authPromotionClient.promoteToGymOwner(reg.getApplicantId());
-
-        reg.setStatus(RegistrationStatus.APPROVED);
         reg.setAdminMessage(null);
         reg.setReviewedBy(admin.getId());
         return GymRegistrationResponse.from(registrationRepository.save(reg));
@@ -178,8 +207,7 @@ public class GymRegistrationServiceImpl implements GymRegistrationService {
     @Transactional
     public GymRegistrationResponse requestChanges(String token, UUID registrationId, String message) {
         UserResponse admin = requireAdmin(token);
-        GymRegistration reg = pendingOrThrow(registrationId);
-        reg.setStatus(RegistrationStatus.CHANGES_REQUESTED);
+        GymRegistration reg = claim(registrationId, RegistrationStatus.CHANGES_REQUESTED);
         reg.setAdminMessage(message);
         reg.setReviewedBy(admin.getId());
         return GymRegistrationResponse.from(registrationRepository.save(reg));
@@ -189,8 +217,7 @@ public class GymRegistrationServiceImpl implements GymRegistrationService {
     @Transactional
     public GymRegistrationResponse reject(String token, UUID registrationId, String message) {
         UserResponse admin = requireAdmin(token);
-        GymRegistration reg = pendingOrThrow(registrationId);
-        reg.setStatus(RegistrationStatus.REJECTED);
+        GymRegistration reg = claim(registrationId, RegistrationStatus.REJECTED);
         reg.setAdminMessage(message);
         reg.setReviewedBy(admin.getId());
         return GymRegistrationResponse.from(registrationRepository.save(reg));
@@ -204,15 +231,41 @@ public class GymRegistrationServiceImpl implements GymRegistrationService {
         return user;
     }
 
-    /** Admin actions only apply to a PENDING registration. */
-    private GymRegistration pendingOrThrow(UUID registrationId) {
-        GymRegistration reg = registrationRepository.findById(registrationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Registration not found: " + registrationId));
-        if (reg.getStatus() != RegistrationStatus.PENDING) {
+    /**
+     * Atomically move a PENDING registration to {@code to} and return the (now
+     * updated) row. The compare-and-set UPDATE takes the row write-lock, so two
+     * admins reviewing the same registration serialize: the second's update
+     * matches zero rows (status is no longer PENDING) and is rejected, instead of
+     * both proceeding. Admin actions only apply to a PENDING registration.
+     */
+    private GymRegistration claim(UUID registrationId, RegistrationStatus to) {
+        int updated = registrationRepository.compareAndSetStatus(
+                registrationId, RegistrationStatus.PENDING, to);
+        if (updated == 0) {
+            RegistrationStatus current = registrationRepository.findById(registrationId)
+                    .map(GymRegistration::getStatus)
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Registration not found: " + registrationId));
             throw new BadRequestException(
-                    "Registration is not pending review (current status: " + reg.getStatus() + ")");
+                    "Registration is not pending review (current status: " + current + ")");
         }
-        return reg;
+        return registrationRepository.findById(registrationId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Registration not found: " + registrationId));
+    }
+
+    /** Promote the applicant in auth, retrying transient failures a few times. */
+    private void promoteWithRetry(UUID applicantId) {
+        UpstreamServiceException last = null;
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                authPromotionClient.promoteToGymOwner(applicantId);
+                return;
+            } catch (UpstreamServiceException e) {
+                last = e;
+            }
+        }
+        throw last;
     }
 
     private RegistrationBranch toBranch(CreateGymRegistrationRequest.BranchInput in) {
