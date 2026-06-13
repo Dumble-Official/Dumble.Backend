@@ -36,4 +36,13 @@ public class GymRegistrationController {
             @RequestHeader("Authorization") String token) {
         return ResponseEntity.ok(gymRegistrationService.listMine(token));
     }
+
+    /** Edit a registration the admin sent back for changes, then resubmit (same id). */
+    @PatchMapping("/{id}")
+    public ResponseEntity<GymRegistrationResponse> edit(
+            @PathVariable java.util.UUID id,
+            @Valid @RequestBody CreateGymRegistrationRequest request,
+            @RequestHeader("Authorization") String token) {
+        return ResponseEntity.ok(gymRegistrationService.editMine(token, id, request));
+    }
 }
