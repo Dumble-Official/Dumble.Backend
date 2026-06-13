@@ -22,6 +22,12 @@ server:
 jwt:
   secret: ${JWT_SECRET}
 
+# Auth service — used to promote an approved applicant to GYM_OWNER.
+services:
+  auth-url: ${SERVICES_AUTH_URL:http://localhost:8081}
+internal:
+  api-secret: ${INTERNAL_API_SECRET:}
+
 # SpringDoc Swagger
 springdoc:
   api-docs:
