@@ -9,6 +9,7 @@ import com.example.DumbleAuthentication.dto.response.RoleRequestResponse;
 import com.example.DumbleAuthentication.repository.RoleRequestRepository;
 import com.example.DumbleAuthentication.repository.UserRepository;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -67,7 +68,16 @@ public class RoleRequestService {
         request.setCertificateUrl(req.getCertificateUrl());
         request.setApplicantNote(req.getNote());
 
-        return RoleRequestResponse.from(roleRequestRepository.save(request));
+        // The exists() check above is a fast path but not race-safe; a partial
+        // unique index on (user_id) WHERE status is open is the real guard (see
+        // RoleRequestOpenIndexMigration). A second concurrent submit trips it —
+        // surface that as the same 400 the pre-check gives, not a 500.
+        try {
+            return RoleRequestResponse.from(roleRequestRepository.saveAndFlush(request));
+        } catch (DataIntegrityViolationException dup) {
+            throw new IllegalArgumentException(
+                    "You already have a role request in progress; edit it instead of opening a new one");
+        }
     }
 
     /** A user's own requests, newest first. */
@@ -162,7 +172,7 @@ public class RoleRequestService {
      * resubmitted before it can be reviewed again.
      */
     private RoleRequest pendingOrThrow(UUID requestId) {
-        RoleRequest request = roleRequestRepository.findById(requestId)
+        RoleRequest request = roleRequestRepository.findByIdForUpdate(requestId)
                 .orElseThrow(() -> new UsernameNotFoundException("Role request not found"));
         if (request.getStatus() != RoleRequestStatus.PENDING) {
             throw new IllegalArgumentException(
