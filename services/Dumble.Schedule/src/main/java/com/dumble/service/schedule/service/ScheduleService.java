@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.*;
 import java.util.function.Predicate;
@@ -189,12 +190,16 @@ public class ScheduleService {
 
     private ItemResponse applyEdit(ScheduleItem item, EditItemRequest req) {
         item.setContent(req.content());
-        item.setYoutubeVideoId(YouTubeLinks.toVideoId(req.youtubeLink()));
+        if (req.youtubeLink() != null && !req.youtubeLink().isBlank()) {
+            item.setYoutubeVideoId(YouTubeLinks.toVideoId(req.youtubeLink()));
+        } else if (req.clearYoutube()) {
+            item.setYoutubeVideoId(null);
+        } // else: content-only edit — leave the existing video untouched
         return ItemResponse.from(itemRepository.save(item));
     }
 
     private CompletionView applyCompletion(UUID userId, UUID itemId, LocalDate date, boolean done) {
-        LocalDate on = (date != null) ? date : LocalDate.now(ZoneOffset.UTC);
+        LocalDate on = (date != null) ? date : LocalDate.now(zoneOf(timezoneOf(userId)));
         if (done) {
             if (!completionRepository.existsByItemIdAndCompletedOn(itemId, on)) {
                 ItemCompletion c = new ItemCompletion();
@@ -222,6 +227,20 @@ public class ScheduleService {
         target.setCarbsG(req.carbsG());
         target.setFatG(req.fatG());
         return MealTargetView.from(targetRepository.save(target));
+    }
+
+    /** "Today" is resolved in the client's schedule timezone (UTC if unset), matching the reminder sweep. */
+    private String timezoneOf(UUID userId) {
+        return scheduleRepository.findByUserId(userId).map(Schedule::getTimezone).orElse(null);
+    }
+
+    private ZoneId zoneOf(String tz) {
+        if (tz == null || tz.isBlank()) return ZoneOffset.UTC;
+        try {
+            return ZoneId.of(tz);
+        } catch (Exception e) {
+            return ZoneOffset.UTC;
+        }
     }
 
     private Schedule getOrCreate(UUID userId) {
@@ -285,7 +304,7 @@ public class ScheduleService {
     }
 
     private ScheduleResponse assemble(Schedule schedule, List<ScheduleItem> items, LocalDate date) {
-        LocalDate on = (date != null) ? date : LocalDate.now(ZoneOffset.UTC);
+        LocalDate on = (date != null) ? date : LocalDate.now(zoneOf(schedule.getTimezone()));
         Set<UUID> doneIds = items.isEmpty() ? Set.of()
                 : completionRepository.findByItemIdInAndCompletedOn(
                         items.stream().map(ScheduleItem::getId).toList(), on).stream()

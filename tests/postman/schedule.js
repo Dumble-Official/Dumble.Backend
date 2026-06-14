@@ -109,8 +109,10 @@ const dayOf = (resp, table, wd) => (resp[table] || []).find(d => d.weekday === w
 
   // ── edit ──────────────────────────────────────────────────────────
   console.log("\n=== client edits an item ===");
-  r = await call("PATCH", `/schedule/me/items/${exId}`, A, { content: "Bench 5x5", youtubeLink: null });
-  ck("edit → content updated, video cleared", r.status === 200 && r.body.content === "Bench 5x5" && r.body.youtubeVideoId === null, `status=${r.status} body=${JSON.stringify(r.body).slice(0,120)}`);
+  r = await call("PATCH", `/schedule/me/items/${exId}`, A, { content: "Bench 5x5" });
+  ck("edit content only → content updated, video preserved", r.status === 200 && r.body.content === "Bench 5x5" && r.body.youtubeVideoId === "dQw4w9WgXcQ", `status=${r.status} body=${JSON.stringify(r.body).slice(0,140)}`);
+  r = await call("PATCH", `/schedule/me/items/${exId}`, A, { content: "Bench 5x5", clearYoutube: true });
+  ck("edit with clearYoutube → video removed", r.status === 200 && r.body.youtubeVideoId === null, `status=${r.status} body=${JSON.stringify(r.body).slice(0,140)}`);
 
   // ── validation: only YouTube links ────────────────────────────────
   console.log("\n=== only-YouTube link rule ===");
