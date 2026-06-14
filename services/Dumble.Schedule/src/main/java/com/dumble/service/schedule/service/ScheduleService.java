@@ -124,6 +124,28 @@ public class ScheduleService {
         return upsertTarget(getOrCreate(clientId).getId(), weekday, req);
     }
 
+    // ── Chatbot side (internal; pro-gating enforced upstream in FitCoach) ──
+
+    /**
+     * The chatbot writes generated items for a pro client. Stamped CHATBOT, not
+     * contact-filtered (platform-generated). replace=true clears the chatbot's
+     * own prior items first; trainer and client items are never touched.
+     */
+    @Transactional
+    public List<ItemResponse> applyChatbotItems(UUID clientId, boolean replace, List<AddItemRequest> items) {
+        Schedule schedule = getOrCreate(clientId);
+        if (replace) {
+            itemRepository.deleteByScheduleAndAuthor(schedule.getId(), AuthorType.CHATBOT);
+        }
+        List<ItemResponse> created = new ArrayList<>();
+        for (AddItemRequest req : items) {
+            created.add(ItemResponse.from(itemRepository.save(
+                    newItem(schedule.getId(), req.tableType(), req.weekday(), req.content(),
+                            req.youtubeLink(), AuthorType.CHATBOT, null))));
+        }
+        return created;
+    }
+
     // ── Internal: trainer↔client link read-model ───────────────────────────
 
     @Transactional
