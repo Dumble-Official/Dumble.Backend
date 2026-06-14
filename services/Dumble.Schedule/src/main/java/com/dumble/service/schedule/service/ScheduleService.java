@@ -24,17 +24,20 @@ public class ScheduleService {
     private final MealDayTargetRepository targetRepository;
     private final ItemCompletionRepository completionRepository;
     private final TrainerClientLinkRepository linkRepository;
+    private final ContactLeakFilter contactLeakFilter;
 
     public ScheduleService(ScheduleRepository scheduleRepository,
                            ScheduleItemRepository itemRepository,
                            MealDayTargetRepository targetRepository,
                            ItemCompletionRepository completionRepository,
-                           TrainerClientLinkRepository linkRepository) {
+                           TrainerClientLinkRepository linkRepository,
+                           ContactLeakFilter contactLeakFilter) {
         this.scheduleRepository = scheduleRepository;
         this.itemRepository = itemRepository;
         this.targetRepository = targetRepository;
         this.completionRepository = completionRepository;
         this.linkRepository = linkRepository;
+        this.contactLeakFilter = contactLeakFilter;
     }
 
     // ── Client (owner) side ───────────────────────────────────────────────
@@ -95,6 +98,7 @@ public class ScheduleService {
     @Transactional
     public ItemResponse addItemForClient(UUID trainerId, UUID clientId, AddItemRequest req) {
         requireActiveLink(trainerId, clientId);
+        contactLeakFilter.check(req.content());
         Schedule schedule = getOrCreate(clientId);
         return ItemResponse.from(itemRepository.save(
                 newItem(schedule.getId(), req.tableType(), req.weekday(), req.content(),
@@ -104,7 +108,9 @@ public class ScheduleService {
     /** A trainer may only edit items they authored on that client (not the client's, not another coach's). */
     @Transactional
     public ItemResponse editItemForClient(UUID trainerId, UUID clientId, UUID itemId, EditItemRequest req) {
-        return applyEdit(coachOwnedItemOrThrow(trainerId, clientId, itemId), req);
+        ScheduleItem item = coachOwnedItemOrThrow(trainerId, clientId, itemId);
+        contactLeakFilter.check(req.content());
+        return applyEdit(item, req);
     }
 
     @Transactional
