@@ -60,7 +60,3 @@ management:
     health:
       probes:
         enabled: true
-  health:
-    # RabbitMQ isn't used until Slice 6 (reminders); don't let it drag health down yet.
-    rabbit:
-      enabled: false
