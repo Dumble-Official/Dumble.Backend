@@ -1,0 +1,70 @@
+spring:
+  application:
+    name: schedule-service
+
+  datasource:
+    url: ${SCHEDULE_DB_URL:jdbc:postgresql://localhost:5432/dumble_schedule}
+    username: ${SCHEDULE_DB_USERNAME:postgres}
+    password: ${SCHEDULE_DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate        # schema only via Flyway
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+
+server:
+  port: 8186
+  servlet:
+    context-path: /api
+
+# Same JWT_SECRET the gateway/auth/gym use; validated locally.
+jwt:
+  secret: ${JWT_SECRET}
+
+# Sibling services (dev defaults point at host-mapped/compose names).
+services:
+  subscription:
+    base-url: ${SUBSCRIPTION_SERVICE_URL:http://localhost:8182}
+  authentication:
+    base-url: ${AUTHENTICATION_URL:http://localhost:8081}
+
+# Shared secret for /api/internal/** service-to-service calls (FitCoach, etc.).
+internal:
+  api-secret: ${INTERNAL_API_SECRET:}
+
+# End-of-day reminder sweep: emit a reminder once per local day for a client who
+# still has unmarked items, when their local time has reached from-hour.
+schedule:
+  reminder:
+    enabled: ${SCHEDULE_REMINDER_ENABLED:true}
+    from-hour: ${SCHEDULE_REMINDER_FROM_HOUR:20}
+    sweep-ms: ${SCHEDULE_REMINDER_SWEEP_MS:900000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
