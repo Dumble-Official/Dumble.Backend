@@ -3,11 +3,9 @@ package com.dumble.service.schedule.service;
 import com.dumble.service.schedule.domain.*;
 import com.dumble.service.schedule.dto.*;
 import com.dumble.service.schedule.exception.BadRequestException;
+import com.dumble.service.schedule.exception.ForbiddenException;
 import com.dumble.service.schedule.exception.NotFoundException;
-import com.dumble.service.schedule.repository.ItemCompletionRepository;
-import com.dumble.service.schedule.repository.MealDayTargetRepository;
-import com.dumble.service.schedule.repository.ScheduleItemRepository;
-import com.dumble.service.schedule.repository.ScheduleRepository;
+import com.dumble.service.schedule.repository.*;
 import com.dumble.service.schedule.util.YouTubeLinks;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,84 +23,149 @@ public class ScheduleService {
     private final ScheduleItemRepository itemRepository;
     private final MealDayTargetRepository targetRepository;
     private final ItemCompletionRepository completionRepository;
+    private final TrainerClientLinkRepository linkRepository;
 
     public ScheduleService(ScheduleRepository scheduleRepository,
                            ScheduleItemRepository itemRepository,
                            MealDayTargetRepository targetRepository,
-                           ItemCompletionRepository completionRepository) {
+                           ItemCompletionRepository completionRepository,
+                           TrainerClientLinkRepository linkRepository) {
         this.scheduleRepository = scheduleRepository;
         this.itemRepository = itemRepository;
         this.targetRepository = targetRepository;
         this.completionRepository = completionRepository;
+        this.linkRepository = linkRepository;
     }
 
-    /**
-     * The caller's full schedule. {@code author} optionally filters items
-     * (all | me | chatbot | a coach uuid); {@code done} flags are computed for
-     * {@code date} (defaults to today, UTC for now).
-     */
+    // ── Client (owner) side ───────────────────────────────────────────────
+
     @Transactional
     public ScheduleResponse getMySchedule(UUID userId, String author, LocalDate date) {
         Schedule schedule = getOrCreate(userId);
-        LocalDate on = (date != null) ? date : LocalDate.now(ZoneOffset.UTC);
-        Predicate<ScheduleItem> authorFilter = authorFilter(author, userId);
-
-        List<ScheduleItem> items =
-                itemRepository.findByScheduleIdOrderByTableTypeAscWeekdayAscPositionAsc(schedule.getId()).stream()
-                        .filter(authorFilter)
-                        .toList();
-
-        Set<UUID> doneIds = items.isEmpty() ? Set.of()
-                : completionRepository.findByItemIdInAndCompletedOn(
-                        items.stream().map(ScheduleItem::getId).toList(), on).stream()
-                .map(ItemCompletion::getItemId).collect(Collectors.toSet());
-
-        Map<Weekday, MealDayTarget> targets = targetRepository.findByScheduleId(schedule.getId()).stream()
-                .collect(Collectors.toMap(MealDayTarget::getWeekday, t -> t));
-
-        List<DayView> exercises = buildDays(items, TableType.EXERCISE, null, doneIds);
-        List<DayView> meals = buildDays(items, TableType.MEAL, targets, doneIds);
-
-        return new ScheduleResponse(schedule.getId(), schedule.getTimezone(), exercises, meals);
+        List<ScheduleItem> items = items(schedule.getId()).stream()
+                .filter(authorFilter(author, userId))
+                .toList();
+        return assemble(schedule, items, date);
     }
 
     @Transactional
     public ItemResponse addItem(UUID userId, AddItemRequest req) {
         Schedule schedule = getOrCreate(userId);
-        String videoId = YouTubeLinks.toVideoId(req.youtubeLink());
-
-        ScheduleItem item = new ScheduleItem();
-        item.setScheduleId(schedule.getId());
-        item.setTableType(req.tableType());
-        item.setWeekday(req.weekday());
-        item.setPosition(itemRepository.countByScheduleIdAndTableTypeAndWeekday(
-                schedule.getId(), req.tableType(), req.weekday()));
-        item.setContent(req.content());
-        item.setYoutubeVideoId(videoId);
-        item.setAuthorType(AuthorType.CLIENT);
-        item.setAuthorId(userId);
-        return ItemResponse.from(itemRepository.save(item));
+        return ItemResponse.from(itemRepository.save(
+                newItem(schedule.getId(), req.tableType(), req.weekday(), req.content(),
+                        req.youtubeLink(), AuthorType.CLIENT, userId)));
     }
 
     /** Clients edit their own schedule freely (any item on it, regardless of author). */
     @Transactional
     public ItemResponse editItem(UUID userId, UUID itemId, EditItemRequest req) {
         ScheduleItem item = ownedItemOrThrow(userId, itemId);
+        return applyEdit(item, req);
+    }
+
+    @Transactional
+    public void deleteItem(UUID userId, UUID itemId) {
+        itemRepository.delete(ownedItemOrThrow(userId, itemId));
+    }
+
+    @Transactional
+    public CompletionView setCompletion(UUID userId, UUID itemId, LocalDate date, boolean done) {
+        ownedItemOrThrow(userId, itemId);
+        return applyCompletion(userId, itemId, date, done);
+    }
+
+    @Transactional
+    public MealTargetView setMealTarget(UUID userId, Weekday weekday, MealTargetRequest req) {
+        return upsertTarget(getOrCreate(userId).getId(), weekday, req);
+    }
+
+    // ── Trainer side (gated by an active link) ─────────────────────────────
+
+    /** A trainer reads a client's schedule: only their own items + the client's own items. */
+    @Transactional
+    public ScheduleResponse getClientSchedule(UUID trainerId, UUID clientId, LocalDate date) {
+        requireActiveLink(trainerId, clientId);
+        Schedule schedule = getOrCreate(clientId);
+        List<ScheduleItem> items = items(schedule.getId()).stream()
+                .filter(coachVisible(trainerId))
+                .toList();
+        return assemble(schedule, items, date);
+    }
+
+    @Transactional
+    public ItemResponse addItemForClient(UUID trainerId, UUID clientId, AddItemRequest req) {
+        requireActiveLink(trainerId, clientId);
+        Schedule schedule = getOrCreate(clientId);
+        return ItemResponse.from(itemRepository.save(
+                newItem(schedule.getId(), req.tableType(), req.weekday(), req.content(),
+                        req.youtubeLink(), AuthorType.TRAINER, trainerId)));
+    }
+
+    /** A trainer may only edit items they authored on that client (not the client's, not another coach's). */
+    @Transactional
+    public ItemResponse editItemForClient(UUID trainerId, UUID clientId, UUID itemId, EditItemRequest req) {
+        return applyEdit(coachOwnedItemOrThrow(trainerId, clientId, itemId), req);
+    }
+
+    @Transactional
+    public void deleteItemForClient(UUID trainerId, UUID clientId, UUID itemId) {
+        itemRepository.delete(coachOwnedItemOrThrow(trainerId, clientId, itemId));
+    }
+
+    @Transactional
+    public MealTargetView setMealTargetForClient(UUID trainerId, UUID clientId, Weekday weekday, MealTargetRequest req) {
+        requireActiveLink(trainerId, clientId);
+        return upsertTarget(getOrCreate(clientId).getId(), weekday, req);
+    }
+
+    // ── Internal: trainer↔client link read-model ───────────────────────────
+
+    @Transactional
+    public void upsertTrainerLink(UUID trainerId, UUID clientId, boolean active) {
+        TrainerClientLink link = linkRepository.findByTrainerIdAndClientId(trainerId, clientId)
+                .orElseGet(() -> {
+                    TrainerClientLink l = new TrainerClientLink();
+                    l.setTrainerId(trainerId);
+                    l.setClientId(clientId);
+                    return l;
+                });
+        link.setActive(active);
+        linkRepository.save(link);
+    }
+
+    // ── helpers ────────────────────────────────────────────────────────────
+
+    private void requireActiveLink(UUID trainerId, UUID clientId) {
+        if (!linkRepository.existsByTrainerIdAndClientIdAndActiveTrue(trainerId, clientId)) {
+            throw new ForbiddenException("No active subscription with this client");
+        }
+    }
+
+    private List<ScheduleItem> items(UUID scheduleId) {
+        return itemRepository.findByScheduleIdOrderByTableTypeAscWeekdayAscPositionAsc(scheduleId);
+    }
+
+    private ScheduleItem newItem(UUID scheduleId, TableType type, Weekday day, String content,
+                                 String youtubeLink, AuthorType authorType, UUID authorId) {
+        ScheduleItem item = new ScheduleItem();
+        item.setScheduleId(scheduleId);
+        item.setTableType(type);
+        item.setWeekday(day);
+        item.setPosition(itemRepository.countByScheduleIdAndTableTypeAndWeekday(scheduleId, type, day));
+        item.setContent(content);
+        item.setYoutubeVideoId(YouTubeLinks.toVideoId(youtubeLink));
+        item.setAuthorType(authorType);
+        item.setAuthorId(authorId);
+        return item;
+    }
+
+    private ItemResponse applyEdit(ScheduleItem item, EditItemRequest req) {
         item.setContent(req.content());
         item.setYoutubeVideoId(YouTubeLinks.toVideoId(req.youtubeLink()));
         return ItemResponse.from(itemRepository.save(item));
     }
 
-    @Transactional
-    public void deleteItem(UUID userId, UUID itemId) {
-        ScheduleItem item = ownedItemOrThrow(userId, itemId);
-        itemRepository.delete(item);
-    }
-
-    /** Mark an item done / not done for a date (defaults to today). */
-    @Transactional
-    public CompletionView setCompletion(UUID userId, UUID itemId, LocalDate date, boolean done) {
-        ownedItemOrThrow(userId, itemId);
+    private CompletionView applyCompletion(UUID userId, UUID itemId, LocalDate date, boolean done) {
         LocalDate on = (date != null) ? date : LocalDate.now(ZoneOffset.UTC);
         if (done) {
             if (!completionRepository.existsByItemIdAndCompletedOn(itemId, on)) {
@@ -118,13 +181,11 @@ public class ScheduleService {
         return new CompletionView(itemId, on, done);
     }
 
-    @Transactional
-    public MealTargetView setMealTarget(UUID userId, Weekday weekday, MealTargetRequest req) {
-        Schedule schedule = getOrCreate(userId);
-        MealDayTarget target = targetRepository.findByScheduleIdAndWeekday(schedule.getId(), weekday)
+    private MealTargetView upsertTarget(UUID scheduleId, Weekday weekday, MealTargetRequest req) {
+        MealDayTarget target = targetRepository.findByScheduleIdAndWeekday(scheduleId, weekday)
                 .orElseGet(() -> {
                     MealDayTarget t = new MealDayTarget();
-                    t.setScheduleId(schedule.getId());
+                    t.setScheduleId(scheduleId);
                     t.setWeekday(weekday);
                     return t;
                 });
@@ -135,8 +196,6 @@ public class ScheduleService {
         return MealTargetView.from(targetRepository.save(target));
     }
 
-    // ── helpers ──────────────────────────────────────────────────────────
-
     private Schedule getOrCreate(UUID userId) {
         return scheduleRepository.findByUserId(userId).orElseGet(() -> {
             Schedule s = new Schedule();
@@ -145,18 +204,33 @@ public class ScheduleService {
         });
     }
 
+    /** An item on the caller's OWN schedule (any author). */
     private ScheduleItem ownedItemOrThrow(UUID userId, UUID itemId) {
         Schedule schedule = scheduleRepository.findByUserId(userId)
                 .orElseThrow(() -> new NotFoundException("Item not found: " + itemId));
-        ScheduleItem item = itemRepository.findById(itemId)
-                .orElseThrow(() -> new NotFoundException("Item not found: " + itemId));
-        if (!item.getScheduleId().equals(schedule.getId())) {
+        return itemOnScheduleOrThrow(itemId, schedule.getId());
+    }
+
+    /** A TRAINER item the trainer authored on the given client's schedule (active link required). */
+    private ScheduleItem coachOwnedItemOrThrow(UUID trainerId, UUID clientId, UUID itemId) {
+        requireActiveLink(trainerId, clientId);
+        Schedule schedule = getOrCreate(clientId);
+        ScheduleItem item = itemOnScheduleOrThrow(itemId, schedule.getId());
+        if (item.getAuthorType() != AuthorType.TRAINER || !trainerId.equals(item.getAuthorId())) {
             throw new NotFoundException("Item not found: " + itemId);
         }
         return item;
     }
 
-    /** all|null → everything; me → caller's CLIENT items; chatbot → CHATBOT; uuid → that coach's TRAINER items. */
+    private ScheduleItem itemOnScheduleOrThrow(UUID itemId, UUID scheduleId) {
+        ScheduleItem item = itemRepository.findById(itemId)
+                .orElseThrow(() -> new NotFoundException("Item not found: " + itemId));
+        if (!item.getScheduleId().equals(scheduleId)) {
+            throw new NotFoundException("Item not found: " + itemId);
+        }
+        return item;
+    }
+
     private Predicate<ScheduleItem> authorFilter(String author, UUID userId) {
         if (author == null || author.isBlank() || author.equalsIgnoreCase("all")) {
             return i -> true;
@@ -176,17 +250,36 @@ public class ScheduleService {
         return i -> i.getAuthorType() == AuthorType.TRAINER && coachId.equals(i.getAuthorId());
     }
 
+    /** A coach sees only their own items + the client's own items — never another coach's or the chatbot's. */
+    private Predicate<ScheduleItem> coachVisible(UUID trainerId) {
+        return i -> i.getAuthorType() == AuthorType.CLIENT
+                || (i.getAuthorType() == AuthorType.TRAINER && trainerId.equals(i.getAuthorId()));
+    }
+
+    private ScheduleResponse assemble(Schedule schedule, List<ScheduleItem> items, LocalDate date) {
+        LocalDate on = (date != null) ? date : LocalDate.now(ZoneOffset.UTC);
+        Set<UUID> doneIds = items.isEmpty() ? Set.of()
+                : completionRepository.findByItemIdInAndCompletedOn(
+                        items.stream().map(ScheduleItem::getId).toList(), on).stream()
+                .map(ItemCompletion::getItemId).collect(Collectors.toSet());
+        Map<Weekday, MealDayTarget> targets = targetRepository.findByScheduleId(schedule.getId()).stream()
+                .collect(Collectors.toMap(MealDayTarget::getWeekday, t -> t));
+        List<DayView> exercises = buildDays(items, TableType.EXERCISE, null, doneIds);
+        List<DayView> meals = buildDays(items, TableType.MEAL, targets, doneIds);
+        return new ScheduleResponse(schedule.getId(), schedule.getTimezone(), exercises, meals);
+    }
+
     private List<DayView> buildDays(List<ScheduleItem> all, TableType type,
                                     Map<Weekday, MealDayTarget> targets, Set<UUID> doneIds) {
         return Arrays.stream(Weekday.values())
                 .map(day -> {
-                    List<ItemView> items = all.stream()
+                    List<ItemView> views = all.stream()
                             .filter(i -> i.getTableType() == type && i.getWeekday() == day)
                             .sorted(Comparator.comparingInt(ScheduleItem::getPosition))
                             .map(i -> ItemView.from(i, doneIds.contains(i.getId())))
                             .toList();
                     MealTargetView target = (targets == null) ? null : MealTargetView.from(targets.get(day));
-                    return new DayView(day, items, target);
+                    return new DayView(day, views, target);
                 })
                 .toList();
     }
