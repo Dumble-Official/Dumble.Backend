@@ -74,6 +74,38 @@ const dayOf = (resp, table, wd) => (resp[table] || []).find(d => d.weekday === w
       `ex=${monEx.items.length} meal=${monMeal.items.length}`);
   ck("MON meal target persisted (calories 2000)", monMeal.target && monMeal.target.calories === 2000, `target=${JSON.stringify(monMeal.target)}`);
 
+  // ── completion (per-date) ─────────────────────────────────────────
+  console.log("\n=== completion (mark done, per-date) ===");
+  const today = new Date().toISOString().slice(0, 10);
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const findItem = (resp, table, wd, id) => dayOf(resp, table, wd).items.find(i => i.id === id);
+
+  r = await call("PUT", `/schedule/me/items/${exId}/completion`, A, { done: true });
+  ck("mark done (today) → 200 done=true", r.status === 200 && r.body.done === true, `status=${r.status}`);
+  r = await call("GET", "/schedule/me", A);
+  ck("GET (today) shows item done", findItem(r.body, "exercises", "MON", exId)?.done === true);
+  r = await call("GET", `/schedule/me?date=${tomorrow}`, A);
+  ck("GET (tomorrow) shows item NOT done — completion is per-date", findItem(r.body, "exercises", "MON", exId)?.done === false);
+  r = await call("PUT", `/schedule/me/items/${exId}/completion`, A, { date: today, done: false });
+  ck("unmark → done=false", r.status === 200 && r.body.done === false);
+  r = await call("GET", "/schedule/me", A);
+  ck("GET (today) shows item not done after unmark", findItem(r.body, "exercises", "MON", exId)?.done === false);
+  r = await call("PUT", `/schedule/me/items/${exId}/completion`, B, { done: true });
+  ck("B marks A's item done → 404 (anti-IDOR)", r.status === 404, `status=${r.status}`);
+
+  // ── author filter ─────────────────────────────────────────────────
+  console.log("\n=== author filter ===");
+  r = await call("GET", "/schedule/me?author=me", A);
+  ck("author=me → the client's items", dayOf(r.body, "exercises", "MON").items.length === 2 && dayOf(r.body, "meals", "MON").items.length === 1);
+  r = await call("GET", "/schedule/me?author=chatbot", A);
+  ck("author=chatbot → empty (no chatbot items yet)", dayOf(r.body, "exercises", "MON").items.length === 0 && dayOf(r.body, "meals", "MON").items.length === 0);
+  r = await call("GET", `/schedule/me?author=${crypto.randomUUID()}`, A);
+  ck("author=<coach uuid> → empty (no trainer items yet)", dayOf(r.body, "exercises", "MON").items.length === 0);
+  r = await call("GET", "/schedule/me?author=all", A);
+  ck("author=all → all items", dayOf(r.body, "exercises", "MON").items.length === 2 && dayOf(r.body, "meals", "MON").items.length === 1);
+  r = await call("GET", "/schedule/me?author=not-a-uuid", A);
+  ck("author=garbage → 400", r.status === 400, `status=${r.status}`);
+
   // ── edit ──────────────────────────────────────────────────────────
   console.log("\n=== client edits an item ===");
   r = await call("PATCH", `/schedule/me/items/${exId}`, A, { content: "Bench 5x5", youtubeLink: null });

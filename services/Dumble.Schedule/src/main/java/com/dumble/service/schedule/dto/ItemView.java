@@ -11,10 +11,11 @@ public record ItemView(
         String content,
         String youtubeVideoId,
         AuthorType authorType,
-        UUID authorId) {
+        UUID authorId,
+        boolean done) {
 
-    public static ItemView from(ScheduleItem i) {
+    public static ItemView from(ScheduleItem i, boolean done) {
         return new ItemView(i.getId(), i.getPosition(), i.getContent(),
-                i.getYoutubeVideoId(), i.getAuthorType(), i.getAuthorId());
+                i.getYoutubeVideoId(), i.getAuthorType(), i.getAuthorId(), done);
     }
 }

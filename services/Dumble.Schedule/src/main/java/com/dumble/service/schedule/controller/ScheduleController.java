@@ -6,10 +6,12 @@ import com.dumble.service.schedule.security.AuthPrincipal;
 import com.dumble.service.schedule.security.CurrentUser;
 import com.dumble.service.schedule.service.ScheduleService;
 import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 /**
@@ -28,8 +30,10 @@ public class ScheduleController {
     }
 
     @GetMapping
-    public ScheduleResponse getMySchedule() {
-        return scheduleService.getMySchedule(me().userId());
+    public ScheduleResponse getMySchedule(
+            @RequestParam(required = false) String author,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return scheduleService.getMySchedule(me().userId(), author, date);
     }
 
     @PostMapping("/items")
@@ -46,6 +50,11 @@ public class ScheduleController {
     public ResponseEntity<Void> deleteItem(@PathVariable UUID itemId) {
         scheduleService.deleteItem(me().userId(), itemId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/items/{itemId}/completion")
+    public CompletionView setCompletion(@PathVariable UUID itemId, @Valid @RequestBody SetCompletionRequest req) {
+        return scheduleService.setCompletion(me().userId(), itemId, req.date(), req.done());
     }
 
     @PutMapping("/meal-targets/{weekday}")
