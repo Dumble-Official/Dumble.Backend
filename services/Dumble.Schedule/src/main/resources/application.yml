@@ -51,6 +51,14 @@ services:
 internal:
   api-secret: ${INTERNAL_API_SECRET:}
 
+# End-of-day reminder sweep: emit a reminder once per local day for a client who
+# still has unmarked items, when their local time has reached from-hour.
+schedule:
+  reminder:
+    enabled: ${SCHEDULE_REMINDER_ENABLED:true}
+    from-hour: ${SCHEDULE_REMINDER_FROM_HOUR:20}
+    sweep-ms: ${SCHEDULE_REMINDER_SWEEP_MS:900000}
+
 management:
   endpoints:
     web:

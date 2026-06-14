@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 /** A client's schedule canvas — one per user. The items + targets hang off it. */
@@ -24,6 +25,10 @@ public class Schedule {
     /** IANA timezone (used for reminders in a later slice); nullable for now. */
     @Column(length = 64)
     private String timezone;
+
+    /** Last local date an end-of-day reminder was emitted (dedup). */
+    @Column(name = "last_reminded_on")
+    private LocalDate lastRemindedOn;
 
     @Version
     private Long version;
