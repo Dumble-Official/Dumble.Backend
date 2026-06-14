@@ -51,7 +51,7 @@ public class SubscriptionLinkConsumer {
                     active ? "ACTIVE" : "inactive", ev.sellerId(), ev.participantId(), routingKey);
         } catch (Exception e) {
             // Don't requeue a poison message into an infinite loop — log and drop.
-            log.error("Failed to handle bundle event [{}]: {}", routingKey, e.getMessage());
+            log.error("Failed to handle bundle event [{}]", routingKey, e);
         }
     }
 

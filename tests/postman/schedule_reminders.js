@@ -10,7 +10,8 @@
 
 const crypto = require("crypto");
 const SCHED = process.env.SCHEDULE_HOST_URL || "http://localhost:8186/api";
-const SECRET = process.env.JWT_SECRET || "K0Q6NCGDFncmftENnNLP9r9lzaJbvOFCnznXqP0PrI4ag5D8tl5kHpFfoM7tDNjo";
+const SECRET = process.env.JWT_SECRET;
+if (!SECRET) { console.error("ERROR: JWT_SECRET env var is required (source release/.env)."); process.exit(2); }
 const MGMT = process.env.RABBIT_MGMT_URL || "http://localhost:15673";
 const RAUTH = "Basic " + Buffer.from(`${process.env.RABBIT_USER || "app"}:${process.env.RABBIT_PASS || "app"}`).toString("base64");
 const KEY = Buffer.from(SECRET, "base64");

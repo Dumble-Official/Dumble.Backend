@@ -9,7 +9,8 @@
 
 const crypto = require("crypto");
 const SCHED = process.env.SCHEDULE_HOST_URL || "http://localhost:8186/api";
-const SECRET = process.env.JWT_SECRET || "K0Q6NCGDFncmftENnNLP9r9lzaJbvOFCnznXqP0PrI4ag5D8tl5kHpFfoM7tDNjo";
+const SECRET = process.env.JWT_SECRET;
+if (!SECRET) { console.error("ERROR: JWT_SECRET env var is required (source release/.env)."); process.exit(2); }
 const KEY = Buffer.from(SECRET, "base64");
 
 let pass = 0, fail = 0;
@@ -137,6 +138,13 @@ const dayOf = (resp, table, wd) => (resp[table] || []).find(d => d.weekday === w
   ck("after delete, MON has 1 exercise left; meal item + target still there (persisted)",
       dayOf(r.body, "exercises", "MON").items.length === 1 && dayOf(r.body, "meals", "MON").items.length === 1
       && dayOf(r.body, "meals", "MON").target.calories === 2000);
+
+  // position uses max+1, not count — adding after a delete must not reuse a freed position
+  console.log("\n=== add-after-delete keeps positions unique ===");
+  const remaining = dayOf(r.body, "exercises", "MON").items[0].position; // the surviving item (position 1)
+  r = await call("POST", "/schedule/me/items", A, { tableType: "EXERCISE", weekday: "MON", content: "added after delete" });
+  ck("new item gets a fresh position (no collision with the survivor)",
+      r.status === 201 && r.body.position > remaining, `new=${r.body.position} survivor=${remaining}`);
 
   console.log(`\n${fail === 0 ? "✓ ALL GREEN" : "✗ FAILURES"}: ${pass}/${pass + fail} checks passed`);
   process.exit(fail === 0 ? 0 : 1);

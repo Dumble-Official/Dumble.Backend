@@ -30,7 +30,7 @@ public class EventPublisher {
                     .build();
             rabbitTemplate.send(RabbitConfig.EXCHANGE, routingKey, msg);
         } catch (Exception e) {
-            log.error("Failed to publish event [{}]: {}", routingKey, e.getMessage());
+            log.error("Failed to publish event [{}]", routingKey, e);
         }
     }
 }

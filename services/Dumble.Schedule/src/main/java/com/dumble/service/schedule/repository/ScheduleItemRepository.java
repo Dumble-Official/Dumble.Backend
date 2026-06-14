@@ -16,7 +16,16 @@ public interface ScheduleItemRepository extends JpaRepository<ScheduleItem, UUID
 
     List<ScheduleItem> findByScheduleIdOrderByTableTypeAscWeekdayAscPositionAsc(UUID scheduleId);
 
-    int countByScheduleIdAndTableTypeAndWeekday(UUID scheduleId, TableType tableType, Weekday weekday);
+    /**
+     * Next append position for a (table, weekday) bucket: max(position)+1, so
+     * positions stay strictly increasing even after deletions (a plain count
+     * would reuse a freed position and collide).
+     */
+    @Query("select coalesce(max(i.position), -1) + 1 from ScheduleItem i "
+            + "where i.scheduleId = :scheduleId and i.tableType = :tableType and i.weekday = :weekday")
+    int nextPosition(@Param("scheduleId") UUID scheduleId,
+                     @Param("tableType") TableType tableType,
+                     @Param("weekday") Weekday weekday);
 
     /** Used by the chatbot apply with replace=true to clear only its own prior items. */
     @Modifying(flushAutomatically = true, clearAutomatically = true)

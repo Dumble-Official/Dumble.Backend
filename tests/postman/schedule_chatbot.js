@@ -6,8 +6,9 @@
 
 const crypto = require("crypto");
 const SCHED = process.env.SCHEDULE_HOST_URL || "http://localhost:8186/api";
-const SECRET = process.env.JWT_SECRET || "K0Q6NCGDFncmftENnNLP9r9lzaJbvOFCnznXqP0PrI4ag5D8tl5kHpFfoM7tDNjo";
-const INTERNAL = process.env.INTERNAL_API_SECRET || "AGXkcoO2HENx9W37bLRydr15QugIj8TfnFSpZqwV4Mts0JKe";
+const SECRET = process.env.JWT_SECRET;
+const INTERNAL = process.env.INTERNAL_API_SECRET;
+if (!SECRET || !INTERNAL) { console.error("ERROR: JWT_SECRET and INTERNAL_API_SECRET env vars are required (source release/.env)."); process.exit(2); }
 const KEY = Buffer.from(SECRET, "base64");
 
 let pass = 0, fail = 0;

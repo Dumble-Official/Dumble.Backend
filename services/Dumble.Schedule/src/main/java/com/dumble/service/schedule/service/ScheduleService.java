@@ -179,7 +179,7 @@ public class ScheduleService {
         item.setScheduleId(scheduleId);
         item.setTableType(type);
         item.setWeekday(day);
-        item.setPosition(itemRepository.countByScheduleIdAndTableTypeAndWeekday(scheduleId, type, day));
+        item.setPosition(itemRepository.nextPosition(scheduleId, type, day));
         item.setContent(content);
         item.setYoutubeVideoId(YouTubeLinks.toVideoId(youtubeLink));
         item.setAuthorType(authorType);

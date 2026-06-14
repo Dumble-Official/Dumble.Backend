@@ -60,7 +60,7 @@ public class ReminderSweeper {
             try {
                 maybeRemind(s);
             } catch (Exception e) {
-                log.error("Reminder sweep failed for schedule {}: {}", s.getId(), e.getMessage());
+                log.error("Reminder sweep failed for schedule {}", s.getId(), e);
             }
         }
     }
