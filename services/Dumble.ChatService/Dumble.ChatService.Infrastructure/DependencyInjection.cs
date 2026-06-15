@@ -28,6 +28,7 @@ public static class DependencyInjection
         // Repositories
         services.AddScoped<IConversationRepository, ConversationRepository>();
         services.AddScoped<IMessageRepository, MessageRepository>();
+        services.AddScoped<IBlockRepository, BlockRepository>();
 
         // Redis
         var redisConnection = configuration.GetConnectionString("Redis");

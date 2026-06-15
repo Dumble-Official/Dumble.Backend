@@ -11,6 +11,7 @@ public class SendMessageCommandHandler(
     IMessageRepository messageRepository,
     IConversationRepository conversationRepository,
     IChatHubService chatHubService,
+    IBlockRepository blockRepository,
     IPublishEndpoint publishEndpoint
 ) : IRequestHandler<SendMessageCommand, MessageResponse>
 {
@@ -22,6 +23,15 @@ public class SendMessageCommandHandler(
 
         if (!conversation.Participants.Any(p => p.UserId == request.SenderId))
             throw new UnauthorizedAccessException("You are not a participant in this conversation");
+
+        // In a 1:1 conversation, either party blocking the other stops messaging both ways.
+        if (conversation.Type == "Direct")
+        {
+            var other = conversation.Participants.FirstOrDefault(p => p.UserId != request.SenderId);
+            if (other is not null &&
+                await blockRepository.IsBlockedBetweenAsync(request.SenderId, other.UserId, cancellationToken))
+                throw new UnauthorizedAccessException("You can no longer message this user");
+        }
 
         var now = DateTime.UtcNow;
 
