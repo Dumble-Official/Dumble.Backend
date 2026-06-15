@@ -7,17 +7,16 @@ import com.example.DumbleAuthentication.dto.response.UserResponse;
 import com.example.DumbleAuthentication.repository.UserRepository;
 import com.example.DumbleAuthentication.service.AccountDeletionService;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
+
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/users")
@@ -29,6 +28,24 @@ public class UserController {
     public UserController(UserRepository userRepository, AccountDeletionService accountDeletionService) {
         this.userRepository = userRepository;
         this.accountDeletionService = accountDeletionService;
+    }
+
+    /** A1 — Admin/Moderator user search (by email or name). Gated in SecurityConfig. */
+    @GetMapping
+    public Page<UserResponse> search(
+            @RequestParam(required = false, defaultValue = "") String query,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return userRepository.search(query, PageRequest.of(page, Math.min(Math.max(size, 1), 100)))
+                .map(UserResponse::from);
+    }
+
+    /** A1 — Admin/Moderator fetch a single user by id. Gated in SecurityConfig. */
+    @GetMapping("/{id}")
+    public ResponseEntity<UserResponse> getById(@PathVariable UUID id) {
+        return userRepository.findById(id)
+                .map(u -> ResponseEntity.ok(UserResponse.from(u)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/me")
