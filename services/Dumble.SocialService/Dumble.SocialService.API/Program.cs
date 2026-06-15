@@ -10,6 +10,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -79,6 +80,15 @@ builder.Services.Configure<ForwardedHeadersOptions>(opt =>
 builder.Services.AddHealthChecks().AddDbContextCheck<SocialDbContext>(name: "database");
 
 var app = builder.Build();
+
+// Provision the schema on startup. The service owns its database and ships no separate
+// migration step, so create the model's tables if they aren't there yet. Fails fast if the
+// database is unreachable, which is the intended behaviour behind depends_on.
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<SocialDbContext>();
+    db.Database.EnsureCreated();
+}
 
 app.UseForwardedHeaders();
 app.UseExceptionMapping();

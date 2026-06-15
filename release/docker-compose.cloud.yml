@@ -1,0 +1,352 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Cloud deploy compose — single Droplet, FREE managed databases.
+#
+#   Postgres  -> Neon            (auth, payment, wallet, subscription, schedule,
+#                                 post, social, recommendation)
+#   MySQL     -> Aiven           (gym)
+#   MongoDB   -> Atlas           (chat, notification)
+#   Redis     -> Upstash (TLS)   (gateway, auth, social, chat, notification, recommendation)
+#   RabbitMQ  -> self-hosted container on the private compose network (NOT published)
+#
+# Differences vs release/docker-compose.yml (local dev):
+#   * No database containers — every connection comes from .env.cloud.
+#   * bundle-service / bundle-db dropped (no free managed SQL Server).
+#   * RabbitMQ ports are NOT published (guest/guest is safe only on the private net).
+#   * Postgres connection pools capped (Neon free-tier connection limit).
+#
+# Required vars use the ${VAR:?message} form so `up` fails fast with a clear
+# message if .env.cloud is missing a value — rather than crash-looping a
+# container later with a cryptic error.
+#
+# Run:
+#   docker compose -f docker-compose.cloud.yml --env-file .env.cloud up -d --build
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── Message broker (self-hosted; reachable only inside this compose network) ──
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:-dumble-cloud-cookie}
+    # Deliberately NO published ports — guest/guest must never be exposed publicly.
+    expose:
+      - "5672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Application Services ─────────────────────────────────────────────────────
+
+  authentication:
+    build:
+      context: ../services/Dumble.Authentication
+      dockerfile: Dockerfile
+    expose:
+      - "8081"
+    environment:
+      # Postgres (Neon). app.properties hardcodes username=postgres, which matches
+      # the Neon role created for this deploy — so only URL + password are wired here.
+      SPRING_DATASOURCE_URL: ${AUTH_DB_URL:?set AUTH_DB_URL in .env.cloud}
+      DATABASEPASS: ${NEON_PASSWORD:?set NEON_PASSWORD in .env.cloud}
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.cloud}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?set GOOGLE_CLIENT_ID in .env.cloud}
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?set INTERNAL_API_SECRET in .env.cloud}
+      # Redis (Upstash, TLS)
+      REDIS_HOST: ${REDIS_HOST:?set REDIS_HOST in .env.cloud}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env.cloud}
+      REDIS_SSL_ENABLED: ${REDIS_SSL_ENABLED:-true}
+      # RabbitMQ (self-hosted)
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: guest
+      RABBITMQ_PASSWORD: guest
+      ADMIN_BOOTSTRAP_ENABLED: ${ADMIN_BOOTSTRAP_ENABLED:-true}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@dumble.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env.cloud}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: ../services/DumbleGateway
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.cloud}
+      # Redis (Upstash, TLS)
+      REDIS_HOST: ${REDIS_HOST:?set REDIS_HOST in .env.cloud}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env.cloud}
+      REDIS_SSL_ENABLED: ${REDIS_SSL_ENABLED:-true}
+      AUTH_SERVICE_URL: http://authentication:8081
+      POST_SERVICE_URL: http://post-service:5134
+      SOCIAL_SERVICE_URL: http://social-service:5021
+      CHAT_SERVICE_URL: http://chat-service:5022
+      NOTIFICATION_SERVICE_URL: http://notification-service:5023
+      # Bundle service is not deployed — /api/bundles/** and /api/categories/** will 503.
+      BUNDLE_SERVICE_URL: http://bundle-service:5012
+      GYM_SERVICE_URL: http://gym-service:8181
+      WALLET_SERVICE_URL: http://wallet:8184
+      PAYMENT_SERVICE_URL: http://payment:8183
+      SUBSCRIPTION_SERVICE_URL: http://subscription:8182
+      FITCOACH_SERVICE_URL: http://fitcoach:8000
+      SCHEDULE_SERVICE_URL: http://schedule:8186
+      RECOMMENDATION_SERVICE_URL: http://recommendation-service:5024
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?set INTERNAL_API_SECRET in .env.cloud}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?set CORS_ALLOWED_ORIGINS in .env.cloud}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      RATELIMIT_FAIL_MODE: ${RATELIMIT_FAIL_MODE:-open}
+    depends_on:
+      authentication:
+        condition: service_started
+    restart: unless-stopped
+
+  post-service:
+    build:
+      context: ../services
+      dockerfile: Dumble.PostService/Dockerfile
+    expose:
+      - "5134"
+    environment:
+      ASPNETCORE_URLS: http://+:5134
+      ConnectionStrings__PostDb: ${POST_DB_CONN:?set POST_DB_CONN in .env.cloud}
+      Cloudinary__Url: ${CLOUDINARY_URL:-cloudinary://placeholder:placeholder@placeholder}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.cloud}
+      RabbitMQ__Host: rabbitmq
+      ASPNETCORE_ENVIRONMENT: Production
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  social-service:
+    build:
+      context: ../services
+      dockerfile: Dumble.SocialService/Dockerfile
+    expose:
+      - "5021"
+    environment:
+      ASPNETCORE_URLS: http://+:5021
+      ConnectionStrings__PostgreSql: ${SOCIAL_DB_CONN:?set SOCIAL_DB_CONN in .env.cloud}
+      ConnectionStrings__Redis: ${REDIS_DOTNET_CONN:?set REDIS_DOTNET_CONN in .env.cloud}
+      Services__PostService: http://post-service:5134
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.cloud}
+      RabbitMQ__Host: rabbitmq
+      ASPNETCORE_ENVIRONMENT: Production
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  chat-service:
+    build:
+      context: ../services
+      dockerfile: Dumble.ChatService/Dockerfile
+    expose:
+      - "5022"
+    environment:
+      ASPNETCORE_URLS: http://+:5022
+      ConnectionStrings__MongoDb: ${MONGO_URI:?set MONGO_URI in .env.cloud}
+      ConnectionStrings__Redis: ${REDIS_DOTNET_CONN:?set REDIS_DOTNET_CONN in .env.cloud}
+      MongoDb__DatabaseName: dumble_chat
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.cloud}
+      RabbitMQ__Host: rabbitmq
+      ASPNETCORE_ENVIRONMENT: Production
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: ../services
+      dockerfile: Dumble.NotificationService/Dockerfile
+    expose:
+      - "5023"
+    environment:
+      ASPNETCORE_URLS: http://+:5023
+      ConnectionStrings__MongoDb: ${MONGO_URI:?set MONGO_URI in .env.cloud}
+      ConnectionStrings__Redis: ${REDIS_DOTNET_CONN:?set REDIS_DOTNET_CONN in .env.cloud}
+      MongoDb__DatabaseName: dumble_notifications
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.cloud}
+      RabbitMQ__Host: rabbitmq
+      ASPNETCORE_ENVIRONMENT: Production
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  gym-service:
+    build:
+      context: ../services/Dumble.GymService
+      dockerfile: Dockerfile
+    expose:
+      - "8181"
+    environment:
+      # MySQL (Aiven). createDatabaseIfNotExist/useSSL removed; uses defaultdb + TLS.
+      SPRING_DATASOURCE_URL: ${GYM_DB_URL:?set GYM_DB_URL in .env.cloud}
+      SPRING_DATASOURCE_USERNAME: ${GYM_DB_USERNAME:?set GYM_DB_USERNAME in .env.cloud}
+      SPRING_DATASOURCE_PASSWORD: ${GYM_DB_PASSWORD:?set GYM_DB_PASSWORD in .env.cloud}
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "10"
+      SERVICES_AUTH_URL: http://authentication:8081
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.cloud}
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?set INTERNAL_API_SECRET in .env.cloud}
+      CLOUDINARY_URL: ${CLOUDINARY_URL:-cloudinary://placeholder:placeholder@placeholder}
+    restart: unless-stopped
+
+  payment:
+    build:
+      context: ../services/Dumble.Payment
+      dockerfile: Dockerfile
+    expose:
+      - "8183"
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.cloud}
+      SERVICE_JWT_SIGNING_KEY: ${SERVICE_JWT_SIGNING_KEY:?set SERVICE_JWT_SIGNING_KEY in .env.cloud}
+      PAYMENT_DB_URL: ${PAYMENT_DB_URL:?set PAYMENT_DB_URL in .env.cloud}
+      PAYMENT_DB_USERNAME: ${NEON_USER:-postgres}
+      PAYMENT_DB_PASSWORD: ${NEON_PASSWORD:?set NEON_PASSWORD in .env.cloud}
+      PAYMENT_HIKARI_MAX_POOL_SIZE: "5"
+      PAYMENT_HIKARI_MIN_IDLE: "1"
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      PAYMOB_ENABLED: ${PAYMOB_ENABLED:-false}
+      PAYMOB_API_KEY: ${PAYMOB_API_KEY:-dev-only-paymob-api-key}
+      PAYMOB_HMAC_SECRET: ${PAYMOB_HMAC_SECRET:-dev-only-paymob-hmac-secret}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  wallet:
+    build:
+      context: ../services/Dumble.Wallet
+      dockerfile: Dockerfile
+    expose:
+      - "8184"
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.cloud}
+      SERVICE_JWT_SIGNING_KEY: ${SERVICE_JWT_SIGNING_KEY:?set SERVICE_JWT_SIGNING_KEY in .env.cloud}
+      WALLET_DB_URL: ${WALLET_DB_URL:?set WALLET_DB_URL in .env.cloud}
+      WALLET_DB_USERNAME: ${NEON_USER:-postgres}
+      WALLET_DB_PASSWORD: ${NEON_PASSWORD:?set NEON_PASSWORD in .env.cloud}
+      WALLET_HIKARI_MAX_POOL_SIZE: "5"
+      WALLET_HIKARI_MIN_IDLE: "1"
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      PAYMENT_SERVICE_URL: http://payment:8183
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      payment:
+        condition: service_started
+    restart: unless-stopped
+
+  subscription:
+    build:
+      context: ../services/Dumble.Subscription
+      dockerfile: Dockerfile
+    expose:
+      - "8182"
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.cloud}
+      SERVICE_JWT_SIGNING_KEY: ${SERVICE_JWT_SIGNING_KEY:?set SERVICE_JWT_SIGNING_KEY in .env.cloud}
+      SUBSCRIPTION_DB_URL: ${SUBSCRIPTION_DB_URL:?set SUBSCRIPTION_DB_URL in .env.cloud}
+      SUBSCRIPTION_DB_USERNAME: ${NEON_USER:-postgres}
+      SUBSCRIPTION_DB_PASSWORD: ${NEON_PASSWORD:?set NEON_PASSWORD in .env.cloud}
+      SUBSCRIPTION_HIKARI_MAX_POOL_SIZE: "5"
+      SUBSCRIPTION_HIKARI_MIN_IDLE: "1"
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      PAYMENT_SERVICE_URL: http://payment:8183
+      WALLET_SERVICE_URL: http://wallet:8184
+      # Bundle service not deployed — bundle-backed subscription ops will fail.
+      BUNDLE_MANAGEMENT_URL: http://bundle-service:5012
+      GYM_SERVICE_URL: http://gym-service:8181
+      AUTHENTICATION_URL: http://authentication:8081
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      payment:
+        condition: service_started
+      wallet:
+        condition: service_started
+    restart: unless-stopped
+
+  schedule:
+    build:
+      context: ../services/Dumble.Schedule
+      dockerfile: Dockerfile
+    expose:
+      - "8186"
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.cloud}
+      SCHEDULE_DB_URL: ${SCHEDULE_DB_URL:?set SCHEDULE_DB_URL in .env.cloud}
+      SCHEDULE_DB_USERNAME: ${NEON_USER:-postgres}
+      SCHEDULE_DB_PASSWORD: ${NEON_PASSWORD:?set NEON_PASSWORD in .env.cloud}
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      SUBSCRIPTION_SERVICE_URL: http://subscription:8182
+      AUTHENTICATION_URL: http://authentication:8081
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?set INTERNAL_API_SECRET in .env.cloud}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  fitcoach:
+    build:
+      context: ../services/Dumble.FitCoach
+      dockerfile: Dockerfile
+    expose:
+      - "8000"
+    environment:
+      GEMINI_API_KEYS: ${GEMINI_API_KEYS:?set GEMINI_API_KEYS in .env.cloud}
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?set INTERNAL_API_SECRET in .env.cloud}
+      ALLOWED_ORIGINS: ${FITCOACH_ALLOWED_ORIGINS:-}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    volumes:
+      - fitcoachmemory:/app/memory_data
+    restart: unless-stopped
+
+  recommendation-service:
+    build:
+      context: ../services
+      dockerfile: Dumble.RecommendationService/Dockerfile
+    expose:
+      - "5024"
+    environment:
+      ASPNETCORE_URLS: http://+:5024
+      ConnectionStrings__RecommendationDb: ${RECOMMENDATION_DB_CONN:?set RECOMMENDATION_DB_CONN in .env.cloud}
+      ConnectionStrings__Redis: ${REDIS_DOTNET_CONN:?set REDIS_DOTNET_CONN in .env.cloud}
+      RabbitMQ__Host: rabbitmq
+      Services__PostService: http://post-service:5134
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.cloud}
+      RECOMBEE_DATABASE_ID: ${RECOMBEE_DATABASE_ID:-}
+      RECOMBEE_PRIVATE_TOKEN: ${RECOMBEE_PRIVATE_TOKEN:-}
+      RECOMBEE_REGION: ${RECOMBEE_REGION:-}
+      ASPNETCORE_ENVIRONMENT: Production
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      post-service:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  fitcoachmemory:
