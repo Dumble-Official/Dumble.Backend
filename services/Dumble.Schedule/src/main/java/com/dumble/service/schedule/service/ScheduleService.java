@@ -83,6 +83,19 @@ public class ScheduleService {
         return upsertTarget(getOrCreate(userId).getId(), weekday, req);
     }
 
+    /** Set the caller's schedule timezone (IANA). Rejects an unknown zone id. */
+    @Transactional
+    public void setTimezone(UUID userId, String timezone) {
+        try {
+            ZoneId.of(timezone);
+        } catch (Exception e) {
+            throw new BadRequestException("Unknown timezone: " + timezone);
+        }
+        Schedule schedule = getOrCreate(userId);
+        schedule.setTimezone(timezone);
+        scheduleRepository.save(schedule);
+    }
+
     // ── Trainer side (gated by an active link) ─────────────────────────────
 
     /** A trainer reads a client's schedule: only their own items + the client's own items. */
