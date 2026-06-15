@@ -37,4 +37,7 @@ public class CommentReactionRepository : ICommentReactionRepository
         _context.CommentReactions.Remove(reaction);
         await _context.SaveChangesAsync(ct);
     }
+
+    public Task<int> DeleteAllByUserAsync(string userId, CancellationToken ct = default) =>
+        _context.CommentReactions.Where(r => r.UserId == userId).ExecuteDeleteAsync(ct);
 }
