@@ -60,6 +60,7 @@ public static class DependencyInjection
         {
             // .NET service consumers (MassTransit-typed exchanges)
             x.AddConsumer<PostReactedConsumer>();
+            x.AddConsumer<CommentReactedConsumer>();
             x.AddConsumer<CommentCreatedConsumer>();
             x.AddConsumer<UserFollowedConsumer>();
             x.AddConsumer<MessageSentConsumer>();
@@ -98,6 +99,10 @@ public static class DependencyInjection
                 cfg.ReceiveEndpoint("PostReacted", e =>
                 {
                     e.ConfigureConsumer<PostReactedConsumer>(context);
+                });
+                cfg.ReceiveEndpoint("CommentReacted", e =>
+                {
+                    e.ConfigureConsumer<CommentReactedConsumer>(context);
                 });
                 cfg.ReceiveEndpoint("CommentCreated", e =>
                 {

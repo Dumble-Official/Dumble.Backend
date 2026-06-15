@@ -1,9 +1,11 @@
 using MediatR;
+using MassTransit;
 using Dumble.PostService.Application.Contracts;
 using Dumble.PostService.Contracts.Reactions;
 using Dumble.PostService.Domain.Entities;
 using Dumble.SharedKernel.Contracts;
 using Dumble.SharedKernel.Enums;
+using Dumble.SharedKernel.Events.Posts;
 
 namespace Dumble.PostService.Application.Features.Comments.Commands.AddCommentReaction;
 
@@ -12,15 +14,18 @@ public class AddCommentReactionCommandHandler : IRequestHandler<AddCommentReacti
     private readonly ICommentReactionRepository _commentReactionRepository;
     private readonly ICommentRepository _commentRepository;
     private readonly ILoggedInUserService _userService;
+    private readonly IPublishEndpoint _publishEndpoint;
 
     public AddCommentReactionCommandHandler(
         ICommentReactionRepository commentReactionRepository,
         ICommentRepository commentRepository,
-        ILoggedInUserService userService)
+        ILoggedInUserService userService,
+        IPublishEndpoint publishEndpoint)
     {
         _commentReactionRepository = commentReactionRepository;
         _commentRepository = commentRepository;
         _userService = userService;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<ReactionResponse> Handle(AddCommentReactionCommand request, CancellationToken ct)
@@ -36,6 +41,7 @@ public class AddCommentReactionCommandHandler : IRequestHandler<AddCommentReacti
         {
             existing.Type = reactionType;
             await _commentReactionRepository.UpdateAsync(existing, ct);
+            await PublishReactedAsync(comment, currentUser, reactionType, ct);
 
             return new ReactionResponse(existing.Id, existing.UserId, existing.Type.ToString(), existing.CreatedAt);
         }
@@ -51,7 +57,19 @@ public class AddCommentReactionCommandHandler : IRequestHandler<AddCommentReacti
 
         await _commentReactionRepository.CreateAsync(reaction, ct);
         await _commentRepository.IncrementReactionsAsync(comment.Id, ct);
+        await PublishReactedAsync(comment, currentUser, reactionType, ct);
 
         return new ReactionResponse(reaction.Id, reaction.UserId, reaction.Type.ToString(), reaction.CreatedAt);
     }
+
+    private Task PublishReactedAsync(Comment comment, CurrentUser currentUser, ReactionType reactionType, CancellationToken ct) =>
+        _publishEndpoint.Publish(new CommentReactedEvent(
+            comment.Id.ToString(),
+            comment.PostId.ToString(),
+            comment.AuthorId,
+            currentUser.Id,
+            currentUser.DisplayName,
+            currentUser.ProfileImage,
+            reactionType,
+            DateTimeOffset.UtcNow), ct);
 }
