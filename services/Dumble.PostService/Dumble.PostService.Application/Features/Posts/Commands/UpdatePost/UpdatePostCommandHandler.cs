@@ -1,10 +1,12 @@
 using MediatR;
+using MassTransit;
 using Dumble.PostService.Application.Contracts;
 using Dumble.PostService.Contracts.Posts;
 using Dumble.PostService.Domain.Entities;
 using Dumble.PostService.Domain.Enums;
 using Dumble.SharedKernel.Contracts;
 using Dumble.SharedKernel.Enums;
+using Dumble.SharedKernel.Events.Posts;
 
 namespace Dumble.PostService.Application.Features.Posts.Commands.UpdatePost;
 
@@ -13,15 +15,18 @@ public class UpdatePostCommandHandler : IRequestHandler<UpdatePostCommand, PostR
     private readonly IPostRepository _postRepository;
     private readonly IHashtagRepository _hashtagRepository;
     private readonly ILoggedInUserService _userService;
+    private readonly IPublishEndpoint _publishEndpoint;
 
     public UpdatePostCommandHandler(
         IPostRepository postRepository,
         IHashtagRepository hashtagRepository,
-        ILoggedInUserService userService)
+        ILoggedInUserService userService,
+        IPublishEndpoint publishEndpoint)
     {
         _postRepository = postRepository;
         _hashtagRepository = hashtagRepository;
         _userService = userService;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<PostResponse> Handle(UpdatePostCommand request, CancellationToken ct)
@@ -78,11 +83,11 @@ public class UpdatePostCommandHandler : IRequestHandler<UpdatePostCommand, PostR
             .Where(n => !string.IsNullOrEmpty(n))
             .ToList();
 
-        // PostUpdatedEvent publish removed: no consumer exists yet (neither
-        // SocialService nor NotificationService binds to post.updated.*). A
-        // fire-and-forget publish to nothing is wasted I/O + a misleading
-        // audit trail. Re-add together with the consumer + outbox in a
-        // follow-up PR.
+        // The recommendation service binds to PostUpdatedEvent to keep its Recombee catalog in
+        // sync with hashtag edits in real time (otherwise only the nightly reconcile heals it).
+        // GymId is not editable here, so the event carries what an edit can change.
+        await _publishEndpoint.Publish(new PostUpdatedEvent(
+            post.Id.ToString(), post.AuthorId, currentHashtags, post.UpdatedAt), ct);
 
         return new PostResponse(
             post.Id, post.AuthorId, post.AuthorDisplayName, post.AuthorProfileImage,
