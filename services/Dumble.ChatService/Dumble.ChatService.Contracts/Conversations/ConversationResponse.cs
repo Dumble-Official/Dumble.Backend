@@ -7,7 +7,7 @@ public record ConversationResponse(
 
 public record ParticipantResponse(
     string UserId, string DisplayName, string? ProfileImage,
-    string Role, DateTime JoinedAt);
+    string Role, DateTime JoinedAt, string? LastReadMessageId);
 
 public record LastMessageResponse(
     string MessageId, string SenderId, string SenderName,
