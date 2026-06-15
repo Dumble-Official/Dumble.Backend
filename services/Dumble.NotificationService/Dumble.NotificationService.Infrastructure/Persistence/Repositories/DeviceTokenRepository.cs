@@ -46,4 +46,7 @@ public class DeviceTokenRepository : IDeviceTokenRepository
             d => d.Token == token && d.UserId == userId, ct);
         return result.DeletedCount > 0;
     }
+
+    public Task DeleteAllForUserAsync(string userId, CancellationToken ct)
+        => _context.DeviceTokens.DeleteManyAsync(d => d.UserId == userId, ct);
 }

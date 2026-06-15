@@ -64,6 +64,9 @@ public static class DependencyInjection
             x.AddConsumer<UserFollowedConsumer>();
             x.AddConsumer<MessageSentConsumer>();
 
+            // Account deletion (right-to-be-forgotten) — Java Auth raw-JSON event.
+            x.AddConsumer<AccountDeletedConsumer>();
+
             // Java Subscription service consumers (dumble.events topic exchange)
             x.AddConsumer<BundleActivatedConsumer>();
             x.AddConsumer<BundleExpiredConsumer>();
@@ -107,6 +110,15 @@ public static class DependencyInjection
                 cfg.ReceiveEndpoint("MessageSent", e =>
                 {
                     e.ConfigureConsumer<MessageSentConsumer>(context);
+                });
+
+                // Account deletion (right-to-be-forgotten) from the Java Auth service.
+                cfg.ReceiveEndpoint("notification-service.account-deleted", e =>
+                {
+                    e.UseRawJsonDeserializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "account.deleted"; });
+                    e.ConfigureConsumer<AccountDeletedConsumer>(context);
                 });
 
                 // Java Subscription service consumers (dumble.events topic exchange)

@@ -26,4 +26,7 @@ public class NotificationPreferenceRepository : INotificationPreferenceRepositor
         var options = new ReplaceOptions { IsUpsert = true };
         await _context.NotificationPreferences.ReplaceOneAsync(filter, preference, options, ct);
     }
+
+    public Task DeleteForUserAsync(string userId, CancellationToken ct)
+        => _context.NotificationPreferences.DeleteOneAsync(p => p.UserId == userId, ct);
 }
