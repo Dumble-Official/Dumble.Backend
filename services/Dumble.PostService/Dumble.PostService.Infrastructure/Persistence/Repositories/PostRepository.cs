@@ -86,12 +86,13 @@ public class PostRepository : IPostRepository
 
     public async Task<List<Post>> GetCatalogPageAsync(DateTime? cursor, int limit, CancellationToken ct)
     {
-        // Full-table sweep for catalog reconcile: every non-deleted post, oldest-skipping by
-        // CreatedAt cursor like the other listings. No image include — the catalog projection
-        // only needs the Recombee properties, so keep the scan light.
+        // Full-table sweep for catalog reconcile: every ACTIVE post, oldest-skipping by CreatedAt
+        // cursor like the other listings. Only Active (not Flagged, not Deleted) so the nightly
+        // reconcile never re-adds a moderated post the PostFlagged event removed. No image include —
+        // the catalog projection only needs the Recombee properties, so keep the scan light.
         var query = _context.Posts
             .Include(p => p.PostHashtags).ThenInclude(ph => ph.Hashtag)
-            .Where(p => p.Status != PostStatus.Deleted);
+            .Where(p => p.Status == PostStatus.Active);
 
         if (cursor.HasValue)
             query = query.Where(p => p.CreatedAt < cursor.Value);

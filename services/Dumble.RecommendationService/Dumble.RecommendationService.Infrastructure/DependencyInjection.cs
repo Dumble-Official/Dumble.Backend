@@ -78,6 +78,7 @@ public static class DependencyInjection
             x.AddConsumer<PostCreatedConsumer>();
             x.AddConsumer<PostUpdatedConsumer>();
             x.AddConsumer<PostDeletedConsumer>();
+            x.AddConsumer<PostFlaggedConsumer>();
             x.AddConsumer<UserFollowedConsumer>();
             x.AddConsumer<UserUnfollowedConsumer>();
 

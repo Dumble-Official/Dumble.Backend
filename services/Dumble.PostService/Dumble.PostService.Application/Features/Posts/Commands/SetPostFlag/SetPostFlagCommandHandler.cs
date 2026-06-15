@@ -1,8 +1,10 @@
 using MediatR;
+using MassTransit;
 using Dumble.PostService.Application.Contracts;
 using Dumble.PostService.Domain.Enums;
 using Dumble.SharedKernel.Contracts;
 using Dumble.SharedKernel.Enums;
+using Dumble.SharedKernel.Events.Posts;
 
 namespace Dumble.PostService.Application.Features.Posts.Commands.SetPostFlag;
 
@@ -10,11 +12,16 @@ public class SetPostFlagCommandHandler : IRequestHandler<SetPostFlagCommand>
 {
     private readonly IPostRepository _postRepository;
     private readonly ILoggedInUserService _userService;
+    private readonly IPublishEndpoint _publishEndpoint;
 
-    public SetPostFlagCommandHandler(IPostRepository postRepository, ILoggedInUserService userService)
+    public SetPostFlagCommandHandler(
+        IPostRepository postRepository,
+        ILoggedInUserService userService,
+        IPublishEndpoint publishEndpoint)
     {
         _postRepository = postRepository;
         _userService = userService;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task Handle(SetPostFlagCommand request, CancellationToken ct)
@@ -31,5 +38,10 @@ public class SetPostFlagCommandHandler : IRequestHandler<SetPostFlagCommand>
         post.Status = request.Flagged ? PostStatus.Flagged : PostStatus.Active;
         post.UpdatedAt = DateTime.UtcNow;
         await _postRepository.UpdateAsync(post, ct);
+
+        // Drop a flagged post from recommendations immediately. Unflagging restores it via the
+        // catalog reconcile (the post is Active again, so the nightly sweep re-adds it).
+        if (request.Flagged)
+            await _publishEndpoint.Publish(new PostFlaggedEvent(post.Id.ToString()), ct);
     }
 }
