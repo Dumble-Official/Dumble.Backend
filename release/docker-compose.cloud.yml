@@ -138,6 +138,8 @@ services:
       ASPNETCORE_URLS: http://+:5021
       ConnectionStrings__PostgreSql: ${SOCIAL_DB_CONN:?set SOCIAL_DB_CONN in .env.cloud}
       ConnectionStrings__Redis: ${REDIS_DOTNET_CONN:?set REDIS_DOTNET_CONN in .env.cloud}
+      # This service targets .NET 8 but the image ships the .NET 9 runtime; allow roll-forward.
+      DOTNET_ROLL_FORWARD: Major
       Services__PostService: http://post-service:5134
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.cloud}
       RabbitMQ__Host: rabbitmq
@@ -158,6 +160,8 @@ services:
       ConnectionStrings__MongoDb: ${MONGO_URI:?set MONGO_URI in .env.cloud}
       ConnectionStrings__Redis: ${REDIS_DOTNET_CONN:?set REDIS_DOTNET_CONN in .env.cloud}
       MongoDb__DatabaseName: dumble_chat
+      # This service targets .NET 8 but the image ships the .NET 9 runtime; allow roll-forward.
+      DOTNET_ROLL_FORWARD: Major
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.cloud}
       RabbitMQ__Host: rabbitmq
       ASPNETCORE_ENVIRONMENT: Production
@@ -177,6 +181,8 @@ services:
       ConnectionStrings__MongoDb: ${MONGO_URI:?set MONGO_URI in .env.cloud}
       ConnectionStrings__Redis: ${REDIS_DOTNET_CONN:?set REDIS_DOTNET_CONN in .env.cloud}
       MongoDb__DatabaseName: dumble_notifications
+      # This service targets .NET 8 but the image ships the .NET 9 runtime; allow roll-forward.
+      DOTNET_ROLL_FORWARD: Major
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.cloud}
       RabbitMQ__Host: rabbitmq
       ASPNETCORE_ENVIRONMENT: Production
