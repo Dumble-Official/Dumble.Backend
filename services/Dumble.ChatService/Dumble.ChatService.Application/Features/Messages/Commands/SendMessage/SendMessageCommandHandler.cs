@@ -32,7 +32,8 @@ public class SendMessageCommandHandler(
             SenderName = request.SenderName,
             SenderProfileImage = request.SenderProfileImage,
             Content = request.Content,
-            MessageType = "Text",
+            ImageUrl = request.ImageUrl,
+            MessageType = string.IsNullOrWhiteSpace(request.ImageUrl) ? "Text" : "Image",
             ReplyToMessageId = request.ReplyToMessageId,
             IsDeleted = false,
             CreatedAt = now

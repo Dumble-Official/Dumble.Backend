@@ -28,7 +28,7 @@ public class SendMessageEndpoint : Endpoint<SendMessageRequest, MessageResponse>
         var profileImage = User.FindFirst("profileImage")?.Value;
 
         var result = await _mediator.Send(new SendMessageCommand(
-            conversationId, userId, displayName, profileImage, req.Content, req.ReplyToMessageId), ct);
+            conversationId, userId, displayName, profileImage, req.Content, req.ReplyToMessageId, req.ImageUrl), ct);
 
         await SendAsync(result, StatusCodes.Status201Created, ct);
     }
