@@ -10,5 +10,6 @@ public enum OutboxOperation
     AddDetailView,
     AddRating,
     AddBookmark,
-    DeleteRating
+    DeleteRating,
+    DeleteBookmark
 }

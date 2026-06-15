@@ -14,5 +14,6 @@ public enum InteractionSignal
     Reaction,
     ReactionRemoved,
     Comment,
+    CommentRemoved,
     Share
 }

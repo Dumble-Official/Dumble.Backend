@@ -26,6 +26,10 @@ public static class InteractionSignalMapper
         InteractionSignal.Comment or InteractionSignal.Share
             => new InteractionMapping(OutboxOperation.AddBookmark, RatingValue: null),
 
+        // A deleted comment reverses the bookmark its creation recorded.
+        InteractionSignal.CommentRemoved
+            => new InteractionMapping(OutboxOperation.DeleteBookmark, RatingValue: null),
+
         _ => throw new ArgumentOutOfRangeException(nameof(signal), signal, "Unmapped interaction signal")
     };
 }

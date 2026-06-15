@@ -20,4 +20,8 @@ public static class InteractionEventMapper
 
     public static RecordInteractionCommand FromCommentCreated(CommentCreatedEvent e) =>
         new(e.CommentAuthorId, e.PostId, InteractionSignal.Comment, e.CreatedAt, SourceEventId: e.EventId.ToString());
+
+    public static RecordInteractionCommand FromCommentDeleted(CommentDeletedEvent e) =>
+        // CommentDeletedEvent carries no action time of its own, so use the event's occurrence time.
+        new(e.CommentAuthorId, e.PostId, InteractionSignal.CommentRemoved, e.OccurredOn, SourceEventId: e.EventId.ToString());
 }

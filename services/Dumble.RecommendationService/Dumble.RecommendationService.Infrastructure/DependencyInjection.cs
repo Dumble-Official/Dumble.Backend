@@ -74,6 +74,7 @@ public static class DependencyInjection
             x.AddConsumer<PostReactedConsumer>();
             x.AddConsumer<ReactionRemovedConsumer>();
             x.AddConsumer<CommentCreatedConsumer>();
+            x.AddConsumer<CommentDeletedConsumer>();
             x.AddConsumer<PostCreatedConsumer>();
             x.AddConsumer<PostUpdatedConsumer>();
             x.AddConsumer<PostDeletedConsumer>();
