@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using StackExchange.Redis;
 using Dumble.ChatService.Application.Contracts;
+using Dumble.ChatService.Infrastructure.Messaging.Consumers;
 using Dumble.ChatService.Infrastructure.Persistence;
 using Dumble.ChatService.Infrastructure.Persistence.Repositories;
 using Dumble.ChatService.Infrastructure.Presence;
@@ -38,6 +39,11 @@ public static class DependencyInjection
         // MassTransit + RabbitMQ (publish-only for ChatService)
         services.AddMassTransit(x =>
         {
+            // Account deletion arrives from the Java Auth service as raw JSON on the shared
+            // dumble.events topic exchange, so it is wired explicitly below and kept out of the
+            // convention-based ConfigureEndpoints.
+            x.AddConsumer<AccountDeletedConsumer>().ExcludeFromConfigureEndpoints();
+
             x.UsingRabbitMq((context, cfg) =>
             {
                 var rabbitHost = configuration["RabbitMQ:Host"];
@@ -53,6 +59,14 @@ public static class DependencyInjection
                 });
 
                 cfg.ConfigureEndpoints(context);
+
+                cfg.ReceiveEndpoint("chat-service.account-deleted", e =>
+                {
+                    e.UseRawJsonDeserializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "account.deleted"; });
+                    e.ConfigureConsumer<AccountDeletedConsumer>(context);
+                });
             });
         });
 

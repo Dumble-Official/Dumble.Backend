@@ -61,4 +61,15 @@ public class MessageRepository : IMessageRepository
 
         await _context.Messages.UpdateOneAsync(m => m.Id == messageId, update, cancellationToken: ct);
     }
+
+    public Task AnonymizeSenderAsync(string userId, CancellationToken ct = default)
+    {
+        // Right-to-be-forgotten: strip the sender's identity from every message they authored.
+        // Bodies are kept so the conversation stays readable for the other participants.
+        var update = Builders<Message>.Update
+            .Set(m => m.SenderName, "[deleted user]")
+            .Set(m => m.SenderProfileImage, (string?)null);
+
+        return _context.Messages.UpdateManyAsync(m => m.SenderId == userId, update, cancellationToken: ct);
+    }
 }
