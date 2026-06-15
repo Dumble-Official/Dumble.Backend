@@ -22,6 +22,13 @@ public class RefundController {
         this.idempotencyService = idempotencyService;
     }
 
+    @GetMapping("/refunds/{id}")
+    public ResponseEntity<RefundResponse> getRefund(@PathVariable java.util.UUID id) {
+        return refundService.getRefund(id)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     @PostMapping("/refunds")
     public ResponseEntity<RefundResponse> refund(@RequestHeader("Idempotency-Key") String idempotencyKey,
                                                  @Valid @RequestBody RefundRequest req,

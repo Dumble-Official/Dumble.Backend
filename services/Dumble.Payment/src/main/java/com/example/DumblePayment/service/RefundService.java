@@ -31,10 +31,18 @@ public class RefundService {
 
     private final RefundPersister persister;
     private final IPaymentProvider provider;
+    private final com.example.DumblePayment.repository.RefundRepository refundRepository;
 
-    public RefundService(RefundPersister persister, IPaymentProvider provider) {
+    public RefundService(RefundPersister persister, IPaymentProvider provider,
+                         com.example.DumblePayment.repository.RefundRepository refundRepository) {
         this.persister = persister;
         this.provider = provider;
+        this.refundRepository = refundRepository;
+    }
+
+    /** Read a refund by id — used to poll a refund whose ORIGINAL_METHOD leg resolves via webhook. */
+    public java.util.Optional<RefundResponse> getRefund(java.util.UUID id) {
+        return refundRepository.findById(id).map(RefundResponse::from);
     }
 
     public RefundResponse refund(RefundRequest req, String actor) {
