@@ -7,4 +7,7 @@ public interface IUserBehaviorRepository
     Task CreateAsync(UserBehavior behavior, CancellationToken ct = default);
     Task CreateBatchAsync(List<UserBehavior> behaviors, CancellationToken ct = default);
     Task<List<UserBehavior>> GetRecentAsync(string userId, int limit, CancellationToken ct = default);
+
+    /// <summary>Delete all behavior rows for a user — right-to-be-forgotten.</summary>
+    Task<int> DeleteAllForUserAsync(string userId, CancellationToken ct = default);
 }

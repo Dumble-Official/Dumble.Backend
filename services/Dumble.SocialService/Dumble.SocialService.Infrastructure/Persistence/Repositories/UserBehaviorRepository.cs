@@ -25,6 +25,9 @@ public class UserBehaviorRepository : IUserBehaviorRepository
         await _db.SaveChangesAsync(ct);
     }
 
+    public Task<int> DeleteAllForUserAsync(string userId, CancellationToken ct = default)
+        => _db.UserBehaviors.Where(b => b.UserId == userId).ExecuteDeleteAsync(ct);
+
     public async Task<List<UserBehavior>> GetRecentAsync(string userId, int limit, CancellationToken ct = default)
     {
         return await _db.UserBehaviors
