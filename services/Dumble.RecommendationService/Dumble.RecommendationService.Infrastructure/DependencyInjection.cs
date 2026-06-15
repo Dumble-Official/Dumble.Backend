@@ -53,6 +53,7 @@ public static class DependencyInjection
         services.AddSingleton<IExploreFeedCache, RedisExploreFeedCache>();
         services.AddSingleton<IFollowProjection, RedisFollowProjection>();
         services.AddSingleton<IUserProfileProjection, RedisUserProfileProjection>();
+        services.AddSingleton<IBannedUserStore, RedisBannedUserStore>();
 
         // Hydration: ranked ids -> renderable posts from PostService (forwarding the user JWT).
         services.AddHttpClient<IPostHydrator, PostServiceClient>(client =>

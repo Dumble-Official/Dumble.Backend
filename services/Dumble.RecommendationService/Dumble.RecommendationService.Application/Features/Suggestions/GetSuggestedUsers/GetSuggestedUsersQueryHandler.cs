@@ -22,17 +22,20 @@ public sealed class GetSuggestedUsersQueryHandler
     private readonly IRecombeeClient _recombee;
     private readonly IFollowProjection _follows;
     private readonly IUserProfileProjection _profiles;
+    private readonly IBannedUserStore _bannedUsers;
     private readonly ILogger<GetSuggestedUsersQueryHandler> _logger;
 
     public GetSuggestedUsersQueryHandler(
         IRecombeeClient recombee,
         IFollowProjection follows,
         IUserProfileProjection profiles,
+        IBannedUserStore bannedUsers,
         ILogger<GetSuggestedUsersQueryHandler> logger)
     {
         _recombee = recombee;
         _follows = follows;
         _profiles = profiles;
+        _bannedUsers = bannedUsers;
         _logger = logger;
     }
 
@@ -56,8 +59,14 @@ public sealed class GetSuggestedUsersQueryHandler
             return Empty();
 
         var followees = await _follows.GetFolloweesAsync(request.UserId, ct);
-        var shortlist = candidates
+        var eligible = candidates
             .Where(id => id != request.UserId && !followees.Contains(id))
+            .ToList();
+
+        // Never suggest a banned account — tapping Follow would hit a blocked user.
+        var banned = await _bannedUsers.GetBannedAsync(eligible, ct);
+        var shortlist = eligible
+            .Where(id => !banned.Contains(id))
             .Take(request.Limit)
             .ToList();
 
