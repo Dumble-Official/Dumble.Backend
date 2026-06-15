@@ -2,6 +2,7 @@ package com.dumble.service.gym.controller;
 
 import com.dumble.service.gym.domain.dto.AddGymStaffRequest;
 import com.dumble.service.gym.domain.dto.StaffResponse;
+import com.dumble.service.gym.domain.enumuration.StaffRole;
 import com.dumble.service.gym.service.GymStaffService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -35,5 +36,12 @@ public class GymStaffController {
     public ResponseEntity<Void> removeGymStaff(@PathVariable UUID gymId, @PathVariable UUID userId, @RequestHeader("Authorization") String token) {
         gymStaffService.removeGymStaff(gymId, userId, token);
         return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{userId}/role")
+    public ResponseEntity<StaffResponse> updateStaffRole(
+            @PathVariable UUID gymId, @PathVariable UUID userId,
+            @RequestParam StaffRole role, @RequestHeader("Authorization") String token) {
+        return ResponseEntity.ok(gymStaffService.updateStaffRole(gymId, userId, role, token));
     }
 }

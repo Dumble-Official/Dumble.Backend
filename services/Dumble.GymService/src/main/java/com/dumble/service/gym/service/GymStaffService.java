@@ -14,5 +14,7 @@ public interface GymStaffService {
 
     void removeGymStaff(UUID gymId, UUID userId, String token);
 
+    StaffResponse updateStaffRole(UUID gymId, UUID userId, StaffRole role, String token);
+
     boolean isUserHasRole(UUID gymId, UUID userId, StaffRole role);
 }

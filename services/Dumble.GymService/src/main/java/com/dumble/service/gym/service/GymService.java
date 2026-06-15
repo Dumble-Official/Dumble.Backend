@@ -19,4 +19,9 @@ public interface GymService {
     GymResponse getGymById(UUID gymId);
     Page<GymResponse> getAllGyms(String name, GenderType genderType, Boolean verified, GymStatus status,Pageable pageable);
     Page<GymResponse> findNearbyGyms(Double lat, Double lng, Double distance, Pageable pageable);
+
+    /** Admin/Moderator: verify a self-created gym (PENDING -> ACTIVE, verified=true). */
+    GymResponse verifyGym(UUID gymId, String token);
+    /** Admin/Moderator: move a gym between ACTIVE and SUSPENDED. */
+    GymResponse setGymStatus(UUID gymId, GymStatus status, String token);
 }

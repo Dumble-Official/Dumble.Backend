@@ -68,6 +68,30 @@ public class GymStaffServiceImpl implements GymStaffService {
     }
 
     @Override
+    @Transactional
+    public StaffResponse updateStaffRole(UUID gymId, UUID userId, StaffRole role, String token) {
+        UserResponse currentUser = tokenExtractor.extractUser(token);
+        Gym gym = gymRepository.findById(gymId)
+                .orElseThrow(() -> new ResourceNotFoundException("Gym not found with id: " + gymId));
+
+        if (!gym.getOwnerId().equals(currentUser.getId())) {
+            throw new UnauthorizedAccessException("Only the gym owner can change staff roles.");
+        }
+        if (role == StaffRole.GYM) {
+            throw new BadRequestException("Cannot reassign ownership via a role change.");
+        }
+
+        GymStaff staff = gymStaffRepository.findByGymIdAndUserId(gymId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Staff member not found in this gym."));
+        if (staff.getRole() == StaffRole.GYM) {
+            throw new BadRequestException("Cannot change the owner's role.");
+        }
+
+        staff.setRole(role);
+        return staffMapper.toResponse(gymStaffRepository.save(staff));
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<StaffResponse> getGymStaff(UUID gymId) {
         return gymStaffRepository.findByGymId(gymId).stream()
