@@ -1,0 +1,28 @@
+using FastEndpoints;
+using MediatR;
+using Dumble.PostService.Application.Features.Comments.Commands.SetCommentFlag;
+
+namespace Dumble.PostService.API.Endpoints.Comments;
+
+public class FlagCommentEndpoint : EndpointWithoutRequest
+{
+    private readonly IMediator _mediator;
+
+    public FlagCommentEndpoint(IMediator mediator)
+    {
+        _mediator = mediator;
+    }
+
+    public override void Configure()
+    {
+        Post("/api/comments/{commentId}/flag");
+        // Authenticated; the handler enforces Moderator/Admin.
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var commentId = Route<Guid>("commentId");
+        await _mediator.Send(new SetCommentFlagCommand(commentId, Flagged: true), ct);
+        await SendNoContentAsync(cancellation: ct);
+    }
+}
