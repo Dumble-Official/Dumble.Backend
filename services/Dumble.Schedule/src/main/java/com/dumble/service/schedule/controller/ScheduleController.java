@@ -62,6 +62,12 @@ public class ScheduleController {
         return scheduleService.setMealTarget(me().userId(), weekday, req);
     }
 
+    @PutMapping("/timezone")
+    public ResponseEntity<Void> setTimezone(@Valid @RequestBody SetTimezoneRequest req) {
+        scheduleService.setTimezone(me().userId(), req.timezone());
+        return ResponseEntity.noContent().build();
+    }
+
     private AuthPrincipal me() {
         return CurrentUser.require();
     }

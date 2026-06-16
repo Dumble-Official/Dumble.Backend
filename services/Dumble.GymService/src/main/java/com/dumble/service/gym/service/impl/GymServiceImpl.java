@@ -128,4 +128,32 @@ public class GymServiceImpl implements GymService {
     public Page<GymResponse> findNearbyGyms(Double lat, Double lng, Double distance, Pageable pageable) {
         return gymRepository.findNearbyGyms(lat, lng, distance, pageable).map(gymMapper::toDto);
     }
+
+    @Override
+    @Transactional
+    public GymResponse verifyGym(UUID gymId, String token) {
+        requireAdminOrModerator(token);
+        Gym gym = gymRepository.findById(gymId)
+                .orElseThrow(() -> new ResourceNotFoundException("Gym not found with id: " + gymId));
+        gym.setStatus(GymStatus.ACTIVE);
+        gym.setIsVerified(true);
+        return gymMapper.toDto(gymRepository.save(gym));
+    }
+
+    @Override
+    @Transactional
+    public GymResponse setGymStatus(UUID gymId, GymStatus status, String token) {
+        requireAdminOrModerator(token);
+        Gym gym = gymRepository.findById(gymId)
+                .orElseThrow(() -> new ResourceNotFoundException("Gym not found with id: " + gymId));
+        gym.setStatus(status);
+        return gymMapper.toDto(gymRepository.save(gym));
+    }
+
+    private void requireAdminOrModerator(String token) {
+        UserResponse user = tokenExtractor.extractUser(token);
+        if (!"ADMIN".equals(user.getUserType()) && !"MODERATOR".equals(user.getUserType())) {
+            throw new UnauthorizedAccessException("Only an admin or moderator can perform this action.");
+        }
+    }
 }

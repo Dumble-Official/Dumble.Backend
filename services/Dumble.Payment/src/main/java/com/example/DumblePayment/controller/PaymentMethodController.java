@@ -1,15 +1,16 @@
 package com.example.DumblePayment.controller;
 
+import com.example.DumblePayment.dto.PaymentMethodResponse;
 import com.example.DumblePayment.dto.TokenizeRequest;
 import com.example.DumblePayment.dto.TokenizeResponse;
 import com.example.DumblePayment.service.PaymentMethodService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/payment/payment-methods")
@@ -34,5 +35,18 @@ public class PaymentMethodController {
     @PostMapping("/tokenize")
     public ResponseEntity<TokenizeResponse> tokenize(@Valid @RequestBody TokenizeRequest req) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.register(req));
+    }
+
+    /** List a user's saved (non-deleted) payment methods. */
+    @GetMapping
+    public List<PaymentMethodResponse> list(@RequestParam UUID userId) {
+        return service.listActive(userId);
+    }
+
+    /** Soft-delete a saved payment method. */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
     }
 }

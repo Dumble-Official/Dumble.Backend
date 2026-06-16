@@ -71,4 +71,7 @@ public class NotificationRepository : INotificationRepository
     {
         await _context.Notifications.DeleteOneAsync(n => n.Id == id, ct);
     }
+
+    public Task DeleteAllForRecipientAsync(string recipientId, CancellationToken ct)
+        => _context.Notifications.DeleteManyAsync(n => n.RecipientId == recipientId, ct);
 }

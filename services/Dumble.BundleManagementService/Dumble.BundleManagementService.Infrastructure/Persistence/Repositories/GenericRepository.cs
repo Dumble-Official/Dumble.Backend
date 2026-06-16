@@ -18,6 +18,12 @@ internal sealed class GenericRepository<TEntity,TKey>(BundleManagementDbContext 
         return await _dbSet.ToListAsync();
     }
 
+    public async Task<IReadOnlyList<TEntity>> ListAsync(
+        Dumble.BundleManagementService.Domain.Specifications.ISpecification<TEntity, TKey> spec)
+    {
+        return await _dbSet.AsNoTracking().Evaluate(spec).ToListAsync();
+    }
+
     public async Task<int> Count(Expression<Func<TEntity, bool>> criteria)
     {
         return await _dbSet.CountAsync(criteria);

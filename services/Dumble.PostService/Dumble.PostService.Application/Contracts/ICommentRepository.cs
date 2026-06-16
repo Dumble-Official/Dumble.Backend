@@ -15,4 +15,7 @@ public interface ICommentRepository
     Task IncrementReactionsAsync(Guid commentId, CancellationToken ct = default);
     Task DecrementReactionsAsync(Guid commentId, CancellationToken ct = default);
     Task<Dictionary<Guid, int>> GetRepliesCountForManyAsync(IReadOnlyList<Guid> parentIds, CancellationToken ct = default);
+
+    /// <summary>Soft-delete every active comment a user authored — right-to-be-forgotten. Returns the count.</summary>
+    Task<int> SoftDeleteAllByAuthorAsync(string authorId, CancellationToken ct = default);
 }

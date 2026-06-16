@@ -95,4 +95,9 @@ public class CommentRepository : ICommentRepository
 
         return counts.ToDictionary(x => x.ParentId, x => x.Count);
     }
+
+    public Task<int> SoftDeleteAllByAuthorAsync(string authorId, CancellationToken ct = default) =>
+        _context.Comments
+            .Where(c => c.AuthorId == authorId && c.Status != CommentStatus.Deleted)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.Status, CommentStatus.Deleted), ct);
 }

@@ -10,4 +10,7 @@ public interface IReactionRepository
     Task<Reaction> CreateAsync(Reaction reaction, CancellationToken ct = default);
     Task UpdateAsync(Reaction reaction, CancellationToken ct = default);
     Task DeleteAsync(Reaction reaction, CancellationToken ct = default);
+
+    /// <summary>Delete every post reaction a user made — right-to-be-forgotten. Returns the count.</summary>
+    Task<int> DeleteAllByUserAsync(string userId, CancellationToken ct = default);
 }

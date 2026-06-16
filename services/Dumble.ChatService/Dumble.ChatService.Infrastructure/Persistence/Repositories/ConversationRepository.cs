@@ -71,6 +71,18 @@ public class ConversationRepository : IConversationRepository
         await _context.Conversations.UpdateOneAsync(c => c.Id == conversationId, update, cancellationToken: ct);
     }
 
+    public Task RemoveParticipantEverywhereAsync(string userId, CancellationToken ct = default)
+    {
+        // Right-to-be-forgotten: drop the user from every conversation's participant list so they
+        // no longer appear in any member roster.
+        var update = Builders<Conversation>.Update
+            .PullFilter(c => c.Participants, p => p.UserId == userId)
+            .Set(c => c.UpdatedAt, DateTime.UtcNow);
+
+        return _context.Conversations.UpdateManyAsync(
+            c => c.Participants.Any(p => p.UserId == userId), update, cancellationToken: ct);
+    }
+
     public async Task RemoveParticipantAsync(string conversationId, string userId, CancellationToken ct = default)
     {
         var update = Builders<Conversation>.Update

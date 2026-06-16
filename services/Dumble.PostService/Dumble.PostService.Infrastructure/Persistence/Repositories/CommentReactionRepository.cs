@@ -19,6 +19,16 @@ public class CommentReactionRepository : ICommentReactionRepository
             .FirstOrDefaultAsync(cr => cr.CommentId == commentId && cr.UserId == userId, ct);
     }
 
+    public async Task<List<CommentReaction>> GetByCommentIdAsync(Guid commentId, int offset, int limit, CancellationToken ct)
+    {
+        return await _context.CommentReactions
+            .Where(cr => cr.CommentId == commentId)
+            .OrderByDescending(cr => cr.CreatedAt)
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync(ct);
+    }
+
     public async Task<CommentReaction> CreateAsync(CommentReaction reaction, CancellationToken ct)
     {
         _context.CommentReactions.Add(reaction);
@@ -37,4 +47,7 @@ public class CommentReactionRepository : ICommentReactionRepository
         _context.CommentReactions.Remove(reaction);
         await _context.SaveChangesAsync(ct);
     }
+
+    public Task<int> DeleteAllByUserAsync(string userId, CancellationToken ct = default) =>
+        _context.CommentReactions.Where(r => r.UserId == userId).ExecuteDeleteAsync(ct);
 }

@@ -67,6 +67,12 @@ public class SellerLifecycleService {
                 .orElse(true);
     }
 
+    /** The caller's own lifecycle (status, frozen/ban reasons, windows). Defaults to ACTIVE. */
+    @Transactional
+    public SellerLifecycle getLifecycle(UUID sellerId) {
+        return loadOrCreate(sellerId, Instant.now());
+    }
+
     @Transactional
     public SellerLifecycle freeze(UUID sellerId, String reason) {
         Instant now = Instant.now();

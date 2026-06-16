@@ -9,5 +9,6 @@ public sealed record SendMessageCommand(
     string SenderName,
     string? SenderProfileImage,
     string Content,
-    string? ReplyToMessageId
+    string? ReplyToMessageId,
+    string? ImageUrl = null
 ) : IRequest<MessageResponse>;

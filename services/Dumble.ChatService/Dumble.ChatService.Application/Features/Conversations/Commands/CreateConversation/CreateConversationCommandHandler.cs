@@ -71,7 +71,7 @@ public class CreateConversationCommandHandler(
             conversation.Name,
             conversation.ImageUrl,
             conversation.Participants.Select(p => new ParticipantResponse(
-                p.UserId, p.DisplayName, p.ProfileImage, p.Role, p.JoinedAt
+                p.UserId, p.DisplayName, p.ProfileImage, p.Role, p.JoinedAt, p.LastReadMessageId
             )).ToList(),
             conversation.LastMessage is not null
                 ? new LastMessageResponse(

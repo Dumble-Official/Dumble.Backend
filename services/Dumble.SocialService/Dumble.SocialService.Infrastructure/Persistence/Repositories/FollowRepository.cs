@@ -33,6 +33,14 @@ public class FollowRepository : IFollowRepository
         return rows > 0;
     }
 
+    public Task<int> DeleteAllForUserAsync(string userId, CancellationToken ct = default)
+    {
+        // Both directions: edges the user created and edges pointing at them.
+        return _db.Follows
+            .Where(f => f.FollowerId == userId || f.FolloweeId == userId)
+            .ExecuteDeleteAsync(ct);
+    }
+
     public async Task<List<Follow>> GetFollowersAsync(string userId, DateTime? cursor, int limit, CancellationToken ct = default)
     {
         IQueryable<Follow> query = _db.Follows.Where(f => f.FolloweeId == userId);

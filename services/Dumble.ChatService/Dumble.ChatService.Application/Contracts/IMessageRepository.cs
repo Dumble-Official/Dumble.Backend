@@ -9,4 +9,7 @@ public interface IMessageRepository
     Task CreateAsync(Message message, CancellationToken ct = default);
     Task SoftDeleteAsync(string messageId, CancellationToken ct = default);
     Task EditAsync(string messageId, string newContent, CancellationToken ct = default);
+
+    /// <summary>Strip the sender identity from every message a user authored — right-to-be-forgotten.</summary>
+    Task AnonymizeSenderAsync(string userId, CancellationToken ct = default);
 }

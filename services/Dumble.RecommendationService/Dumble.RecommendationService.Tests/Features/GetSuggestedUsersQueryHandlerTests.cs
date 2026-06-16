@@ -10,9 +10,23 @@ public class GetSuggestedUsersQueryHandlerTests
     private readonly FakeRecombeeClient _recombee = new();
     private readonly FakeFollowProjection _follows = new();
     private readonly FakeUserProfileProjection _profiles = new();
+    private readonly FakeBannedUserStore _banned = new();
 
     private GetSuggestedUsersQueryHandler Handler() =>
-        new(_recombee, _follows, _profiles, NullLogger<GetSuggestedUsersQueryHandler>.Instance);
+        new(_recombee, _follows, _profiles, _banned, NullLogger<GetSuggestedUsersQueryHandler>.Instance);
+
+    [Fact]
+    public async Task Excludes_banned_users()
+    {
+        _recombee.RecommendUsersResult = new[] { "u2", "u3" };
+        _profiles.Seed("u2", "User Two");
+        _profiles.Seed("u3", "User Three");
+        _banned.Banned.Add("u2");
+
+        var result = await Handler().Handle(new GetSuggestedUsersQuery("me", 10), CancellationToken.None);
+
+        Assert.Equal(new[] { "u3" }, result.Items.Select(u => u.UserId));
+    }
 
     [Fact]
     public async Task Excludes_self_and_already_followed_users()

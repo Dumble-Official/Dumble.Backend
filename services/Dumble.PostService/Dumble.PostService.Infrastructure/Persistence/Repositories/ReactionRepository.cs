@@ -56,4 +56,7 @@ public class ReactionRepository : IReactionRepository
         _context.Reactions.Remove(reaction);
         await _context.SaveChangesAsync(ct);
     }
+
+    public Task<int> DeleteAllByUserAsync(string userId, CancellationToken ct = default) =>
+        _context.Reactions.Where(r => r.UserId == userId).ExecuteDeleteAsync(ct);
 }

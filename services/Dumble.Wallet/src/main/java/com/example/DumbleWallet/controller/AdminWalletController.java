@@ -41,6 +41,14 @@ public class AdminWalletController {
         this.auditLogger = auditLogger;
     }
 
+    @GetMapping("/withdrawals")
+    public java.util.List<com.example.DumbleWallet.dto.WithdrawalResponse> listWithdrawals(
+            @RequestParam(required = false) com.example.DumbleWallet.domain.enums.WithdrawalStatus status,
+            @RequestParam(required = false) UUID userId) {
+        // W2 — admin forensic list of withdrawals by status and/or user.
+        return adminWalletService.listWithdrawals(status, userId);
+    }
+
     @GetMapping("/{userId}")
     public WalletSummaryResponse get(@AuthenticationPrincipal CurrentUser admin,
                                      @PathVariable UUID userId) {

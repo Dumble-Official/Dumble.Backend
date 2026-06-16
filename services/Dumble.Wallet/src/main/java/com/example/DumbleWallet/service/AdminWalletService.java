@@ -4,18 +4,23 @@ import com.example.DumbleWallet.domain.Wallet;
 import com.example.DumbleWallet.domain.WalletEntry;
 import com.example.DumbleWallet.domain.enums.EntrySource;
 import com.example.DumbleWallet.domain.enums.EntryType;
+import com.example.DumbleWallet.domain.WithdrawalRequest;
+import com.example.DumbleWallet.domain.enums.WithdrawalStatus;
 import com.example.DumbleWallet.dto.AdminAdjustmentRequest;
 import com.example.DumbleWallet.dto.WalletWriteResponse;
+import com.example.DumbleWallet.dto.WithdrawalResponse;
 import com.example.DumbleWallet.event.OutboxWriter;
 import com.example.DumbleWallet.exception.BusinessRuleViolationException;
 import com.example.DumbleWallet.exception.InsufficientBalanceException;
 import com.example.DumbleWallet.exception.ResourceNotFoundException;
 import com.example.DumbleWallet.repository.WalletRepository;
+import com.example.DumbleWallet.repository.WithdrawalRequestRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -31,18 +36,38 @@ public class AdminWalletService {
     private final WalletService walletService;
     private final OutboxWriter outboxWriter;
     private final AuditLogger auditLogger;
+    private final WithdrawalRequestRepository withdrawalRepository;
     private final String currency;
 
     public AdminWalletService(WalletRepository walletRepository,
                               WalletService walletService,
                               OutboxWriter outboxWriter,
                               AuditLogger auditLogger,
+                              WithdrawalRequestRepository withdrawalRepository,
                               @Value("${wallet.currency:EGP}") String currency) {
         this.walletRepository = walletRepository;
         this.walletService = walletService;
         this.outboxWriter = outboxWriter;
         this.auditLogger = auditLogger;
+        this.withdrawalRepository = withdrawalRepository;
         this.currency = currency;
+    }
+
+    /** Admin forensic read: withdrawals filtered by status and/or user. */
+    @Transactional(readOnly = true)
+    public List<WithdrawalResponse> listWithdrawals(WithdrawalStatus status, UUID userId) {
+        List<WithdrawalRequest> rows;
+        if (userId != null) {
+            rows = withdrawalRepository.findByWalletUserIdOrderByCreatedAtDesc(userId);
+            if (status != null) {
+                rows = rows.stream().filter(w -> w.getStatus() == status).toList();
+            }
+        } else if (status != null) {
+            rows = withdrawalRepository.findByStatus(status);
+        } else {
+            rows = withdrawalRepository.findAll();
+        }
+        return rows.stream().map(WithdrawalResponse::from).toList();
     }
 
     @Transactional

@@ -16,6 +16,7 @@ public class RoleRequestResponse {
     private String certificateUrl;
     private String applicantNote;
     private String adminMessage;
+    private UUID reviewedBy;
     private Instant createdAt;
     private Instant updatedAt;
 
@@ -28,10 +29,14 @@ public class RoleRequestResponse {
         dto.certificateUrl = r.getCertificateUrl();
         dto.applicantNote = r.getApplicantNote();
         dto.adminMessage = r.getAdminMessage();
+        dto.reviewedBy = r.getReviewedBy();
         dto.createdAt = r.getCreatedAt();
         dto.updatedAt = r.getUpdatedAt();
         return dto;
     }
+
+    public UUID getReviewedBy() { return reviewedBy; }
+    public void setReviewedBy(UUID reviewedBy) { this.reviewedBy = reviewedBy; }
 
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }

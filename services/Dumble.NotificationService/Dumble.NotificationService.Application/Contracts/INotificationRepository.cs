@@ -11,4 +11,7 @@ public interface INotificationRepository
     Task MarkAsReadAsync(string id, CancellationToken ct = default);
     Task MarkAllAsReadAsync(string recipientId, CancellationToken ct = default);
     Task DeleteAsync(string id, CancellationToken ct = default);
+
+    /// <summary>Delete every notification for a recipient — right-to-be-forgotten.</summary>
+    Task DeleteAllForRecipientAsync(string recipientId, CancellationToken ct = default);
 }

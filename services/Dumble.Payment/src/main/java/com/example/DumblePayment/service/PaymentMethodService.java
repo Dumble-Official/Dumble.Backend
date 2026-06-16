@@ -2,6 +2,7 @@ package com.example.DumblePayment.service;
 
 import com.example.DumblePayment.domain.PaymentMethodToken;
 import com.example.DumblePayment.domain.enums.PaymentMethodKind;
+import com.example.DumblePayment.dto.PaymentMethodResponse;
 import com.example.DumblePayment.dto.TokenizeRequest;
 import com.example.DumblePayment.dto.TokenizeResponse;
 import com.example.DumblePayment.exception.BusinessRuleViolationException;
@@ -10,6 +11,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 
 /**
  * Decision 10.1 — Payment never sees raw card numbers; the frontend
@@ -23,6 +26,23 @@ public class PaymentMethodService {
 
     public PaymentMethodService(PaymentMethodTokenRepository repository) {
         this.repository = repository;
+    }
+
+    /** A user's active (non-deleted) saved payment methods. */
+    @Transactional(readOnly = true)
+    public List<PaymentMethodResponse> listActive(UUID userId) {
+        return repository.findActiveByUser(userId).stream().map(PaymentMethodResponse::from).toList();
+    }
+
+    /** Soft-delete a saved payment method by stamping deletedAt. */
+    @Transactional
+    public void delete(UUID id) {
+        repository.findById(id).ifPresent(t -> {
+            if (t.getDeletedAt() == null) {
+                t.setDeletedAt(Instant.now());
+                repository.save(t);
+            }
+        });
     }
 
     @Transactional

@@ -178,6 +178,8 @@ public sealed class RecombeeClientAdapter : IRecombeeClient
                 timestamp: timestamp, cascadeCreate: true),
             OutboxOperation.DeleteRating => new DeleteRating(i.UserId, i.ItemId,
                 timestamp: timestamp),
+            OutboxOperation.DeleteBookmark => new DeleteBookmark(i.UserId, i.ItemId,
+                timestamp: timestamp),
             _ => throw new ArgumentOutOfRangeException(nameof(i), i.Operation, "Unmapped outbox operation")
         };
     }
