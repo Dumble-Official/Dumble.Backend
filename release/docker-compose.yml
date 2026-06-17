@@ -291,15 +291,13 @@ services:
     environment:
       ASPNETCORE_URLS: http://+:5021
       ConnectionStrings__PostgreSql: Host=social-db;Port=5432;Database=dumble_social;Username=dumble;Password=${SOCIAL_DB_PASSWORD:?SOCIAL_DB_PASSWORD must be set in release/.env}
-      ConnectionStrings__Redis: redis:6379
-      Services__PostService: http://post-service:5134
+      # Home feed proxies to the recommendation service (Recombee-ranked); social no longer ranks.
+      Services__RecommendationApi: http://recommendation-service:5024
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
       RabbitMQ__Host: rabbitmq
       ASPNETCORE_ENVIRONMENT: Production
     depends_on:
       social-db:
-        condition: service_healthy
-      redis:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy

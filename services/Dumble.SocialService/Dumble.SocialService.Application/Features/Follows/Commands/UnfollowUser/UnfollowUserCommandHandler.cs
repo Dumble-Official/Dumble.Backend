@@ -8,16 +8,13 @@ namespace Dumble.SocialService.Application.Features.Follows.Commands.UnfollowUse
 public class UnfollowUserCommandHandler : IRequestHandler<UnfollowUserCommand>
 {
     private readonly IFollowRepository _followRepository;
-    private readonly IFeedCacheService _feedCache;
     private readonly IPublishEndpoint _publishEndpoint;
 
     public UnfollowUserCommandHandler(
         IFollowRepository followRepository,
-        IFeedCacheService feedCache,
         IPublishEndpoint publishEndpoint)
     {
         _followRepository = followRepository;
-        _feedCache = feedCache;
         _publishEndpoint = publishEndpoint;
     }
 
@@ -26,11 +23,8 @@ public class UnfollowUserCommandHandler : IRequestHandler<UnfollowUserCommand>
         var deleted = await _followRepository.DeleteAsync(request.FollowerId, request.FolloweeId, ct);
         if (deleted)
         {
-            // Invalidate the follower's cached feed so the followee's posts
-            // are removed on next read. Without this they linger for up to
-            // the cache TTL.
-            await _feedCache.InvalidateFeedAsync(request.FollowerId, ct);
-
+            // The recommendation service consumes UserUnfollowedEvent to update its follow
+            // projection, dropping the unfollowed author from the Recombee-ranked home feed.
             await _publishEndpoint.Publish(new UserUnfollowedEvent(request.FollowerId, request.FolloweeId), ct);
         }
     }
