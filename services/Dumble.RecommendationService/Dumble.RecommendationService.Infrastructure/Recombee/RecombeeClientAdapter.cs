@@ -134,6 +134,21 @@ public sealed class RecombeeClientAdapter : IRecombeeClient
         return response.Recomms.Select(r => r.Id).ToList();
     }
 
+    public async Task<IReadOnlyList<string>> RecommendFollowedItemsAsync(
+        string userId, int count, IReadOnlyCollection<string> authorIds, CancellationToken ct = default)
+    {
+        if (authorIds.Count == 0)
+            return Array.Empty<string>();
+
+        // ReQL filter: keep only items whose 'author' property is in the followee set, so Recombee
+        // ranks the home feed (people you follow) with the same per-user model as explore.
+        var set = string.Join(",", authorIds.Select(a => "\"" + a.Replace("\"", "") + "\""));
+        var filter = "'author' in {" + set + "}";
+
+        var response = await _client.SendAsync(new RecommendItemsToUser(userId, count, filter));
+        return response.Recomms.Select(r => r.Id).ToList();
+    }
+
     public async Task<IReadOnlyList<string>> RecommendUsersToUserAsync(string userId, int count, CancellationToken ct = default)
     {
         var response = await _client.SendAsync(new RecommendUsersToUser(userId, count));

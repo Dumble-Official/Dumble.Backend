@@ -44,6 +44,14 @@ public interface IRecombeeClient
     /// <summary>Personalized post recommendations for a user — returns ranked item ids only.</summary>
     Task<IReadOnlyList<string>> RecommendItemsToUserAsync(string userId, int count, CancellationToken ct = default);
 
+    /// <summary>
+    /// Personalized recommendations restricted to posts authored by the given users — the home
+    /// feed (ranked posts from people the caller follows). Same engine as the explore feed,
+    /// filtered to the followee set. Returns ranked item ids only.
+    /// </summary>
+    Task<IReadOnlyList<string>> RecommendFollowedItemsAsync(
+        string userId, int count, IReadOnlyCollection<string> authorIds, CancellationToken ct = default);
+
     /// <summary>Recommend users to follow — returns ranked user ids, by interaction similarity.</summary>
     Task<IReadOnlyList<string>> RecommendUsersToUserAsync(string userId, int count, CancellationToken ct = default);
 }
