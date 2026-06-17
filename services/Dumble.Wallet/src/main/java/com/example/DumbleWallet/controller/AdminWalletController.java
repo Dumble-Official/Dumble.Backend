@@ -49,6 +49,15 @@ public class AdminWalletController {
         return adminWalletService.listWithdrawals(status, userId);
     }
 
+    @PostMapping("/withdrawals/{id}/cancel")
+    public com.example.DumbleWallet.dto.WithdrawalResponse cancelWithdrawal(
+            @AuthenticationPrincipal CurrentUser admin,
+            @PathVariable UUID id) {
+        // W1 — admin force-cancel, incl. SUBMITTING/SENT (asks Payment to abort
+        // the payout, then reverses the wallet movement only on Payment's ack).
+        return adminWalletService.cancelWithdrawal(id, admin == null ? null : admin.getId());
+    }
+
     @GetMapping("/{userId}")
     public WalletSummaryResponse get(@AuthenticationPrincipal CurrentUser admin,
                                      @PathVariable UUID userId) {

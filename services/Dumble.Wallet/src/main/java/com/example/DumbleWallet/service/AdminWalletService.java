@@ -1,5 +1,6 @@
 package com.example.DumbleWallet.service;
 
+import com.example.DumbleWallet.client.PaymentServiceClient;
 import com.example.DumbleWallet.domain.Wallet;
 import com.example.DumbleWallet.domain.WalletEntry;
 import com.example.DumbleWallet.domain.enums.EntrySource;
@@ -37,6 +38,8 @@ public class AdminWalletService {
     private final OutboxWriter outboxWriter;
     private final AuditLogger auditLogger;
     private final WithdrawalRequestRepository withdrawalRepository;
+    private final WithdrawalPersister withdrawalPersister;
+    private final PaymentServiceClient paymentServiceClient;
     private final String currency;
 
     public AdminWalletService(WalletRepository walletRepository,
@@ -44,12 +47,16 @@ public class AdminWalletService {
                               OutboxWriter outboxWriter,
                               AuditLogger auditLogger,
                               WithdrawalRequestRepository withdrawalRepository,
+                              WithdrawalPersister withdrawalPersister,
+                              PaymentServiceClient paymentServiceClient,
                               @Value("${wallet.currency:EGP}") String currency) {
         this.walletRepository = walletRepository;
         this.walletService = walletService;
         this.outboxWriter = outboxWriter;
         this.auditLogger = auditLogger;
         this.withdrawalRepository = withdrawalRepository;
+        this.withdrawalPersister = withdrawalPersister;
+        this.paymentServiceClient = paymentServiceClient;
         this.currency = currency;
     }
 
@@ -68,6 +75,46 @@ public class AdminWalletService {
             rows = withdrawalRepository.findAll();
         }
         return rows.stream().map(WithdrawalResponse::from).toList();
+    }
+
+    /**
+     * W1 — admin force-cancel of a withdrawal, including ones already handed to
+     * Payment (SUBMITTING/SENT). Deliberately NOT {@code @Transactional}: the
+     * Payment HTTP round-trip must sit outside any JPA tx, and the wallet
+     * reversal is only applied AFTER Payment acks the cancel, so we never
+     * credit the user for a payout that actually went out.
+     */
+    public WithdrawalResponse cancelWithdrawal(UUID withdrawalId, UUID adminId) {
+        WithdrawalRequest w = withdrawalRepository.findById(withdrawalId)
+                .orElseThrow(() -> new ResourceNotFoundException("Withdrawal not found"));
+        WithdrawalStatus status = w.getStatus();
+        switch (status) {
+            case PENDING -> {
+                // Not yet handed to Payment — reverse locally and mark CANCELLED.
+                return WithdrawalResponse.from(withdrawalPersister.cancel(w.getWalletUserId(), withdrawalId));
+            }
+            case SUBMITTING, SENT -> {
+                String paymentRef = w.getPaymentRef();
+                if (paymentRef == null || paymentRef.isBlank()) {
+                    // Mid-submission with no provider reference yet — we can't tell
+                    // Payment which payout to abort, so reversing could double-pay.
+                    // Leave it for the reaper / a retry once it settles.
+                    throw new BusinessRuleViolationException(
+                            "Withdrawal is mid-submission without a payment reference; cannot safely cancel yet");
+                }
+                // Ask Payment to abort the Paymob payout. If Payment refuses
+                // (e.g. already paid out), this throws and we do NOT reverse.
+                paymentServiceClient.cancelWithdrawal(paymentRef);
+                // Payment acked the cancel — reverse the wallet movement + mark terminal.
+                WithdrawalRequest reversed = withdrawalPersister.reverseAndFail(withdrawalId, "admin_cancelled");
+                auditLogger.log(w.getWalletUserId(), "WithdrawalAdminCancelled", "ADMIN",
+                        adminId == null ? "" : adminId.toString(), "admin_force_cancel",
+                        Map.of("withdrawalId", withdrawalId, "paymentRef", paymentRef));
+                return WithdrawalResponse.from(reversed);
+            }
+            default -> throw new BusinessRuleViolationException(
+                    "Cannot cancel a withdrawal in status " + status);
+        }
     }
 
     @Transactional
