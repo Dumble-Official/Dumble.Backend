@@ -107,6 +107,21 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+  
+  session-db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: session_service_db
+      MYSQL_ROOT_PASSWORD: Xz9Wv2KpQmLt51NbRt4M92Yx
+    expose:
+      - "3306"
+    volumes:
+      - sessiondata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   wallet-db:
     image: postgres:16-alpine
@@ -385,6 +400,28 @@ services:
       gym-db:
         condition: service_healthy
 
+  session-service:
+    build:
+      context: ../services/Dumble.Session
+      dockerfile: Dockerfile
+    ports:
+      - "8182:8182"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://session-db:3306/session_service_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: Xz9Wv2KpQmLt51NbRt4M92Yx
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      SERVICES_AUTH_URL: http://authentication:8081
+      PAYMENT_SERVICE_URL: http://payment:8183/api
+      SERVICE_JWT_SIGNING_KEY: ${SERVICE_JWT_SIGNING_KEY:?SERVICE_JWT_SIGNING_KEY must be set in release/.env}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
+    depends_on:
+      session-db:
+        condition: service_healthy
+      payment:
+        condition: service_started
+
   payment:
     build:
       context: ../services/Dumble.Payment
@@ -568,6 +605,7 @@ volumes:
   postdata:
   mongodata:
   gymdata:
+  sessiondata:
   bundledata:
   walletdata:
   paymentdata:
