@@ -6,6 +6,5 @@ public enum BehaviorEventType
     TimeSpent,
     Click,
     Reaction,
-    Comment,
-    Share
+    Comment
 }

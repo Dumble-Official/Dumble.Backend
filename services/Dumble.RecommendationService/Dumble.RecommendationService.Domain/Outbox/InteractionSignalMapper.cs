@@ -23,7 +23,7 @@ public static class InteractionSignalMapper
         InteractionSignal.ReactionRemoved
             => new InteractionMapping(OutboxOperation.DeleteRating, RatingValue: null),
 
-        InteractionSignal.Comment or InteractionSignal.Share
+        InteractionSignal.Comment
             => new InteractionMapping(OutboxOperation.AddBookmark, RatingValue: null),
 
         // A deleted comment reverses the bookmark its creation recorded.
