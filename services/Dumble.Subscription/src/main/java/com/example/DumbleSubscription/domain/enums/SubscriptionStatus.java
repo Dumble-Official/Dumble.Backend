@@ -1,6 +1,5 @@
 package com.example.DumbleSubscription.domain.enums;
 
-import java.util.EnumSet;
 import java.util.Set;
 
 public enum SubscriptionStatus {
@@ -13,7 +12,7 @@ public enum SubscriptionStatus {
 
     /** Statuses in which a bundle subscriber still has access (paid through the
      *  current period): ACTIVE, or CANCELLED (cancel-at-period-end). */
-    public static final Set<SubscriptionStatus> ENTITLED = EnumSet.of(ACTIVE, CANCELLED);
+    public static final Set<SubscriptionStatus> ENTITLED = Set.of(ACTIVE, CANCELLED);
 
     public boolean isEntitled() {
         return this == ACTIVE || this == CANCELLED;

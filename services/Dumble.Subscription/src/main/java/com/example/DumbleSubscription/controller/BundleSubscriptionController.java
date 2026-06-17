@@ -82,8 +82,11 @@ public class BundleSubscriptionController {
             throw new ResourceNotFoundException("Subscription not found");
         }
         // Cancel-at-period-end (Decision 6.1): keep access until endsAt, stop renewing.
-        // CANCELLED is the interim state — still entitled until ExpirationJob marks it EXPIRED.
-        sub.setStatus(SubscriptionStatus.CANCELLED);
+        // Only an ACTIVE sub enters the CANCELLED interim state — never resurrect an
+        // EXPIRED/REFUNDED/PENDING sub into an entitled (isEntitled) state.
+        if (sub.getStatus() == SubscriptionStatus.ACTIVE) {
+            sub.setStatus(SubscriptionStatus.CANCELLED);
+        }
         sub.setAutoRenew(false);
         sub.setCancelledAt(Instant.now());
         sub.setUpdatedAt(Instant.now());
