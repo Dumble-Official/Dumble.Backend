@@ -71,7 +71,7 @@ public class EarningsController {
     @GetMapping("/me/subscribers/stats")
     public Map<String, Object> subscriberStats(@AuthenticationPrincipal CurrentUser user) {
         List<BundleSubscription> active = bundleSubscriptionRepository
-                .findBySellerIdAndStatus(user.getId(), SubscriptionStatus.ACTIVE);
+                .findBySellerIdAndStatusIn(user.getId(), SubscriptionStatus.ENTITLED);
         Instant cutoff = Instant.now().minus(30, ChronoUnit.DAYS);
         long newThisMonth = active.stream().filter(s -> s.getStartedAt().isAfter(cutoff)).count();
 
