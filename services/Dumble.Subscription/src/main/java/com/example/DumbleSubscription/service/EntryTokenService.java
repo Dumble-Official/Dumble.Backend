@@ -78,7 +78,7 @@ public class EntryTokenService {
         if (sub.getSellerType() != SellerType.GYM) {
             throw new BusinessRuleViolationException("Entry tokens are issued only for gym bundles");
         }
-        if (sub.getStatus() != SubscriptionStatus.ACTIVE) {
+        if (!sub.getStatus().isEntitled()) {
             throw new BusinessRuleViolationException("Subscription is not active");
         }
         // Block token generation when the gym is suspended/banned — saves the
@@ -149,7 +149,7 @@ public class EntryTokenService {
             return logAndReturn(token.getId(), req.getGymId(), token.getParticipantId(), staffUserId,
                     EntryResult.DENIED, EntryDenialReason.EXPIRED, sub);
         }
-        if (sub.getStatus() != SubscriptionStatus.ACTIVE) {
+        if (!sub.getStatus().isEntitled()) {
             EntryDenialReason reason = sub.getStatus() == SubscriptionStatus.REFUNDED
                     ? EntryDenialReason.BANNED
                     : EntryDenialReason.SUSPENDED;

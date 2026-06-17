@@ -180,7 +180,7 @@ public class SellerLifecycleService {
         Instant now = Instant.now();
         SellerLifecycle lifecycle = loadOrCreate(sellerId, now);
         // Decision 18.1 — block close if any active subs.
-        long active = bundleSubscriptionRepository.findBySellerIdAndStatus(sellerId, SubscriptionStatus.ACTIVE).size();
+        long active = bundleSubscriptionRepository.findBySellerIdAndStatusIn(sellerId, SubscriptionStatus.ENTITLED).size();
         if (active > 0) {
             throw new BusinessRuleViolationException(
                     "You have active subscriptions — contact support to wind down");
@@ -223,7 +223,7 @@ public class SellerLifecycleService {
         // WINDING_DOWN → CLOSED_ESCROW_PENDING / CLOSED when no active subs left.
         for (SellerLifecycle lifecycle : repository.findByStatus(SellerStatus.WINDING_DOWN)) {
             long active = bundleSubscriptionRepository
-                    .findBySellerIdAndStatus(lifecycle.getSellerId(), SubscriptionStatus.ACTIVE).size();
+                    .findBySellerIdAndStatusIn(lifecycle.getSellerId(), SubscriptionStatus.ENTITLED).size();
             if (active > 0) continue;
 
             long pending = escrowEntryRepository.countBySellerIdAndStatusIn(

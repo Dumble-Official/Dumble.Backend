@@ -2,13 +2,16 @@ package com.example.DumblePayment.scheduler;
 
 import com.example.DumblePayment.domain.Charge;
 import com.example.DumblePayment.domain.Payout;
+import com.example.DumblePayment.domain.Refund;
 import com.example.DumblePayment.domain.WebhookEvent;
 import com.example.DumblePayment.domain.enums.WebhookProcessingStatus;
 import com.example.DumblePayment.repository.ChargeRepository;
 import com.example.DumblePayment.repository.PayoutRepository;
+import com.example.DumblePayment.repository.RefundRepository;
 import com.example.DumblePayment.repository.WebhookEventRepository;
 import com.example.DumblePayment.service.ChargePersister;
 import com.example.DumblePayment.service.PayoutPersister;
+import com.example.DumblePayment.service.RefundPersister;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -45,23 +48,29 @@ public class WebhookProcessingJob {
     private final WebhookEventRepository webhookEventRepository;
     private final ChargePersister chargePersister;
     private final PayoutPersister payoutPersister;
+    private final RefundPersister refundPersister;
     private final ChargeRepository chargeRepository;
     private final PayoutRepository payoutRepository;
+    private final RefundRepository refundRepository;
     private final ObjectMapper objectMapper;
     private final int maxAttempts;
 
     public WebhookProcessingJob(WebhookEventRepository webhookEventRepository,
                                 ChargePersister chargePersister,
                                 PayoutPersister payoutPersister,
+                                RefundPersister refundPersister,
                                 ChargeRepository chargeRepository,
                                 PayoutRepository payoutRepository,
+                                RefundRepository refundRepository,
                                 ObjectMapper objectMapper,
                                 @Value("${payment.webhook.max-attempts:10}") int maxAttempts) {
         this.webhookEventRepository = webhookEventRepository;
         this.chargePersister = chargePersister;
         this.payoutPersister = payoutPersister;
+        this.refundPersister = refundPersister;
         this.chargeRepository = chargeRepository;
         this.payoutRepository = payoutRepository;
+        this.refundRepository = refundRepository;
         this.objectMapper = objectMapper;
         this.maxAttempts = maxAttempts;
     }
@@ -110,6 +119,10 @@ public class WebhookProcessingJob {
         // SUCCEEDED instead of flipping to REVERSED).
         if (type.contains("chargeback") || type.contains("dispute")) {
             applyChargebackEvent(body);
+        } else if (type.contains("refund")) {
+            // Before the transaction branch: a refund event name can contain
+            // "charge", which would otherwise misroute it to applyTransactionEvent.
+            applyRefundEvent(body);
         } else if (type.contains("transaction") || type.contains("charge")) {
             applyTransactionEvent(body);
         } else if (type.contains("payout") || type.contains("withdrawal") || type.contains("disbursement")) {
@@ -193,6 +206,32 @@ public class WebhookProcessingJob {
             return;
         }
         chargePersister.markReversed(c.getId(), reason);
+    }
+
+    private void applyRefundEvent(JsonNode body) {
+        // An ORIGINAL_METHOD refund is async at Paymob: RefundService persisted
+        // it PENDING with a providerRef and is waiting for this webhook to flip
+        // it to SUCCEEDED/FAILED (which emits payment.refund.succeeded/failed).
+        JsonNode root = body.has("obj") ? body.path("obj") : body;
+        boolean success = root.path("success").asBoolean(false);
+        String providerRef = stringOrNull(root.path("id"));
+
+        Refund r = providerRef == null ? null
+                : refundRepository.findByProviderRef(providerRef).orElse(null);
+        if (r == null) {
+            log.warn("Webhook refund matched no Refund (providerRef={})", providerRef);
+            return;
+        }
+        // markSucceeded/markFailed are idempotent — they no-op unless still PENDING.
+        if (success) {
+            refundPersister.markSucceeded(r.getId(), providerRef);
+        } else {
+            String reason = firstNonBlank(
+                    root.path("data").path("message").asText(null),
+                    root.path("error_occured").asText(null),
+                    "provider_failed");
+            refundPersister.markFailed(r.getId(), reason);
+        }
     }
 
     private Charge locateCharge(String providerRef, String callerRef) {

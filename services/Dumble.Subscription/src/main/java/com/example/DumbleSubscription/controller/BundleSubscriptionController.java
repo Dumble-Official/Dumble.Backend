@@ -56,6 +56,7 @@ public class BundleSubscriptionController {
         List<BundleSubscription> subs;
         if (status == null) {
             subs = repository.findByParticipantIdAndStatus(user.getId(), SubscriptionStatus.ACTIVE);
+            subs.addAll(repository.findByParticipantIdAndStatus(user.getId(), SubscriptionStatus.CANCELLED));
             subs.addAll(repository.findByParticipantIdAndStatus(user.getId(), SubscriptionStatus.EXPIRED));
         } else {
             subs = repository.findByParticipantIdAndStatus(user.getId(), status);
@@ -80,7 +81,12 @@ public class BundleSubscriptionController {
         if (!sub.getParticipantId().equals(user.getId())) {
             throw new ResourceNotFoundException("Subscription not found");
         }
-        // Cancel-at-period-end (Decision 6.1): keep status ACTIVE, just disable renewal.
+        // Cancel-at-period-end (Decision 6.1): keep access until endsAt, stop renewing.
+        // Only an ACTIVE sub enters the CANCELLED interim state — never resurrect an
+        // EXPIRED/REFUNDED/PENDING sub into an entitled (isEntitled) state.
+        if (sub.getStatus() == SubscriptionStatus.ACTIVE) {
+            sub.setStatus(SubscriptionStatus.CANCELLED);
+        }
         sub.setAutoRenew(false);
         sub.setCancelledAt(Instant.now());
         sub.setUpdatedAt(Instant.now());

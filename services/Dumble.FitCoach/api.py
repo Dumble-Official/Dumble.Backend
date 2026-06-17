@@ -13,11 +13,13 @@ try:
 except ImportError:
     pass
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 import asyncio
+import httpx
 import json as _json
 
 from ai_engine import respond, fc_loop_stream, init_memory, _build_system_prompt
@@ -42,6 +44,11 @@ GEMINI_API_KEYS_LIST = [k.strip() for k in _raw_keys.split(",") if k.strip()]
 # _check_auth returns 503 until it's set. Previously this silently
 # disabled auth and left the service open to anyone on the network.
 INTERNAL_SECRET = os.getenv("INTERNAL_API_SECRET", "")
+
+# #4 — base URL of the schedule service (e.g. http://schedule:8186/api). When set,
+# an AI-generated plan (schedule_changes) is best-effort pushed into the client's
+# schedule via the internal chatbot endpoint, authed with the shared INTERNAL_SECRET.
+SCHEDULE_SERVICE_URL = os.getenv("SCHEDULE_SERVICE_URL", "").rstrip("/")
 
 # CORS: FitCoach lives behind the gateway on a private compose network,
 # so by default no browser origin is allowed. Set ALLOWED_ORIGINS in the
@@ -91,6 +98,61 @@ def _require_user_id(request: Request) -> str:
     if not uid:
         raise HTTPException(401, "Missing X-User-Id (must come from the gateway)")
     return uid
+
+
+# #4 — schedule_contract day_index is 0=Monday..6=Sunday; the schedule service's
+# Weekday enum is SUN..SAT, so map by index.
+_WEEKDAY_BY_INDEX = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+
+
+def _schedule_changes_to_items(schedule_changes: dict) -> list[dict]:
+    """Translate FitCoach schedule_changes (days[].exercises[]) into the schedule
+    service's AddItemRequest shape: {tableType, weekday, content}."""
+    items: list[dict] = []
+    for day in (schedule_changes.get("days") or []):
+        if day.get("rest_day"):
+            continue
+        idx = day.get("day_index", -1)
+        if not isinstance(idx, int) or idx < 0 or idx > 6:
+            continue
+        weekday = _WEEKDAY_BY_INDEX[idx]
+        for ex in (day.get("exercises") or []):
+            name = (ex.get("name") or "").strip()
+            if not name:
+                continue
+            content = f"{name} — {ex.get('sets', 3)}x{ex.get('reps', '10')}"
+            rest = ex.get("rest_sec")
+            if rest:
+                content += f", rest {rest}s"
+            notes = (ex.get("notes") or "").strip()
+            if notes:
+                content += f" ({notes})"
+            items.append({"tableType": "EXERCISE", "weekday": weekday, "content": content})
+    return items
+
+
+async def _sync_schedule(user_id: str, schedule_changes: dict | None) -> None:
+    """Best-effort push of an AI-generated plan into the schedule service. Never
+    raises — a schedule hiccup must not affect the chat response.
+
+    Note: the schedule endpoint's `replace` is all-or-nothing (true clears ALL
+    chatbot items). full_replace maps to replace=true; update_days maps to
+    replace=false (append), which the schedule service can't scope per-day."""
+    if not (schedule_changes and user_id and SCHEDULE_SERVICE_URL and INTERNAL_SECRET):
+        return
+    try:
+        items = _schedule_changes_to_items(schedule_changes)
+        if not items:
+            return
+        body = {"replace": schedule_changes.get("action") == "full_replace", "items": items}
+        url = f"{SCHEDULE_SERVICE_URL}/internal/clients/{user_id}/chatbot/items"
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(url, headers={"X-Internal-Secret": INTERNAL_SECRET}, json=body)
+        if resp.status_code >= 300:
+            logger.warning("Schedule sync user=%s -> HTTP %s: %s",
+                           user_id, resp.status_code, resp.text[:200])
+    except Exception as exc:
+        logger.warning("Schedule sync failed for user=%s: %s", user_id, exc)
 
                                                                                 
 
@@ -253,7 +315,7 @@ async def _run_chat(req, msg: str, lang: str) -> tuple:
                                                                                 
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest, request: Request):
+async def chat(req: ChatRequest, request: Request, background_tasks: BackgroundTasks):
     _check_keys()
     _check_auth(request)
     # Override the body's user_id with the gateway-set X-User-Id — see
@@ -266,6 +328,9 @@ async def chat(req: ChatRequest, request: Request):
     lang = _detect_lang(req.history, msg)
     reply, tools_used, new_profile, new_plan_cache, new_progress_logs, entry_id, sched =\
         await _run_chat(req, msg, lang)
+
+    if sched:
+        background_tasks.add_task(_sync_schedule, req.user_id, sched)
 
     return ChatResponse(
         reply              = reply,
@@ -326,6 +391,8 @@ async def chat_stream(req: ChatRequest, request: Request):
         "plan_cache":    req.plan_cache,
         "schedule_changes": None,
     }
+    # Populated at stream end so the post-stream background task can sync the plan.
+    sync_holder: dict = {}
 
     async def generate():
         api_key    = key_manager.get()
@@ -389,6 +456,8 @@ async def chat_stream(req: ChatRequest, request: Request):
         if len(msg.strip()) >= 15:
             mem.store(msg, role="user")
 
+        sync_holder["user_id"] = req.user_id
+        sync_holder["sched"]   = final_state.get("schedule_changes")
         meta = _json.dumps({
             "tools_used":         tools_used,
             "profile":            final_state.get("profile", req.profile),
@@ -400,10 +469,14 @@ async def chat_stream(req: ChatRequest, request: Request):
         yield f"data: [META]{meta}\n\n"
         yield "data: [DONE]\n\n"
 
+    async def _sync_after_stream():
+        await _sync_schedule(sync_holder.get("user_id"), sync_holder.get("sched"))
+
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        background=BackgroundTask(_sync_after_stream),
     )
 
                                                                                 
@@ -442,6 +515,7 @@ AUDIO_MIME_TO_EXT = {
 @app.post("/voice", response_model=VoiceResponse)
 async def voice(
     request:       Request,
+    background_tasks: BackgroundTasks,
     file:          UploadFile = File(...),
     user_id:       str        = Form(default=""),
     profile:       str        = Form(default="{}"),
@@ -513,6 +587,9 @@ async def voice(
 
     reply, tools_used, new_profile, new_plan_cache, new_progress_logs, entry_id, sched =\
         await _run_chat(_req, transcript, lang)
+
+    if sched:
+        background_tasks.add_task(_sync_schedule, user_id, sched)
 
     return VoiceResponse(
         reply              = reply,

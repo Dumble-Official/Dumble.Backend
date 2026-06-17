@@ -4,6 +4,8 @@ import com.example.DumbleSubscription.client.dto.ChargeRequest;
 import com.example.DumbleSubscription.client.dto.ChargeResponse;
 import com.example.DumbleSubscription.client.dto.PayoutRequest;
 import com.example.DumbleSubscription.client.dto.PayoutResponse;
+import com.example.DumbleSubscription.client.dto.TokenizeRequest;
+import com.example.DumbleSubscription.client.dto.TokenizeResponse;
 import com.example.DumbleSubscription.security.SystemTokenSigner;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -42,6 +44,21 @@ public class PaymentServiceClient {
                 .bodyValue(body)
                 .retrieve()
                 .bodyToMono(PayoutResponse.class)
+                .block();
+    }
+
+    /**
+     * #5 — register a tokenised card on behalf of a user. The caller (the
+     * /me/payment-methods controller) sets {@code body.userId} from the
+     * authenticated principal; we vouch for it with a minted system token.
+     */
+    public TokenizeResponse tokenize(TokenizeRequest body) {
+        return client.post()
+                .uri("/api/payment/payment-methods/tokenize")
+                .header("Authorization", "Bearer " + signer.mint("payment"))
+                .bodyValue(body)
+                .retrieve()
+                .bodyToMono(TokenizeResponse.class)
                 .block();
     }
 }

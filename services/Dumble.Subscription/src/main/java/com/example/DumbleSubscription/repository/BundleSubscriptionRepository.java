@@ -58,10 +58,12 @@ public interface BundleSubscriptionRepository extends JpaRepository<BundleSubscr
         """)
     List<BundleSubscription> findRenewalsDue(@Param("now") Instant now);
 
-    /** Expiration scheduler — non-renewing subs whose endsAt has passed. */
+    /** Expiration scheduler — non-renewing subs (ACTIVE or CANCELLED) whose endsAt has passed. */
     @Query("""
         SELECT s FROM BundleSubscription s
-        WHERE s.status = com.example.DumbleSubscription.domain.enums.SubscriptionStatus.ACTIVE
+        WHERE s.status IN (
+                  com.example.DumbleSubscription.domain.enums.SubscriptionStatus.ACTIVE,
+                  com.example.DumbleSubscription.domain.enums.SubscriptionStatus.CANCELLED)
           AND s.autoRenew = FALSE
           AND s.endsAt <= :now
         """)
@@ -82,7 +84,9 @@ public interface BundleSubscriptionRepository extends JpaRepository<BundleSubscr
      */
     @Query("""
         SELECT s FROM BundleSubscription s
-        WHERE s.status = com.example.DumbleSubscription.domain.enums.SubscriptionStatus.ACTIVE
+        WHERE s.status IN (
+                  com.example.DumbleSubscription.domain.enums.SubscriptionStatus.ACTIVE,
+                  com.example.DumbleSubscription.domain.enums.SubscriptionStatus.CANCELLED)
           AND s.autoRenew = FALSE
           AND s.endsAt BETWEEN :from AND :to
         """)
