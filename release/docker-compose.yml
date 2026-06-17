@@ -500,6 +500,8 @@ services:
     environment:
       GEMINI_API_KEYS: ${GEMINI_API_KEYS:?GEMINI_API_KEYS must be set in release/.env}
       INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?INTERNAL_API_SECRET must be set in release/.env}
+      # #4 — schedule base URL (context-path /api) for the AI-plan -> schedule sync.
+      SCHEDULE_SERVICE_URL: http://schedule:8186/api
       # CORS is enforced at the gateway; FitCoach is only reachable on the
       # internal compose network, so this stays empty to fall back to "*"
       # for the few direct-from-LAN dev probes.
