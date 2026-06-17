@@ -8,7 +8,6 @@ public class SocialDbContext : DbContext
     public SocialDbContext(DbContextOptions<SocialDbContext> options) : base(options) { }
 
     public DbSet<Follow> Follows => Set<Follow>();
-    public DbSet<UserBehavior> UserBehaviors => Set<UserBehavior>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

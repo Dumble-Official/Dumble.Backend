@@ -2,11 +2,9 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using StackExchange.Redis;
 using Dumble.SharedKernel.Contracts;
 using Dumble.SocialService.Application.Contracts;
 using Dumble.SocialService.Infrastructure.Authentication;
-using Dumble.SocialService.Infrastructure.Caching;
 using Dumble.SocialService.Infrastructure.ExternalServices;
 using Dumble.SocialService.Infrastructure.Messaging.Consumers;
 using Dumble.SocialService.Infrastructure.Persistence;
@@ -18,50 +16,31 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        // PostgreSQL + EF Core
+        // PostgreSQL + EF Core — social owns the follow graph.
         services.AddDbContext<SocialDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("PostgreSql") ?? "Host=localhost;Port=5433;Database=dumble_social;Username=dumble;Password=dumble123")
                    .UseSnakeCaseNamingConvention());
 
-        // Repositories
         services.AddScoped<IFollowRepository, FollowRepository>();
-        services.AddScoped<IUserBehaviorRepository, UserBehaviorRepository>();
-
-        // Redis
-        var redisConnection = configuration.GetConnectionString("Redis") ?? "localhost:6379";
-        services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnection));
-        services.AddScoped<IFeedCacheService, RedisFeedCacheService>();
 
         services.AddHttpContextAccessor();
 
         // Current user is read from validated JWT claims — no extra HTTP call.
         services.AddScoped<ILoggedInUserService, LoggedInUserService>();
 
-        // PostService — fixed wrong default port (was 5020, Post listens on 5134).
-        services.AddHttpClient<IPostServiceClient, PostServiceClient>(client =>
+        // Home feed is ranked by Recombee in the recommendation service; /api/social/feed proxies
+        // to GET /api/feed/home there (forwarding the caller's token). Social no longer ranks feeds.
+        services.AddHttpClient<IHomeFeedClient, HomeFeedClient>(client =>
         {
-            client.BaseAddress = new Uri(configuration["Services:PostService"] ?? "http://localhost:5134");
+            client.BaseAddress = new Uri(configuration["Services:RecommendationApi"] ?? "http://localhost:5024");
             client.Timeout = TimeSpan.FromSeconds(10);
         });
 
-        // RankingApi is optional — when not configured, RankingServiceClient
-        // detects the missing config and short-circuits to an empty result
-        // (logging a warning) instead of silently swallowing connection refused.
-        var rankingUrl = configuration["Services:RankingApi"];
-        services.AddHttpClient<IRankingServiceClient, RankingServiceClient>(client =>
-        {
-            client.BaseAddress = new Uri(rankingUrl ?? "http://ranking-not-configured.invalid");
-            client.Timeout = TimeSpan.FromSeconds(5);
-        });
-
-        // MassTransit + RabbitMQ
+        // MassTransit + RabbitMQ — social publishes follow events; its only consumer is the
+        // right-to-be-forgotten cleanup (the old feed-ranking consumers were retired with the
+        // move to Recombee).
         services.AddMassTransit(x =>
         {
-            x.AddConsumer<PostCreatedConsumer>();
-            x.AddConsumer<PostDeletedConsumer>();
-            x.AddConsumer<PostReactedConsumer>();
-            x.AddConsumer<CommentCreatedConsumer>();
-
             // Account deletion arrives from the Java Auth service as raw JSON on the shared
             // dumble.events topic exchange (no MassTransit envelope), so it is wired explicitly
             // and excluded from the convention-based ConfigureEndpoints.

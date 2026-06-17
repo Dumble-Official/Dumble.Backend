@@ -10,7 +10,6 @@ public class InteractionSignalMapperTests
     [InlineData(InteractionSignal.Click, OutboxOperation.AddDetailView)]
     [InlineData(InteractionSignal.Dwell, OutboxOperation.AddDetailView)]
     [InlineData(InteractionSignal.Comment, OutboxOperation.AddBookmark)]
-    [InlineData(InteractionSignal.Share, OutboxOperation.AddBookmark)]
     [InlineData(InteractionSignal.ReactionRemoved, OutboxOperation.DeleteRating)]
     public void Maps_signal_to_expected_operation(InteractionSignal signal, OutboxOperation expected)
         => Assert.Equal(expected, InteractionSignalMapper.Map(signal).Operation);
@@ -28,7 +27,6 @@ public class InteractionSignalMapperTests
     [InlineData(InteractionSignal.Click)]
     [InlineData(InteractionSignal.Dwell)]
     [InlineData(InteractionSignal.Comment)]
-    [InlineData(InteractionSignal.Share)]
     [InlineData(InteractionSignal.ReactionRemoved)]
     public void Non_reaction_signals_carry_no_rating(InteractionSignal signal)
         => Assert.Null(InteractionSignalMapper.Map(signal).RatingValue);
