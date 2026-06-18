@@ -355,7 +355,9 @@ services:
       ASPNETCORE_URLS: http://+:5012
       ConnectionStrings__DatabaseConnection: "Host=bundle-db;Port=5432;Database=dumble_bundles;Username=dumble;Password=${BUNDLE_DB_PASSWORD:?BUNDLE_DB_PASSWORD must be set in release/.env}"
       Cloudinary__Url: ${CLOUDINARY_URL:-cloudinary://placeholder:placeholder@placeholder}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
+      # Bundle reads Jwt:Secret FIRST (appsettings ships a non-base64 placeholder),
+      # so the real base64 secret must come in as Jwt__Secret, not JWT_SECRET.
+      Jwt__Secret: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
       ASPNETCORE_ENVIRONMENT: Production
     depends_on:
       redis:
