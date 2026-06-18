@@ -88,11 +88,13 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+// Provision the schema on startup. The service owns its database and ships no
+// separate migration step (Postgres via EnsureCreated, like post-service), so the
+// model's tables are created if they aren't there yet — in every environment.
+using (var scope = app.Services.CreateScope())
 {
-    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<BundleManagementDbContext>();
-    db.Database.Migrate();
+    db.Database.EnsureCreated();
 }
 
 app.UseForwardedHeaders();

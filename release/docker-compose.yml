@@ -173,21 +173,20 @@ services:
       retries: 10
 
   bundle-db:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: postgres:16-alpine
     environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: ${BUNDLE_DB_PASSWORD:?BUNDLE_DB_PASSWORD must be set in release/.env}
-      MSSQL_PID: Developer
+      POSTGRES_DB: dumble_bundles
+      POSTGRES_USER: dumble
+      POSTGRES_PASSWORD: ${BUNDLE_DB_PASSWORD:?BUNDLE_DB_PASSWORD must be set in release/.env}
     expose:
-      - "1433"
+      - "5432"
     volumes:
-      - bundledata:/var/opt/mssql
+      - bundlepgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 30s
+      test: ["CMD-SHELL", "pg_isready -U dumble"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   # ── Application Services ───────────────────────────────────────────
 
@@ -356,7 +355,7 @@ services:
       - "5012"
     environment:
       ASPNETCORE_URLS: http://+:5012
-      ConnectionStrings__DatabaseConnection: "Server=bundle-db,1433;Database=dumble_bundles;User Id=sa;Password=${BUNDLE_DB_PASSWORD:?BUNDLE_DB_PASSWORD must be set in release/.env};TrustServerCertificate=True"
+      ConnectionStrings__DatabaseConnection: "Host=bundle-db;Port=5432;Database=dumble_bundles;Username=dumble;Password=${BUNDLE_DB_PASSWORD:?BUNDLE_DB_PASSWORD must be set in release/.env}"
       Cloudinary__Url: ${CLOUDINARY_URL:-cloudinary://placeholder:placeholder@placeholder}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in release/.env}
       ASPNETCORE_ENVIRONMENT: Production
@@ -570,7 +569,8 @@ volumes:
   postdata:
   mongodata:
   gymdata:
-  bundledata:
+  bundledata:        # legacy (SQL Server) — unused after the Postgres port
+  bundlepgdata:
   walletdata:
   paymentdata:
   subscriptiondata:

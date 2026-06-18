@@ -20,7 +20,7 @@ public static class DependencyInjection
     {
         var connectionString = configuration.GetConnectionString("DatabaseConnection")
             ?? throw new InvalidOperationException("ConnectionStrings:DatabaseConnection is required");
-        services.AddDbContext<BundleManagementDbContext>(opt => opt.UseSqlServer(connectionString));
+        services.AddDbContext<BundleManagementDbContext>(opt => opt.UseNpgsql(connectionString));
 
         services.AddScoped<ILoggedInUserService, LoggedInUserService>();
         services.AddScoped(typeof(IGenericRepository<,>), typeof(GenericRepository<,>));
