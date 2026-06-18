@@ -359,5 +359,24 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  # Bundle Management — ported from SQL Server to Postgres (Neon) so it runs on the
+  # free managed-DB stack. EF EnsureCreated provisions the schema on first boot.
+  bundle-service:
+    build:
+      context: ../services
+      dockerfile: Dumble.BundleManagementService/Dumble.BundleManagementService.API/Dockerfile
+    expose:
+      - "5012"
+    environment:
+      ASPNETCORE_URLS: http://+:5012
+      ConnectionStrings__DatabaseConnection: ${BUNDLE_DB_CONN:?set BUNDLE_DB_CONN in .env.cloud}
+      # Cloudinary image uploads — empty is fine (service still boots; uploads fail until set).
+      Cloudinary__CloudName: ${BUNDLE_CLOUDINARY_CLOUD_NAME:-}
+      Cloudinary__ApiKey: ${BUNDLE_CLOUDINARY_API_KEY:-}
+      Cloudinary__ApiSecret: ${BUNDLE_CLOUDINARY_API_SECRET:-}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.cloud}
+      ASPNETCORE_ENVIRONMENT: Production
+    restart: unless-stopped
+
 volumes:
   fitcoachmemory:
