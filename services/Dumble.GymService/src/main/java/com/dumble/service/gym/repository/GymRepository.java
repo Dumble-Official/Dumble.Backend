@@ -14,6 +14,7 @@ import java.util.UUID;
 public interface GymRepository extends JpaRepository<Gym, UUID>, JpaSpecificationExecutor<Gym> {
 
     @Query(value = "SELECT * FROM gyms g WHERE " +
+            "g.is_verified = true AND g.status = 'ACTIVE' AND " +
             "(6371 * acos(cos(radians(:lat)) * cos(radians(g.latitude)) * " +
             "cos(radians(g.longitude) - radians(:lng)) + sin(radians(:lat)) * " +
             "sin(radians(g.latitude)))) <= :distance",
