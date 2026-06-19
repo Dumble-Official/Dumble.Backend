@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Dumble.NotificationService.Application.Contracts;
 using Dumble.NotificationService.Infrastructure.Configuration;
 using Dumble.NotificationService.Infrastructure.Messaging.Consumers;
+using Dumble.NotificationService.Infrastructure.Messaging.Consumers.Schedule;
 using Dumble.NotificationService.Infrastructure.Messaging.Consumers.Subscription;
 using Dumble.NotificationService.Infrastructure.Persistence;
 using Dumble.NotificationService.Infrastructure.Persistence.Repositories;
@@ -85,6 +86,9 @@ public static class DependencyInjection
             x.AddConsumer<SellerFrozenConsumer>();
             x.AddConsumer<SellerUnfrozenConsumer>();
             x.AddConsumer<SellerWindingDownConsumer>();
+
+            // Java Schedule service consumer (dumble.events topic exchange)
+            x.AddConsumer<ScheduleReminderConsumer>();
 
             x.UsingRabbitMq((context, cfg) =>
             {
@@ -243,6 +247,15 @@ public static class DependencyInjection
                     e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
                     e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "subscription.seller.winding-down"; });
                     e.ConfigureConsumer<SellerWindingDownConsumer>(context);
+                });
+
+                // Java Schedule service end-of-day reminder (dumble.events topic exchange)
+                cfg.ReceiveEndpoint("notification-service.schedule-reminder-due", e =>
+                {
+                    e.UseRawJsonSerializer();
+                    e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+                    e.Bind("dumble.events", b => { b.ExchangeType = "topic"; b.Durable = true; b.RoutingKey = "schedule.reminder.due"; });
+                    e.ConfigureConsumer<ScheduleReminderConsumer>(context);
                 });
             });
         });

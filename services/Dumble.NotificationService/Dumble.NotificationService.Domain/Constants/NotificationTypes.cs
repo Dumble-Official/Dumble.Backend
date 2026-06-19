@@ -14,4 +14,5 @@ public static class NotificationTypes
     public const string Renewal = "Renewal";
     public const string SellerAccount = "SellerAccount";
     public const string Chargeback = "Chargeback";
+    public const string ScheduleReminder = "ScheduleReminder";
 }
