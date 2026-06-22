@@ -109,7 +109,10 @@ public class RoleRequestService {
         }
 
         request.setRequestedRole(req.getRequestedRole());
-        request.setCertificateUrl(req.getCertificateUrl());
+        // A null certificate URL means the applicant didn't re-upload — keep the existing one.
+        if (req.getCertificateUrl() != null) {
+            request.setCertificateUrl(req.getCertificateUrl());
+        }
         request.setApplicantNote(req.getNote());
         request.setStatus(RoleRequestStatus.PENDING);
         return RoleRequestResponse.from(roleRequestRepository.save(request));

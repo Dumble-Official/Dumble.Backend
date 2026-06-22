@@ -6,13 +6,16 @@ import com.example.DumbleAuthentication.dto.request.UpdateProfileRequest;
 import com.example.DumbleAuthentication.dto.response.UserResponse;
 import com.example.DumbleAuthentication.repository.UserRepository;
 import com.example.DumbleAuthentication.service.AccountDeletionService;
+import com.example.DumbleAuthentication.service.CloudinaryService;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.validation.Valid;
 
@@ -24,10 +27,14 @@ public class UserController {
 
     private final UserRepository userRepository;
     private final AccountDeletionService accountDeletionService;
+    private final CloudinaryService cloudinaryService;
 
-    public UserController(UserRepository userRepository, AccountDeletionService accountDeletionService) {
+    public UserController(UserRepository userRepository,
+                          AccountDeletionService accountDeletionService,
+                          CloudinaryService cloudinaryService) {
         this.userRepository = userRepository;
         this.accountDeletionService = accountDeletionService;
+        this.cloudinaryService = cloudinaryService;
     }
 
     /** A1 — Admin/Moderator user search (by email or name). Gated in SecurityConfig. */
@@ -95,6 +102,24 @@ public class UserController {
         if (request.getDisplayName() != null) user.setDisplayName(request.getDisplayName());
         if (request.getPfp() != null) user.setPfp(request.getPfp());
         if (request.getBio() != null) user.setBio(request.getBio());
+        user = userRepository.save(user);
+        return ResponseEntity.ok(UserResponse.from(user));
+    }
+
+    /**
+     * Upload (or replace) the current user's profile picture. The client sends
+     * the raw image; we upload it to Cloudinary server-side and store the URL.
+     */
+    @PostMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<UserResponse> uploadAvatar(@RequestPart("file") MultipartFile file) {
+        User user = currentUser();
+        if (user == null) {
+            return ResponseEntity.status(401).build();
+        }
+        if (file == null || file.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        user.setPfp(cloudinaryService.uploadFile(file));
         user = userRepository.save(user);
         return ResponseEntity.ok(UserResponse.from(user));
     }
