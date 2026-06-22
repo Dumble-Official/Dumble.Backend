@@ -24,6 +24,7 @@ public class GymRegistrationResponse {
     private String nationalIdUrl;
     private String commercialRegisterUrl;
     private String taxCardUrl;
+    private List<String> supportingDocumentUrls;
     private String applicantNote;
     private String adminMessage;
     private List<BranchView> branches;
@@ -59,6 +60,7 @@ public class GymRegistrationResponse {
                 .nationalIdUrl(r.getNationalIdUrl())
                 .commercialRegisterUrl(r.getCommercialRegisterUrl())
                 .taxCardUrl(r.getTaxCardUrl())
+                .supportingDocumentUrls(r.getSupportingDocumentUrls())
                 .applicantNote(r.getApplicantNote())
                 .adminMessage(r.getAdminMessage())
                 .branches(r.getBranches().stream().map(GymRegistrationResponse::branchView).toList())
