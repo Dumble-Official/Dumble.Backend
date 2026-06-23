@@ -1,5 +1,6 @@
 package com.dumble.service.gym.domain.entity;
 
+import com.dumble.service.gym.domain.converter.SupportingDocumentUrlsConverter;
 import com.dumble.service.gym.domain.enumuration.RegistrationStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -54,12 +55,12 @@ public class GymRegistration {
     /**
      * Optional extra documents the applicant attaches beyond the required ones
      * (e.g. extra licences, premises photos). Each entry is a Cloudinary URL.
+     * Stored inline as a JSON array (see {@link SupportingDocumentUrlsConverter})
+     * rather than a join table — Aiven MySQL rejects the primary-key-less table an
+     * {@code @ElementCollection} would create.
      */
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(
-            name = "gym_registration_supporting_docs",
-            joinColumns = @JoinColumn(name = "registration_id"))
-    @Column(name = "document_url", length = 512)
+    @Convert(converter = SupportingDocumentUrlsConverter.class)
+    @Column(name = "supporting_document_urls", columnDefinition = "TEXT")
     private List<String> supportingDocumentUrls = new ArrayList<>();
 
     @OneToMany(mappedBy = "registration", cascade = CascadeType.ALL, orphanRemoval = true)
