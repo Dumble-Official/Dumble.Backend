@@ -38,6 +38,10 @@ public class CreateGymRegistrationRequest {
     @Size(max = 1000)
     private String note;
 
+    /** Optional extra documents (Cloudinary URLs) beyond the required ones. */
+    @Size(max = 20, message = "At most 20 supporting documents")
+    private List<@NotBlank @Size(max = 512) String> supportingDocumentUrls;
+
     @NotEmpty(message = "At least one branch is required")
     @Size(max = 50, message = "At most 50 branches")
     @Valid

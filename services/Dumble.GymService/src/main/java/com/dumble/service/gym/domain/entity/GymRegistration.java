@@ -51,6 +51,17 @@ public class GymRegistration {
     @Column(name = "tax_card_url", nullable = false, length = 512)
     private String taxCardUrl;
 
+    /**
+     * Optional extra documents the applicant attaches beyond the required ones
+     * (e.g. extra licences, premises photos). Each entry is a Cloudinary URL.
+     */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "gym_registration_supporting_docs",
+            joinColumns = @JoinColumn(name = "registration_id"))
+    @Column(name = "document_url", length = 512)
+    private List<String> supportingDocumentUrls = new ArrayList<>();
+
     @OneToMany(mappedBy = "registration", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<RegistrationBranch> branches = new ArrayList<>();
 

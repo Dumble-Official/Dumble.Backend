@@ -73,6 +73,9 @@ public class GymRegistrationServiceImpl implements GymRegistrationService {
         registration.setCommercialRegisterUrl(request.getCommercialRegisterUrl());
         registration.setTaxCardUrl(request.getTaxCardUrl());
         registration.setApplicantNote(request.getNote());
+        if (request.getSupportingDocumentUrls() != null) {
+            registration.getSupportingDocumentUrls().addAll(request.getSupportingDocumentUrls());
+        }
         request.getBranches().forEach(b -> registration.addBranch(toBranch(b)));
 
         // The exists() check above is a fast path but not race-safe; a unique key
@@ -122,6 +125,10 @@ public class GymRegistrationServiceImpl implements GymRegistrationService {
         reg.setCommercialRegisterUrl(request.getCommercialRegisterUrl());
         reg.setTaxCardUrl(request.getTaxCardUrl());
         reg.setApplicantNote(request.getNote());
+        reg.getSupportingDocumentUrls().clear();
+        if (request.getSupportingDocumentUrls() != null) {
+            reg.getSupportingDocumentUrls().addAll(request.getSupportingDocumentUrls());
+        }
         reg.getBranches().clear();
         request.getBranches().forEach(b -> reg.addBranch(toBranch(b)));
         reg.setStatus(RegistrationStatus.PENDING);
