@@ -72,6 +72,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/logout", "/api/auth/change-password").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/users/me").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/users/me/**").authenticated()
+                        // Public people-search for follow/discovery — any logged-in user.
+                        // Declared BEFORE the admin /api/users/* rule so it isn't gated to staff.
+                        .requestMatchers(HttpMethod.GET, "/api/users/search").authenticated()
                         // Admin/Moderator user search + lookup (declared AFTER /me so self stays open).
                         .requestMatchers(HttpMethod.GET, "/api/users", "/api/users/*")
                         .hasAnyRole("ADMIN", "MODERATOR")

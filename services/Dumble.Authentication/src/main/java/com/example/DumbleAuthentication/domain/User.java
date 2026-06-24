@@ -10,7 +10,15 @@ import java.util.List;
 import java.util.UUID;
 
 @Entity
-@Table(name = "app_user")
+@Table(name = "app_user", indexes = {
+        // People-search filters on these columns (LOWER(...) LIKE). The btree
+        // indexes serve equality/prefix lookups; for fast substring ('%q%')
+        // matching at scale, add pg_trgm GIN indexes via SQL (see deploy notes).
+        @Index(name = "idx_app_user_display_name", columnList = "display_name"),
+        @Index(name = "idx_app_user_user_name", columnList = "user_name"),
+        @Index(name = "idx_app_user_first_name", columnList = "first_name"),
+        @Index(name = "idx_app_user_last_name", columnList = "last_name")
+})
 public class User {
 
     @Id
@@ -189,6 +197,14 @@ public class User {
 
     public void setDisplayName(String displayName) {
         this.displayName = displayName;
+    }
+
+    public String getUserName() {
+        return userName;
+    }
+
+    public void setUserName(String userName) {
+        this.userName = userName;
     }
 
     public String getBio() {

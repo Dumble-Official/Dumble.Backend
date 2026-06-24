@@ -4,12 +4,14 @@ import com.example.DumbleAuthentication.domain.User;
 import com.example.DumbleAuthentication.dto.request.OnboardingRequest;
 import com.example.DumbleAuthentication.dto.request.UpdateProfileRequest;
 import com.example.DumbleAuthentication.dto.response.UserResponse;
+import com.example.DumbleAuthentication.dto.response.UserSummaryResponse;
 import com.example.DumbleAuthentication.repository.UserRepository;
 import com.example.DumbleAuthentication.service.AccountDeletionService;
 import com.example.DumbleAuthentication.service.CloudinaryService;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -45,6 +47,26 @@ public class UserController {
             @RequestParam(defaultValue = "20") int size) {
         return userRepository.search(query, PageRequest.of(page, Math.min(Math.max(size, 1), 100)))
                 .map(UserResponse::from);
+    }
+
+    /**
+     * Public people-search for follow/discovery cards — any authenticated user.
+     * Returns a lightweight, PII-free {@link UserSummaryResponse} projection and
+     * is paginated. Short/blank queries return an empty page so a single
+     * keystroke never triggers a full-table scan. Open to all in SecurityConfig
+     * (declared before the admin {@code /api/users/*} rule).
+     */
+    @GetMapping("/search")
+    public Page<UserSummaryResponse> searchPublic(
+            @RequestParam(required = false, defaultValue = "") String query,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 50));
+        String q = query == null ? "" : query.trim().toLowerCase();
+        if (q.length() < 2) {
+            return Page.empty(pageable);
+        }
+        return userRepository.searchPublic(q, pageable);
     }
 
     /** A1 — Admin/Moderator fetch a single user by id. Gated in SecurityConfig. */

@@ -8,7 +8,8 @@ using MediatR;
 namespace Dumble.ChatService.Application.Features.Conversations.Queries.GetConversations;
 
 public class GetConversationsQueryHandler(
-    IConversationRepository conversationRepository
+    IConversationRepository conversationRepository,
+    IMessageRepository messageRepository
 ) : IRequestHandler<GetConversationsQuery, CursorPagedResponse<ConversationResponse>>
 {
     public async Task<CursorPagedResponse<ConversationResponse>> Handle(
@@ -27,6 +28,16 @@ public class GetConversationsQueryHandler(
         var nextCursor = hasMore
             ? ChatCursorParsing.Format(conversations[^1].UpdatedAt)
             : null;
+
+        // Resolve any placeholder participant names from message history and persist the
+        // correction, so peers show their real name/photo even in conversations created
+        // before the sender-upsert existed (self-heals; the lookup only runs while stale).
+        foreach (var conversation in conversations)
+        {
+            if (await ParticipantBackfill.ResolveSentinelNamesAsync(
+                    conversation, messageRepository, cancellationToken))
+                await conversationRepository.UpdateAsync(conversation, cancellationToken);
+        }
 
         var items = conversations.Select(MapToResponse).ToList();
 

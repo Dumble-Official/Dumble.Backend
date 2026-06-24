@@ -1,6 +1,7 @@
 package com.example.DumbleAuthentication.repository;
 
 import com.example.DumbleAuthentication.domain.User;
+import com.example.DumbleAuthentication.dto.response.UserSummaryResponse;
 
 import java.util.List;
 import java.util.Optional;
@@ -31,6 +32,27 @@ public interface UserRepository extends JpaRepository<User, UUID> {
            OR LOWER(u.lastName) LIKE LOWER(CONCAT('%', :q, '%'))
         """)
     Page<User> search(@Param("q") String q, Pageable pageable);
+
+    /**
+     * Public people-search for discovery/follow cards. Lowercased once into
+     * {@code :q} by the caller so the DB doesn't LOWER() the bind param per row,
+     * and projected straight into {@link UserSummaryResponse} so only the card
+     * columns are read (no full-entity hydration, no PII). Active users only;
+     * email is intentionally not searched (it's private). Ordered by name for a
+     * stable, paginated result.
+     */
+    @Query("""
+        SELECT new com.example.DumbleAuthentication.dto.response.UserSummaryResponse(
+            u.id, u.displayName, u.userName, u.pfp, u.userType, u.bio)
+        FROM User u
+        WHERE u.isActive = true
+          AND (LOWER(u.displayName) LIKE CONCAT('%', :q, '%')
+            OR LOWER(u.userName)    LIKE CONCAT('%', :q, '%')
+            OR LOWER(u.firstName)   LIKE CONCAT('%', :q, '%')
+            OR LOWER(u.lastName)    LIKE CONCAT('%', :q, '%'))
+        ORDER BY u.displayName ASC, u.firstName ASC
+        """)
+    Page<UserSummaryResponse> searchPublic(@Param("q") String q, Pageable pageable);
 
     /**
      * Pessimistic-write lock on the user row. Used by JwtService.generateRefreshToken

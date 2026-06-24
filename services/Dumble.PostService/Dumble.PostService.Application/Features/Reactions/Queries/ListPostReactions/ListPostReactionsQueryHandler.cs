@@ -19,7 +19,7 @@ public class ListPostReactionsQueryHandler : IRequestHandler<ListPostReactionsQu
         var offset = Math.Max(0, request.Offset);
         var reactions = await _reactionRepository.GetByPostIdAsync(request.PostId, offset, limit, ct);
         return reactions
-            .Select(r => new ReactionResponse(r.Id, r.UserId, r.Type.ToString(), r.CreatedAt))
+            .Select(r => new ReactionResponse(r.Id, r.UserId, r.DisplayName, r.ProfileImage, r.Type.ToString(), r.CreatedAt))
             .ToList();
     }
 }

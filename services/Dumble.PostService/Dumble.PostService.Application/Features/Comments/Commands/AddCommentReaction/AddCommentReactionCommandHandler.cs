@@ -40,10 +40,12 @@ public class AddCommentReactionCommandHandler : IRequestHandler<AddCommentReacti
         if (existing is not null)
         {
             existing.Type = reactionType;
+            existing.DisplayName = currentUser.DisplayName;
+            existing.ProfileImage = currentUser.ProfileImage;
             await _commentReactionRepository.UpdateAsync(existing, ct);
             await PublishReactedAsync(comment, currentUser, reactionType, ct);
 
-            return new ReactionResponse(existing.Id, existing.UserId, existing.Type.ToString(), existing.CreatedAt);
+            return new ReactionResponse(existing.Id, existing.UserId, existing.DisplayName, existing.ProfileImage, existing.Type.ToString(), existing.CreatedAt);
         }
 
         var reaction = new CommentReaction
@@ -51,6 +53,8 @@ public class AddCommentReactionCommandHandler : IRequestHandler<AddCommentReacti
             Id = Guid.NewGuid(),
             CommentId = request.CommentId,
             UserId = currentUser.Id,
+            DisplayName = currentUser.DisplayName,
+            ProfileImage = currentUser.ProfileImage,
             Type = reactionType,
             CreatedAt = DateTime.UtcNow
         };
@@ -59,7 +63,7 @@ public class AddCommentReactionCommandHandler : IRequestHandler<AddCommentReacti
         await _commentRepository.IncrementReactionsAsync(comment.Id, ct);
         await PublishReactedAsync(comment, currentUser, reactionType, ct);
 
-        return new ReactionResponse(reaction.Id, reaction.UserId, reaction.Type.ToString(), reaction.CreatedAt);
+        return new ReactionResponse(reaction.Id, reaction.UserId, reaction.DisplayName, reaction.ProfileImage, reaction.Type.ToString(), reaction.CreatedAt);
     }
 
     private Task PublishReactedAsync(Comment comment, CurrentUser currentUser, ReactionType reactionType, CancellationToken ct) =>

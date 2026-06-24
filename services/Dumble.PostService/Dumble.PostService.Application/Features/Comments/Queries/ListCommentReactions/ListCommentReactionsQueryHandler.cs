@@ -19,7 +19,7 @@ public class ListCommentReactionsQueryHandler : IRequestHandler<ListCommentReact
         var offset = Math.Max(0, request.Offset);
         var reactions = await _commentReactionRepository.GetByCommentIdAsync(request.CommentId, offset, limit, ct);
         return reactions
-            .Select(r => new ReactionResponse(r.Id, r.UserId, r.Type.ToString(), r.CreatedAt))
+            .Select(r => new ReactionResponse(r.Id, r.UserId, r.DisplayName, r.ProfileImage, r.Type.ToString(), r.CreatedAt))
             .ToList();
     }
 }

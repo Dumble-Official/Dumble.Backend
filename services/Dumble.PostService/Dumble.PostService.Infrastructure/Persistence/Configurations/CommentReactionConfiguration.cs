@@ -12,6 +12,8 @@ public class CommentReactionConfiguration : IEntityTypeConfiguration<CommentReac
         builder.HasKey(cr => cr.Id);
 
         builder.Property(cr => cr.UserId).IsRequired().HasMaxLength(100);
+        builder.Property(cr => cr.DisplayName).IsRequired().HasMaxLength(200);
+        builder.Property(cr => cr.ProfileImage).HasMaxLength(500);
         builder.Property(cr => cr.Type).HasConversion<string>().HasMaxLength(50);
 
         builder.HasIndex(cr => new { cr.CommentId, cr.UserId })

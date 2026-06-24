@@ -40,6 +40,8 @@ public class AddReactionCommandHandler : IRequestHandler<AddReactionCommand, Rea
         if (existing is not null)
         {
             existing.Type = reactionType;
+            existing.DisplayName = currentUser.DisplayName;
+            existing.ProfileImage = currentUser.ProfileImage;
             await _reactionRepository.UpdateAsync(existing, ct);
 
             await _publishEndpoint.Publish(new PostReactedEvent(
@@ -52,7 +54,7 @@ public class AddReactionCommandHandler : IRequestHandler<AddReactionCommand, Rea
                 new DateTimeOffset(existing.CreatedAt, TimeSpan.Zero)
             ), ct);
 
-            return new ReactionResponse(existing.Id, existing.UserId, existing.Type.ToString(), existing.CreatedAt);
+            return new ReactionResponse(existing.Id, existing.UserId, existing.DisplayName, existing.ProfileImage, existing.Type.ToString(), existing.CreatedAt);
         }
 
         var reaction = new Reaction
@@ -60,6 +62,8 @@ public class AddReactionCommandHandler : IRequestHandler<AddReactionCommand, Rea
             Id = Guid.NewGuid(),
             PostId = request.PostId,
             UserId = currentUser.Id,
+            DisplayName = currentUser.DisplayName,
+            ProfileImage = currentUser.ProfileImage,
             Type = reactionType,
             CreatedAt = DateTime.UtcNow
         };
@@ -77,6 +81,6 @@ public class AddReactionCommandHandler : IRequestHandler<AddReactionCommand, Rea
             new DateTimeOffset(reaction.CreatedAt, TimeSpan.Zero)
         ), ct);
 
-        return new ReactionResponse(reaction.Id, reaction.UserId, reaction.Type.ToString(), reaction.CreatedAt);
+        return new ReactionResponse(reaction.Id, reaction.UserId, reaction.DisplayName, reaction.ProfileImage, reaction.Type.ToString(), reaction.CreatedAt);
     }
 }
