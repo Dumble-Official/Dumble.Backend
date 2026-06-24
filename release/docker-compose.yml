@@ -216,6 +216,8 @@ services:
       ADMIN_BOOTSTRAP_ENABLED: ${ADMIN_BOOTSTRAP_ENABLED:-true}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@dumble.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set in release/.env}
+      # Cloudinary — server-side upload of avatars & trainer certificates.
+      CLOUDINARY_URL: ${CLOUDINARY_URL:-cloudinary://placeholder:placeholder@placeholder}
     depends_on:
       db:
         condition: service_healthy

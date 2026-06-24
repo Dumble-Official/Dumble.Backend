@@ -326,6 +326,8 @@ async def chat(req: ChatRequest, request: Request, background_tasks: BackgroundT
         raise HTTPException(400, "Empty message")
 
     lang = _detect_lang(req.history, msg)
+    logger.info("CHAT user=%s lang=%s hist=%d msg=%r",
+                req.user_id, lang, len(req.history or []), msg[:80])
     reply, tools_used, new_profile, new_plan_cache, new_progress_logs, entry_id, sched =\
         await _run_chat(req, msg, lang)
 
@@ -362,7 +364,8 @@ async def chat_stream(req: ChatRequest, request: Request):
         raise HTTPException(400, "Empty message")
 
     lang = _detect_lang(req.history, msg)
-
+    logger.info("CHAT-STREAM user=%s lang=%s hist=%d msg=%r",
+                req.user_id, lang, len(req.history or []), msg[:80])
 
     fres = filter_message(msg, lang, api_key=key_manager.get())
     if fres.blocked:

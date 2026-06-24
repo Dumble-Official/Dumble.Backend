@@ -31,12 +31,12 @@ logger = logging.getLogger(__name__)
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 
-# Fallback chain — ordered by preference. Earlier entries (gemini-3-*)
-# don't exist in the public Gemini API yet; they were placeholders and
-# would 404 on every call, collapsing the "3-model fallback" into one
-# real model. Use shipped model IDs only.
-FC_MODELS: list[str]   = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
-PLAN_MODELS: list[str] = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+# Fallback chain — ordered by preference. gemini-1.5-flash was retired by
+# Google and now 404s on this endpoint, so it's replaced by the -lite variants,
+# which also carry separate free-tier quota — useful when the flash models are
+# rate-limited (429) or overloaded (503). Use only currently-shipped model IDs.
+FC_MODELS: list[str]   = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"]
+PLAN_MODELS: list[str] = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"]
 
 MAX_TOKENS_CHAT = 2000
 MAX_TOKENS_PLAN = 2500
@@ -103,7 +103,11 @@ def _post(api_key: str, models: list[str], messages: list, max_tokens: int,
                 logger.info("Rotated key after 401, retrying %s", model)
                 continue  # same idx — retry this model with the new key
             if resp.status_code != 200:
-                logger.warning("HTTP %s on %s", resp.status_code, model)
+                # Surface the provider's reason — a bare status code hides WHY
+                # (e.g. malformed tool_calls, unknown field). Critical for tracing.
+                body_preview = (resp.text or "")[:600]
+                logger.warning("HTTP %s on %s — body: %s", resp.status_code, model, body_preview)
+                last_err = f"HTTP {resp.status_code} on {model}: {body_preview}"
                 idx += 1
                 continue
             data    = resp.json()
@@ -189,7 +193,15 @@ def _stream_chunks(api_key: str, messages: list, tools: list):
                     logger.info("Stream: rotated key after 401, retrying %s", model)
                     continue  # same idx
                 if resp.status_code != 200:
-                    logger.warning("HTTP %s on %s", resp.status_code, model)
+                    # Body is a stream; read it so the failure reason is logged
+                    # instead of a bare status code (this is what hid the
+                    # malformed-tool_calls 400 that broke parallel tool turns).
+                    try:
+                        err_body = resp.read().decode("utf-8", errors="replace")[:600]
+                    except Exception:
+                        err_body = "<unreadable>"
+                    logger.warning("Stream HTTP %s on %s — body: %s",
+                                   resp.status_code, model, err_body)
                     idx += 1
                     continue
                 for raw_line in resp.iter_lines():
@@ -259,8 +271,11 @@ def fc_loop_stream(api_key: str, messages: list, state: dict):
     msgs       = list(messages)
     tools_used = []
 
+    logger.info("FC-stream begin: %d message(s), max %d round(s)", len(msgs), MAX_FC_ROUNDS + 1)
+
     for round_num in range(MAX_FC_ROUNDS + 1):
         accumulated_tool_calls: dict = {}
+        cur_key       = None    # key of the tool call currently being assembled
         text_buffer   = ""
         got_tool_call = False
 
@@ -273,18 +288,36 @@ def fc_loop_stream(api_key: str, messages: list, state: dict):
                     yield ("text", text_delta)
 
                 for tc in tc_deltas:
-                    idx = tc.get("index", 0)
-                    if idx not in accumulated_tool_calls:
-                        accumulated_tool_calls[idx] = {
-                            "id":       tc.get("id", f"call_{round_num}_{idx}"),
+                    fn = tc.get("function", {}) or {}
+                    has_index = tc.get("index") is not None
+                    # Decide: does this delta START a new tool call or CONTINUE the
+                    # current one? Gemini's OpenAI-compat stream emits PARALLEL
+                    # function calls WITHOUT a distinct `index`, so the old code
+                    # (keyed on index, defaulting to 0) merged two calls into one
+                    # mangled name like "update_profilelog_weight" with concatenated
+                    # arguments -> the follow-up request was malformed -> Gemini
+                    # returned 400 on every model. Start a fresh entry when: a new
+                    # explicit index appears, an id appears, or a name arrives while
+                    # the current call is already named.
+                    start_new = (
+                        (has_index and tc["index"] not in accumulated_tool_calls)
+                        or bool(tc.get("id"))
+                        or (fn.get("name") and (cur_key is None
+                            or accumulated_tool_calls[cur_key]["function"]["name"]))
+                    )
+                    if start_new:
+                        cur_key = tc["index"] if has_index else len(accumulated_tool_calls)
+                        accumulated_tool_calls[cur_key] = {
+                            "id":       tc.get("id") or f"call_{round_num}_{cur_key}",
                             "type":     "function",
-                            "function": {"name": "", "arguments": ""},
+                            "function": {"name": fn.get("name", ""),
+                                         "arguments": fn.get("arguments", "")},
                         }
-                    fn = tc.get("function", {})
-                    if fn.get("name"):
-                        accumulated_tool_calls[idx]["function"]["name"] += fn["name"]
-                    if fn.get("arguments"):
-                        accumulated_tool_calls[idx]["function"]["arguments"] += fn["arguments"]
+                    elif cur_key is not None:
+                        if fn.get("name"):
+                            accumulated_tool_calls[cur_key]["function"]["name"] += fn["name"]
+                        if fn.get("arguments"):
+                            accumulated_tool_calls[cur_key]["function"]["arguments"] += fn["arguments"]
                     got_tool_call = True
 
                 if is_done:
@@ -299,15 +332,25 @@ def fc_loop_stream(api_key: str, messages: list, state: dict):
             return
 
         if not got_tool_call:
+            logger.info("FC-stream round %d: final answer (%d chars), tools used: %s",
+                        round_num + 1, len(text_buffer), tools_used or "none")
             yield ("tools", tools_used)
             yield ("state", state)
             return
 
         tool_calls_list = [accumulated_tool_calls[i]
                            for i in sorted(accumulated_tool_calls)]
+        # Trace the assembled calls: a single entry named like "update_profilelog_weight"
+        # here means the parallel-call accumulator merged again — fix it, don't ship it.
+        logger.info("FC-stream round %d: %d tool call(s) -> %s",
+                    round_num + 1, len(tool_calls_list),
+                    [t["function"]["name"] for t in tool_calls_list])
         msgs.append({
             "role":       "assistant",
-            "content":    text_buffer or "",
+            # Canonical OpenAI shape: content is null (not "") when the turn is
+            # purely tool calls — keeps the follow-up request valid for Gemini's
+            # compat endpoint.
+            "content":    text_buffer or None,
             "tool_calls": tool_calls_list,
         })
 
@@ -337,12 +380,15 @@ def fc_loop_stream(api_key: str, messages: list, state: dict):
 
             try:
                 result, state = _execute_tool(tc_name, tc_args, state, api_key)
+                logger.info("Tool %s -> %d-char result", tc_name, len(result or ""))
             except Exception as exc:
-                logger.warning("Tool %s error: %s", tc_name, exc)
+                logger.warning("Tool %s FAILED: %s", tc_name, exc)
                 result = json.dumps({"error": str(exc)})
 
             msgs.append({"role": "tool", "tool_call_id": tc_id, "content": result})
 
+    logger.warning("FC-stream exhausted %d round(s) without a final answer; tools used: %s",
+                   MAX_FC_ROUNDS + 1, tools_used or "none")
     yield ("tools", tools_used)
     yield ("state", state)
 
@@ -490,6 +536,8 @@ def fc_loop(api_key: str, messages: list, state: dict) -> tuple[str, list[str], 
     msgs       = list(messages)
     tools_used = []
 
+    logger.info("FC begin: %d message(s), max %d round(s)", len(msgs), MAX_FC_ROUNDS + 1)
+
     for round_num in range(MAX_FC_ROUNDS + 1):
         data    = _post(api_key, FC_MODELS, msgs, MAX_TOKENS_CHAT, TEMPERATURE, tools=TOOL_SCHEMAS)
         choices = data.get("choices") or []
@@ -505,8 +553,12 @@ def fc_loop(api_key: str, messages: list, state: dict) -> tuple[str, list[str], 
         tool_calls = msg.get("tool_calls") or []
 
         if not tool_calls or finish == "stop":
+            logger.info("FC round %d: final answer (%d chars), tools used: %s",
+                        round_num + 1, len((msg.get("content") or "")), tools_used or "none")
             return (msg.get("content") or "").strip(), tools_used, state
 
+        logger.info("FC round %d: %d tool call(s) -> %s", round_num + 1, len(tool_calls),
+                    [t.get("function", {}).get("name") for t in tool_calls])
         msgs.append({
             "role":       "assistant",
             "content":    msg.get("content") or "",

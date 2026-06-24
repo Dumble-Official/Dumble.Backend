@@ -50,10 +50,13 @@ public class GymController {
     public ResponseEntity<Page<GymResponse>> gerAllGyms(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) GenderType genderType,
-            @RequestParam(required = false) Boolean verified,
-            @RequestParam(required = false) GymStatus status,
             Pageable pageable) {
-        return new ResponseEntity<>(gymService.getAllGyms(name, genderType, verified, status, pageable), HttpStatus.OK);
+        // Public discovery only ever shows admin-verified, ACTIVE gyms. The verified/status
+        // filters are not client-controllable here, so a PENDING or unverified gym can never
+        // leak into the public listing; moderation of other states lives behind /admin/gyms.
+        return new ResponseEntity<>(
+                gymService.getAllGyms(name, genderType, Boolean.TRUE, GymStatus.ACTIVE, pageable),
+                HttpStatus.OK);
     }
 
     @GetMapping("/nearby")
