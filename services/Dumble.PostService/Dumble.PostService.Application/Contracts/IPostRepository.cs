@@ -7,6 +7,7 @@ public interface IPostRepository
     Task<Post?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<Post?> GetByIdWithDetailsAsync(Guid id, CancellationToken ct = default);
     Task<List<Post>> GetByAuthorIdAsync(string authorId, DateTime? cursor, int limit, CancellationToken ct = default);
+    Task<int> CountByAuthorIdAsync(string authorId, CancellationToken ct = default);
     Task<List<Post>> GetLikedByUserAsync(string userId, DateTime? cursor, int limit, CancellationToken ct = default);
     Task<List<Post>> GetByGymIdAsync(string gymId, DateTime? cursor, int limit, CancellationToken ct = default);
     Task<List<Post>> GetByHashtagAsync(string hashtag, DateTime? cursor, int limit, CancellationToken ct = default);
