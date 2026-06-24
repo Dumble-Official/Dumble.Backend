@@ -96,7 +96,7 @@ Respond with ONLY the category word. Nothing else."""
 
 _VALID_LABELS = {"safe", "peds", "self_harm", "drugs", "sexual", "off_topic"}
 
-_CLASSIFIER_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"]
+_CLASSIFIER_MODELS = ["gpt-oss-120b", "zai-glm-4.7"]
 
 
 def _llm_classify(text: str, api_key: str) -> str:
@@ -111,7 +111,7 @@ def _llm_classify(text: str, api_key: str) -> str:
     for model in _CLASSIFIER_MODELS:
         try:
             resp = httpx.post(
-                "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                "https://api.cerebras.ai/v1/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}",
                          "Content-Type": "application/json"},
                 json={**payload, "model": model},
