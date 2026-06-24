@@ -6,6 +6,7 @@ public sealed record GetAllBundlesResponse(
 
 public sealed record BundleListItemResponse(
     Guid Id,
+    Guid OwnerId,
     IReadOnlyList<string> Images,
     string Name,
     string Description,

@@ -14,12 +14,18 @@ internal sealed class GetAllBundlesQueryHandler(
         var pageIndex = request.PageIndex < 1 ? 1 : request.PageIndex;
         var pageSize = request.PageSize is < 1 or > 100 ? 20 : request.PageSize;
 
-        var spec = new GetAllBundlesSpecifications(pageIndex, pageSize, _ => true);
+        System.Linq.Expressions.Expression<Func<Bundle, bool>> criteria =
+            request.OwnerId is { } ownerId
+                ? b => b.OwnerId.Value == ownerId
+                : _ => true;
+
+        var spec = new GetAllBundlesSpecifications(pageIndex, pageSize, criteria);
         var bundles = await bundlesRepository.ListAsync(spec);
-        var total = await bundlesRepository.Count(_ => true);
+        var total = await bundlesRepository.Count(criteria);
 
         var items = bundles.Select(b => new BundleListItem(
             b.Id.Value,
+            b.OwnerId.Value,
             b.Images.Select(i => i.Value).ToList(),
             b.Name.Value,
             b.Description.Value,
