@@ -51,6 +51,32 @@ public class SendMessageCommandHandler(
 
         await messageRepository.CreateAsync(message, cancellationToken);
 
+        // Upsert the sender's participant profile so the peer's name/photo show correctly
+        // for everyone. CreateConversation stores non-creators with DisplayName == userId and
+        // no ProfileImage; the first message a user sends backfills the real values from the JWT.
+        var senderParticipant = conversation.Participants
+            .FirstOrDefault(p => p.UserId == request.SenderId);
+
+        if (senderParticipant is not null)
+        {
+            var changed = false;
+
+            if (senderParticipant.DisplayName != request.SenderName)
+            {
+                senderParticipant.DisplayName = request.SenderName;
+                changed = true;
+            }
+
+            if (senderParticipant.ProfileImage != request.SenderProfileImage)
+            {
+                senderParticipant.ProfileImage = request.SenderProfileImage;
+                changed = true;
+            }
+
+            if (changed)
+                await conversationRepository.UpdateAsync(conversation, cancellationToken);
+        }
+
         var lastMessage = new LastMessageInfo
         {
             MessageId = message.Id,
