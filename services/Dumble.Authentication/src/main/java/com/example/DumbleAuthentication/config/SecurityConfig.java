@@ -76,6 +76,7 @@ public class SecurityConfig {
                         // Declared BEFORE the admin /api/users/* rule so they aren't gated to staff.
                         .requestMatchers(HttpMethod.GET, "/api/users/search").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/users/*/summary").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/users/*/profile").authenticated()
                         // Admin/Moderator user search + lookup (declared AFTER /me so self stays open).
                         .requestMatchers(HttpMethod.GET, "/api/users", "/api/users/*")
                         .hasAnyRole("ADMIN", "MODERATOR")

@@ -3,6 +3,7 @@ package com.example.DumbleAuthentication.controller;
 import com.example.DumbleAuthentication.domain.User;
 import com.example.DumbleAuthentication.dto.request.OnboardingRequest;
 import com.example.DumbleAuthentication.dto.request.UpdateProfileRequest;
+import com.example.DumbleAuthentication.dto.response.PublicProfileResponse;
 import com.example.DumbleAuthentication.dto.response.UserResponse;
 import com.example.DumbleAuthentication.dto.response.UserSummaryResponse;
 import com.example.DumbleAuthentication.repository.UserRepository;
@@ -81,6 +82,18 @@ public class UserController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    /**
+     * Another user's profile, privacy-filtered — any authenticated user. Returns
+     * identity always and the rest of the fields only when the owner hasn't
+     * hidden them. (The owner reads their own full profile via {@code /me}.)
+     */
+    @GetMapping("/{id}/profile")
+    public ResponseEntity<PublicProfileResponse> publicProfile(@PathVariable UUID id) {
+        return userRepository.findById(id)
+                .map(u -> ResponseEntity.ok(PublicProfileResponse.from(u)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     /** A1 — Admin/Moderator fetch a single user by id. Gated in SecurityConfig. */
     @GetMapping("/{id}")
     public ResponseEntity<UserResponse> getById(@PathVariable UUID id) {
@@ -136,6 +149,13 @@ public class UserController {
         if (request.getDisplayName() != null) user.setDisplayName(request.getDisplayName());
         if (request.getPfp() != null) user.setPfp(request.getPfp());
         if (request.getBio() != null) user.setBio(request.getBio());
+        if (request.getHiddenFields() != null) {
+            // Keep only recognised, controllable keys so a client can't stash junk.
+            user.setHiddenFields(request.getHiddenFields().stream()
+                    .filter(PublicProfileResponse.CONTROLLABLE_FIELDS::contains)
+                    .distinct()
+                    .toList());
+        }
         user = userRepository.save(user);
         return ResponseEntity.ok(UserResponse.from(user));
     }
