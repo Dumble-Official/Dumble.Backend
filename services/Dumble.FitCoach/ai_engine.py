@@ -31,12 +31,12 @@ logger = logging.getLogger(__name__)
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 
-# Fallback chain — ordered by preference. Earlier entries (gemini-3-*)
-# don't exist in the public Gemini API yet; they were placeholders and
-# would 404 on every call, collapsing the "3-model fallback" into one
-# real model. Use shipped model IDs only.
-FC_MODELS: list[str]   = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
-PLAN_MODELS: list[str] = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+# Fallback chain — ordered by preference. gemini-1.5-flash was retired by
+# Google and now 404s on this endpoint, so it's replaced by the -lite variants,
+# which also carry separate free-tier quota — useful when the flash models are
+# rate-limited (429) or overloaded (503). Use only currently-shipped model IDs.
+FC_MODELS: list[str]   = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"]
+PLAN_MODELS: list[str] = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"]
 
 MAX_TOKENS_CHAT = 2000
 MAX_TOKENS_PLAN = 2500
