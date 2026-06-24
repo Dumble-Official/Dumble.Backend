@@ -96,7 +96,7 @@ Respond with ONLY the category word. Nothing else."""
 
 _VALID_LABELS = {"safe", "peds", "self_harm", "drugs", "sexual", "off_topic"}
 
-_CLASSIFIER_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+_CLASSIFIER_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"]
 
 
 def _llm_classify(text: str, api_key: str) -> str:
