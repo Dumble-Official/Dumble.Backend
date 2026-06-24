@@ -1,5 +1,6 @@
 package com.example.DumbleAuthentication.dto.response;
 
+import com.example.DumbleAuthentication.domain.User;
 import com.example.DumbleAuthentication.domain.UserType;
 
 import java.util.UUID;
@@ -29,6 +30,12 @@ public class UserSummaryResponse {
         this.pfp = pfp;
         this.userType = userType;
         this.bio = bio;
+    }
+
+    public static UserSummaryResponse from(User user) {
+        return new UserSummaryResponse(
+                user.getId(), user.getDisplayName(), user.getUserName(),
+                user.getPfp(), user.getUserType(), user.getBio());
     }
 
     public UUID getId() { return id; }

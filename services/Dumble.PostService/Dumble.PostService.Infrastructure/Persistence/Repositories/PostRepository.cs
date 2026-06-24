@@ -43,6 +43,26 @@ public class PostRepository : IPostRepository
             .ToListAsync(ct);
     }
 
+    public async Task<List<Post>> GetLikedByUserAsync(string userId, DateTime? cursor, int limit, CancellationToken ct)
+    {
+        // Posts the user has reacted to (any reaction type). Ordered/cursored by the
+        // post's CreatedAt — same shape as the other listings so pagination and the
+        // PostResponse mapping are identical.
+        var query = _context.Posts
+            .Include(p => p.Images.OrderBy(i => i.Order))
+            .Include(p => p.PostHashtags).ThenInclude(ph => ph.Hashtag)
+            .Where(p => p.Status != PostStatus.Deleted &&
+                        p.Reactions.Any(r => r.UserId == userId));
+
+        if (cursor.HasValue)
+            query = query.Where(p => p.CreatedAt < cursor.Value);
+
+        return await query
+            .OrderByDescending(p => p.CreatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+    }
+
     public async Task<List<Post>> GetByGymIdAsync(string gymId, DateTime? cursor, int limit, CancellationToken ct)
     {
         var query = _context.Posts
