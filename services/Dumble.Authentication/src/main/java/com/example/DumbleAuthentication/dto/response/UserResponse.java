@@ -25,6 +25,7 @@ public class UserResponse {
     private String bio;
     private String injuries;
     private UserType userType;
+    private List<String> hiddenFields;
     private Instant createdAt;
     private Instant updatedAt;
 
@@ -44,6 +45,7 @@ public class UserResponse {
         r.setBio(user.getBio());
         r.setInjuries(user.getInjuries());
         r.setUserType(user.getUserType());
+        r.setHiddenFields(user.getHiddenFields());
         r.setCreatedAt(user.getCreatedAt());
         r.setUpdatedAt(user.getUpdatedAt());
         return r;
@@ -77,6 +79,8 @@ public class UserResponse {
     public void setInjuries(String injuries) { this.injuries = injuries; }
     public UserType getUserType() { return userType; }
     public void setUserType(UserType userType) { this.userType = userType; }
+    public List<String> getHiddenFields() { return hiddenFields; }
+    public void setHiddenFields(List<String> hiddenFields) { this.hiddenFields = hiddenFields; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

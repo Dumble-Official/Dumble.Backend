@@ -28,6 +28,11 @@ public class UpdateProfileRequest {
     @Size(max = 1000)
     private String bio;
 
+    // Field keys the user wants hidden from other viewers. Null = leave unchanged;
+    // empty list = make everything public again.
+    @Size(max = 20)
+    private List<@Size(max = 50) String> hiddenFields;
+
     public BigDecimal getWeight() { return weight; }
     public void setWeight(BigDecimal weight) { this.weight = weight; }
     public String getInjuries() { return injuries; }
@@ -40,4 +45,6 @@ public class UpdateProfileRequest {
     public void setPfp(String pfp) { this.pfp = pfp; }
     public String getBio() { return bio; }
     public void setBio(String bio) { this.bio = bio; }
+    public List<String> getHiddenFields() { return hiddenFields; }
+    public void setHiddenFields(List<String> hiddenFields) { this.hiddenFields = hiddenFields; }
 }

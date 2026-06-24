@@ -73,6 +73,15 @@ public class User {
     @Column(unique = true, name = "user_name", length = 150)
     private String userName;
 
+    // Profile fields the user has marked private — hidden from other viewers
+    // (the owner always sees everything). Stored comma-joined like fitnessGoals.
+    // Empty/null = nothing hidden (every field is public), so existing rows keep
+    // showing their data. Allowed keys: bio, dateOfBirth, gender, weight, height,
+    // fitnessGoals, injuries.
+    @Column(name = "hidden_fields", length = 500)
+    @Convert(converter = StringListConverter.class)
+    private List<String> hiddenFields;
+
     @Column(length = 1000)
     private String bio;
 
@@ -205,6 +214,14 @@ public class User {
 
     public void setUserName(String userName) {
         this.userName = userName;
+    }
+
+    public List<String> getHiddenFields() {
+        return hiddenFields;
+    }
+
+    public void setHiddenFields(List<String> hiddenFields) {
+        this.hiddenFields = hiddenFields;
     }
 
     public String getBio() {
