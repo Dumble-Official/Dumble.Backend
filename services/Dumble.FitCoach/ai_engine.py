@@ -29,14 +29,14 @@ from schedule_contract import (
 
 logger = logging.getLogger(__name__)
 
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+# Provider endpoint (OpenAI-compatible). Points at Cerebras — free, fast, no
+# per-minute cap and no 503 "high demand" walls like Gemini's free tier.
+GEMINI_BASE_URL = "https://api.cerebras.ai/v1/chat/completions"
 
-# Fallback chain — ordered by preference. gemini-1.5-flash was retired by
-# Google and now 404s on this endpoint, so it's replaced by the -lite variants,
-# which also carry separate free-tier quota — useful when the flash models are
-# rate-limited (429) or overloaded (503). Use only currently-shipped model IDs.
-FC_MODELS: list[str]   = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"]
-PLAN_MODELS: list[str] = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"]
+# Cerebras model fallback chain (OpenAI-compatible). gpt-oss-120b is the
+# primary — confirmed tool-calling + reasoning; zai-glm-4.7 is the backup.
+FC_MODELS: list[str]   = ["gpt-oss-120b", "zai-glm-4.7"]
+PLAN_MODELS: list[str] = ["gpt-oss-120b", "zai-glm-4.7"]
 
 MAX_TOKENS_CHAT = 2000
 MAX_TOKENS_PLAN = 2500
@@ -50,13 +50,8 @@ def _post(api_key: str, models: list[str], messages: list, max_tokens: int,
         "messages":         messages,
         "max_tokens":       max_tokens,
         "temperature":      temperature,
-        # Disable Gemini's "thinking" budget on 2.5+ models so the response
-        # tokens actually contain the reply instead of internal reasoning.
-        # The previous body used `"thinking": {"type": "disabled"}` — that's
-        # the Gemini-NATIVE field name, which the OpenAI-compat endpoint we
-        # post to rejects with 400 "Unknown name 'thinking'". The compat
-        # endpoint takes the OpenAI-style `reasoning_effort` knob.
-        "reasoning_effort": "none",
+        # No reasoning_effort here: Cerebras gpt-oss uses a light default, and
+        # zai-glm-4.7 rejects the field — so omit it for cross-model safety.
     }
     if tools:
         body["tools"]       = tools
@@ -153,10 +148,6 @@ def _stream_chunks(api_key: str, messages: list, tools: list):
             "stream":           True,
             "tools":            tools,
             "tool_choice":      "auto",
-            # Match _post — keep Gemini 2.5+ from spending response budget on
-            # internal reasoning. With this set "none", a 2000-token cap leaves
-            # all 2000 for the actual streamed answer.
-            "reasoning_effort": "none",
         }
         try:
             with httpx.stream(
