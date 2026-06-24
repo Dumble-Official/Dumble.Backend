@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -44,6 +45,11 @@ public class ScheduleController {
     @PatchMapping("/items/{itemId}")
     public ItemResponse editItem(@PathVariable UUID itemId, @Valid @RequestBody EditItemRequest req) {
         return scheduleService.editItem(me().userId(), itemId, req);
+    }
+
+    @PutMapping("/items/reorder")
+    public List<ItemResponse> reorderItems(@Valid @RequestBody ReorderRequest req) {
+        return scheduleService.reorderItems(me().userId(), req);
     }
 
     @DeleteMapping("/items/{itemId}")

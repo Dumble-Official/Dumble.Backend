@@ -83,6 +83,36 @@ public class ScheduleService {
         return upsertTarget(getOrCreate(userId).getId(), weekday, req);
     }
 
+    /**
+     * Reorder a day's list. The caller sends the full new order of the
+     * (tableType, weekday) bucket; it must be exactly those items (a
+     * permutation), and positions are re-stamped 0..n-1 in that order.
+     */
+    @Transactional
+    public List<ItemResponse> reorderItems(UUID userId, ReorderRequest req) {
+        Schedule schedule = getOrCreate(userId);
+        List<ScheduleItem> bucket = itemRepository.findByScheduleIdAndTableTypeAndWeekday(
+                schedule.getId(), req.tableType(), req.weekday());
+
+        Map<UUID, ScheduleItem> byId = bucket.stream()
+                .collect(Collectors.toMap(ScheduleItem::getId, i -> i));
+
+        if (req.itemIds().size() != bucket.size()
+                || !byId.keySet().equals(new HashSet<>(req.itemIds()))) {
+            throw new BadRequestException(
+                    "itemIds must be exactly the items in this day's list, with no duplicates");
+        }
+
+        List<ItemResponse> reordered = new ArrayList<>();
+        int position = 0;
+        for (UUID id : req.itemIds()) {
+            ScheduleItem item = byId.get(id);
+            item.setPosition(position++);
+            reordered.add(ItemResponse.from(itemRepository.save(item)));
+        }
+        return reordered;
+    }
+
     /** Set the caller's schedule timezone (IANA). Rejects an unknown zone id. */
     @Transactional
     public void setTimezone(UUID userId, String timezone) {

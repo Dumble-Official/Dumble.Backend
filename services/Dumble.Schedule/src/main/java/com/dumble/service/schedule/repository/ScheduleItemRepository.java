@@ -16,6 +16,9 @@ public interface ScheduleItemRepository extends JpaRepository<ScheduleItem, UUID
 
     List<ScheduleItem> findByScheduleIdOrderByTableTypeAscWeekdayAscPositionAsc(UUID scheduleId);
 
+    /** The items of a single (table, weekday) bucket — used to validate and re-stamp a reorder. */
+    List<ScheduleItem> findByScheduleIdAndTableTypeAndWeekday(UUID scheduleId, TableType tableType, Weekday weekday);
+
     /**
      * Next append position for a (table, weekday) bucket: max(position)+1, so
      * positions stay strictly increasing even after deletions (a plain count
