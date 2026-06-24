@@ -50,8 +50,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 Object userIdClaim = claims.get("userId");
                 if (userIdClaim instanceof String idStr) {
                     UUID userId = UUID.fromString(idStr);
-                    Object typeClaim = claims.get("userType");
-                    String userType = (typeClaim instanceof String s && !s.isBlank()) ? s : "PARTICIPANT";
+                    String userType = resolveUserType(claims);
 
                     AuthPrincipal principal = new AuthPrincipal(userId, userType);
                     var auth = new UsernamePasswordAuthenticationToken(
@@ -63,5 +62,33 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             }
         }
         chain.doFilter(request, response);
+    }
+
+    /**
+     * Prefer the explicit {@code userType} claim; otherwise derive it from the
+     * {@code roles} array (e.g. {@code ["ROLE_ADMIN"]}) so admin/trainer/gym are
+     * still recognised when a token omits userType — matching the Wallet/
+     * Subscription/Gym services' behaviour.
+     */
+    @SuppressWarnings("unchecked")
+    private static String resolveUserType(Claims claims) {
+        Object explicit = claims.get("userType");
+        if (explicit instanceof String s && !s.isBlank()) {
+            return s;
+        }
+        Object rolesClaim = claims.get("roles");
+        if (rolesClaim instanceof java.util.List<?> roles) {
+            String resolved = "PARTICIPANT";
+            for (Object r : roles) {
+                String role = String.valueOf(r);
+                if (role.startsWith("ROLE_")) role = role.substring(5);
+                if ("ADMIN".equalsIgnoreCase(role)) return "ADMIN";
+                if ("GYM_OWNER".equalsIgnoreCase(role)) resolved = "GYM_OWNER";
+                else if ("GYM".equalsIgnoreCase(role) && !"GYM_OWNER".equals(resolved)) resolved = "GYM";
+                else if ("TRAINER".equalsIgnoreCase(role) && "PARTICIPANT".equals(resolved)) resolved = "TRAINER";
+            }
+            return resolved;
+        }
+        return "PARTICIPANT";
     }
 }

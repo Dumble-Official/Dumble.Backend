@@ -43,6 +43,9 @@ public class PostRepository : IPostRepository
             .ToListAsync(ct);
     }
 
+    public Task<int> CountByAuthorIdAsync(string authorId, CancellationToken ct) =>
+        _context.Posts.CountAsync(p => p.AuthorId == authorId && p.Status != PostStatus.Deleted, ct);
+
     public async Task<List<Post>> GetLikedByUserAsync(string userId, DateTime? cursor, int limit, CancellationToken ct)
     {
         // Posts the user has reacted to (any reaction type). Ordered/cursored by the
