@@ -12,6 +12,8 @@ public class ReactionConfiguration : IEntityTypeConfiguration<Reaction>
         builder.HasKey(r => r.Id);
 
         builder.Property(r => r.UserId).IsRequired().HasMaxLength(100);
+        builder.Property(r => r.DisplayName).IsRequired().HasMaxLength(200);
+        builder.Property(r => r.ProfileImage).HasMaxLength(500);
         builder.Property(r => r.Type).HasConversion<string>().HasMaxLength(50);
 
         builder.HasIndex(r => new { r.PostId, r.UserId })
