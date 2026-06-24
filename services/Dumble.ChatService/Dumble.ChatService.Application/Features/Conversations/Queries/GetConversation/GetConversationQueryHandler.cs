@@ -1,3 +1,4 @@
+using Dumble.ChatService.Application.Common;
 using Dumble.ChatService.Application.Contracts;
 using Dumble.ChatService.Contracts.Conversations;
 using Dumble.ChatService.Domain.Models;
@@ -6,7 +7,8 @@ using MediatR;
 namespace Dumble.ChatService.Application.Features.Conversations.Queries.GetConversation;
 
 public class GetConversationQueryHandler(
-    IConversationRepository conversationRepository
+    IConversationRepository conversationRepository,
+    IMessageRepository messageRepository
 ) : IRequestHandler<GetConversationQuery, ConversationResponse>
 {
     public async Task<ConversationResponse> Handle(GetConversationQuery request, CancellationToken cancellationToken)
@@ -16,6 +18,11 @@ public class GetConversationQueryHandler(
 
         if (!conversation.Participants.Any(p => p.UserId == request.CallerId))
             throw new UnauthorizedAccessException("You are not a participant in this conversation");
+
+        // Backfill any placeholder participant names from message history (self-heals).
+        if (await ParticipantBackfill.ResolveSentinelNamesAsync(
+                conversation, messageRepository, cancellationToken))
+            await conversationRepository.UpdateAsync(conversation, cancellationToken);
 
         return MapToResponse(conversation);
     }
