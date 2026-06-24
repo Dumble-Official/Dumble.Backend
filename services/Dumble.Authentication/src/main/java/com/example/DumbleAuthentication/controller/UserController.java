@@ -69,6 +69,18 @@ public class UserController {
         return userRepository.searchPublic(q, pageable);
     }
 
+    /**
+     * Public, PII-free summary of any user by id — for profile screens that need
+     * the viewed user's role/handle/avatar (e.g. to decide whether to show a
+     * "Bundles" tab). Any authenticated user; distinct from the admin getById.
+     */
+    @GetMapping("/{id}/summary")
+    public ResponseEntity<UserSummaryResponse> summary(@PathVariable UUID id) {
+        return userRepository.findById(id)
+                .map(u -> ResponseEntity.ok(UserSummaryResponse.from(u)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     /** A1 — Admin/Moderator fetch a single user by id. Gated in SecurityConfig. */
     @GetMapping("/{id}")
     public ResponseEntity<UserResponse> getById(@PathVariable UUID id) {
