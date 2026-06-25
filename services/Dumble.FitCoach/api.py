@@ -272,9 +272,12 @@ class ChatResponse(BaseModel):
     schedule_changes:   dict | None = None                                         
 
 class FeedbackRequest(BaseModel):
-    user_id:  str
+    # Optional in the body: the gateway-set identity always overrides it
+    # (anti-IDOR, see the endpoint), so requiring it here just 422'd clients
+    # that correctly omit it.
+    user_id:  str = ""
     entry_id: str
-    feedback: int                           
+    feedback: int
     note:     str = ""
 
 class FeedbackResponse(BaseModel):
