@@ -1,8 +1,11 @@
 FROM python:3.11-slim
 
-# System deps for OpenCV / MediaPipe
+# System deps for OpenCV / MediaPipe. MediaPipe's pose landmarker loads an
+# OpenGL-ES backend at runtime, so it needs libGLESv2 (libgles2) and libEGL
+# (libegl1) on top of OpenCV's libGL (libgl1) — without them analysis fails
+# with "libGLESv2.so.2: cannot open shared object file".
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 libglib2.0-0 libgomp1 curl \
+    libgl1 libglib2.0-0 libgomp1 libgles2 libegl1 curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
