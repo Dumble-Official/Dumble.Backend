@@ -1,8 +1,10 @@
 package com.example.DumbleSubscription.controller;
 
+import com.example.DumbleSubscription.client.dto.CheckoutResponse;
 import com.example.DumbleSubscription.dto.CurrentUser;
 import com.example.DumbleSubscription.dto.MyPlanResponse;
 import com.example.DumbleSubscription.dto.PlanResponse;
+import com.example.DumbleSubscription.dto.PlanUpgradeCheckoutRequest;
 import com.example.DumbleSubscription.dto.PlanUpgradeRequest;
 import com.example.DumbleSubscription.repository.PlanRepository;
 import com.example.DumbleSubscription.service.IdempotencyService;
@@ -53,6 +55,20 @@ public class PlanController {
                 MyPlanResponse.class,
                 () -> platformPlanService.upgradeToPro(user.getId(), req));
         return ResponseEntity.status(HttpStatus.OK).body(cached.value());
+    }
+
+    /**
+     * Hosted-checkout Pro upgrade: returns a Paymob iframe URL the app opens in a
+     * WebView. The subscription is claimed PENDING and activated by the
+     * charge.succeeded webhook once the card payment clears. No Idempotency-Key
+     * header needed — the underlying charge key is derived from the subscription.
+     */
+    @PostMapping("/me/plan/upgrade/checkout")
+    public ResponseEntity<CheckoutResponse> upgradeCheckout(
+            @AuthenticationPrincipal CurrentUser user,
+            @RequestBody(required = false) PlanUpgradeCheckoutRequest req) {
+        PlanUpgradeCheckoutRequest body = req == null ? new PlanUpgradeCheckoutRequest() : req;
+        return ResponseEntity.ok(platformPlanService.createUpgradeCheckout(user.getId(), body));
     }
 
     @PostMapping("/me/plan/cancel")

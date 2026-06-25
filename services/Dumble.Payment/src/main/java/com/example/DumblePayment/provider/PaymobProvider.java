@@ -3,6 +3,8 @@ package com.example.DumblePayment.provider;
 import com.example.DumblePayment.exception.ProviderException;
 import com.example.DumblePayment.provider.dto.ProviderChargeRequest;
 import com.example.DumblePayment.provider.dto.ProviderChargeResponse;
+import com.example.DumblePayment.provider.dto.ProviderHostedCheckoutRequest;
+import com.example.DumblePayment.provider.dto.ProviderHostedCheckoutResponse;
 import com.example.DumblePayment.provider.dto.ProviderPayoutRequest;
 import com.example.DumblePayment.provider.dto.ProviderPayoutResponse;
 import com.example.DumblePayment.provider.dto.ProviderRefundRequest;
@@ -22,6 +24,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -56,17 +59,26 @@ public class PaymobProvider implements IPaymentProvider {
     private final boolean enabled;
     private final String apiKey;
     private final String hmacSecret;
+    private final String baseUrl;
+    private final long integrationId;
+    private final long iframeId;
 
     public PaymobProvider(@Qualifier("paymobClient") WebClient client,
                           ObjectMapper objectMapper,
                           @Value("${paymob.enabled:false}") boolean enabled,
                           @Value("${paymob.api-key}") String apiKey,
-                          @Value("${paymob.hmac-secret}") String hmacSecret) {
+                          @Value("${paymob.hmac-secret}") String hmacSecret,
+                          @Value("${paymob.base-url:https://accept.paymob.com/api}") String baseUrl,
+                          @Value("${paymob.integration-id:0}") long integrationId,
+                          @Value("${paymob.iframe-id:0}") long iframeId) {
         this.client = client;
         this.objectMapper = objectMapper;
         this.enabled = enabled;
         this.apiKey = apiKey;
         this.hmacSecret = hmacSecret;
+        this.baseUrl = baseUrl;
+        this.integrationId = integrationId;
+        this.iframeId = iframeId;
     }
 
     @Override
@@ -97,6 +109,90 @@ public class PaymobProvider implements IPaymentProvider {
         } catch (Exception ex) {
             throw new ProviderException("Paymob charge failed: " + ex.getMessage(), ex);
         }
+    }
+
+    @Override
+    public ProviderHostedCheckoutResponse createHostedCheckout(ProviderHostedCheckoutRequest req) {
+        if (!enabled) {
+            // Stub: hand back a deterministic, well-formed iframe URL so the app's
+            // WebView flow can be developed/exercised before real credentials land.
+            // The stub webhook fixture (signature "dev-stub-ok") then drives the
+            // charge to its terminal state, exactly like a real Paymob callback.
+            String token = "stub-paytoken-" + UUID.randomUUID();
+            String orderId = "stub-order-" + UUID.randomUUID();
+            log.info("PaymobProvider [stub]: hosted checkout order={} amount={} {}",
+                    orderId, req.amountCents(), req.currency());
+            return new ProviderHostedCheckoutResponse(
+                    iframeUrl(token), token, orderId);
+        }
+        try {
+            // 1) Auth token
+            String authToken = postForJson("/auth/tokens",
+                    Map.of("api_key", apiKey)).path("token").asText(null);
+            if (authToken == null || authToken.isBlank()) {
+                throw new ProviderException("Paymob auth returned no token");
+            }
+
+            // 2) Order (merchant_order_id must be unique per attempt)
+            JsonNode order = postForJson("/ecommerce/orders", Map.of(
+                    "auth_token", authToken,
+                    "delivery_needed", false,
+                    "amount_cents", req.amountCents(),
+                    "currency", req.currency(),
+                    "merchant_order_id", req.merchantOrderId(),
+                    "items", java.util.List.of()));
+            String orderId = order.path("id").asText(null);
+            if (orderId == null || orderId.isBlank()) {
+                throw new ProviderException("Paymob order creation returned no id");
+            }
+
+            // 3) Payment key (billing_data fields are mandatory; fill placeholders)
+            Map<String, Object> billing = new java.util.HashMap<>();
+            billing.put("email", orBlank(req.email(), "na@dumble.app"));
+            billing.put("first_name", orBlank(req.firstName(), "Dumble"));
+            billing.put("last_name", orBlank(req.lastName(), "User"));
+            billing.put("phone_number", orBlank(req.phone(), "+200000000000"));
+            for (String f : new String[]{"apartment", "floor", "street", "building",
+                    "shipping_method", "postal_code", "city", "country", "state"}) {
+                billing.put(f, "NA");
+            }
+            JsonNode key = postForJson("/acceptance/payment_keys", Map.of(
+                    "auth_token", authToken,
+                    "amount_cents", req.amountCents(),
+                    "expiration", 3600,
+                    "order_id", orderId,
+                    "billing_data", billing,
+                    "currency", req.currency(),
+                    "integration_id", integrationId));
+            String paymentToken = key.path("token").asText(null);
+            if (paymentToken == null || paymentToken.isBlank()) {
+                throw new ProviderException("Paymob payment_keys returned no token");
+            }
+
+            return new ProviderHostedCheckoutResponse(iframeUrl(paymentToken), paymentToken, orderId);
+        } catch (ProviderException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new ProviderException("Paymob hosted checkout failed: " + ex.getMessage(), ex);
+        }
+    }
+
+    /** Build the WebView iframe URL Paymob serves the card form from. */
+    private String iframeUrl(String paymentToken) {
+        return baseUrl + "/acceptance/iframes/" + iframeId + "?payment_token=" + paymentToken;
+    }
+
+    private JsonNode postForJson(String uri, Object body) {
+        return client.post()
+                .uri(uri)
+                .bodyValue(body)
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .block();
+    }
+
+    private static String orBlank(String value, String fallback) {
+        return (value == null || value.isBlank()) ? fallback : value;
     }
 
     @Override

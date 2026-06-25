@@ -2,6 +2,8 @@ package com.example.DumblePayment.provider;
 
 import com.example.DumblePayment.provider.dto.ProviderChargeRequest;
 import com.example.DumblePayment.provider.dto.ProviderChargeResponse;
+import com.example.DumblePayment.provider.dto.ProviderHostedCheckoutRequest;
+import com.example.DumblePayment.provider.dto.ProviderHostedCheckoutResponse;
 import com.example.DumblePayment.provider.dto.ProviderPayoutRequest;
 import com.example.DumblePayment.provider.dto.ProviderPayoutResponse;
 import com.example.DumblePayment.provider.dto.ProviderRefundRequest;
@@ -20,6 +22,13 @@ public interface IPaymentProvider {
 
     /** Make a charge attempt. Result is one of Pending / Succeeded / Failed. */
     ProviderChargeResponse charge(ProviderChargeRequest req);
+
+    /**
+     * Create an interactive hosted-checkout (iframe) session: the user enters
+     * their card on Paymob's hosted page inside an in-app WebView, and the final
+     * outcome arrives via webhook. Returns the iframe URL plus Paymob's order id.
+     */
+    ProviderHostedCheckoutResponse createHostedCheckout(ProviderHostedCheckoutRequest req);
 
     /** Issue a refund against a previously-Succeeded charge (Decision 5.2 ORIGINAL_METHOD path). */
     ProviderRefundResponse refund(ProviderRefundRequest req);

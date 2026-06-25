@@ -21,5 +21,7 @@ public enum EntrySource {
     /** Decision 4.2 — debit when a withdrawal is requested (moves Available → Pending). */
     WITHDRAWAL_REQUESTED,
     /** Decision 4.4 — credit reversal when Payment reports the withdrawal failed. */
-    WITHDRAWAL_REVERSED
+    WITHDRAWAL_REVERSED,
+    /** User-initiated wallet top-up funded by a Paymob hosted-checkout charge. */
+    TOPUP
 }

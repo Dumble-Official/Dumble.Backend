@@ -74,6 +74,11 @@ paymob:
   api-key: ${PAYMOB_API_KEY:dev-only-paymob-api-key}
   hmac-secret: ${PAYMOB_HMAC_SECRET:dev-only-paymob-hmac-secret}
   base-url: ${PAYMOB_BASE_URL:https://accept.paymob.com/api}
+  # Hosted-checkout (iframe) integration — card online-payment integration id
+  # and iframe id from the Paymob dashboard. Used to mint the payment key and
+  # build the iframe URL the app loads in a WebView.
+  integration-id: ${PAYMOB_INTEGRATION_ID:0}
+  iframe-id: ${PAYMOB_IFRAME_ID:0}
   # Boot-time guard refuses to start when a key starts with the production
   # prefix and the active profile isn't "prod" (Decision 10.3).
   prod-key-prefix: ${PAYMOB_PROD_KEY_PREFIX:live_}

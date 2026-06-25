@@ -145,6 +145,7 @@ public class PaymentEventListener {
         String providerRef = node.path("providerRef").asText("");
         String subIdStr = node.path("subscriptionId").asText("");
         String userIdStr = node.path("userId").asText("");
+        String callerRef = node.path("callerReference").asText("");
 
         if (!subIdStr.isEmpty()) {
             UUID subId = parseUuid(subIdStr, "charge.completed.subscriptionId");
@@ -165,15 +166,19 @@ public class PaymentEventListener {
                 return;
             }
         }
-        if (!userIdStr.isEmpty()) {
+        // userId fallback is ONLY for platform Pro upgrades. Gate it on the
+        // platform-sub: callerReference so an unrelated charge for the same user
+        // (e.g. a wallet top-up: callerReference "topup:<userId>") can't wrongly
+        // activate a still-pending Pro upgrade without its own payment.
+        if (!userIdStr.isEmpty() && callerRef.startsWith("platform-sub:")) {
             UUID userId = parseUuid(userIdStr, "charge.completed.userId");
             if (userId != null) {
                 platformPlanService.confirmPendingUpgrade(userId, providerRef);
                 return;
             }
         }
-        log.warn("charge.completed event matched no PENDING subscription (providerRef={}, sub={}, user={})",
-                providerRef, subIdStr, userIdStr);
+        log.warn("charge.completed event matched no PENDING subscription (providerRef={}, sub={}, user={}, caller={})",
+                providerRef, subIdStr, userIdStr, callerRef);
     }
 
     private void handleChargeFailed(JsonNode node) {

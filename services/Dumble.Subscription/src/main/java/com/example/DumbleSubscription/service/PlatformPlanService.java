@@ -3,6 +3,9 @@ package com.example.DumbleSubscription.service;
 import com.example.DumbleSubscription.client.PaymentServiceClient;
 import com.example.DumbleSubscription.client.dto.ChargeRequest;
 import com.example.DumbleSubscription.client.dto.ChargeResponse;
+import com.example.DumbleSubscription.client.dto.CheckoutRequest;
+import com.example.DumbleSubscription.client.dto.CheckoutResponse;
+import com.example.DumbleSubscription.dto.PlanUpgradeCheckoutRequest;
 import com.example.DumbleSubscription.domain.Plan;
 import com.example.DumbleSubscription.domain.PlatformSubscription;
 import com.example.DumbleSubscription.domain.enums.PaymentMethodType;
@@ -131,6 +134,49 @@ public class PlatformPlanService {
         }
         persister.releasePending(claimed.getId());
         throw new BusinessRuleViolationException("Payment failed");
+    }
+
+    /**
+     * Hosted-checkout (iframe) upgrade. Same claim-PENDING shape as
+     * {@link #upgradeToPro} but instead of charging a saved token, creates a
+     * Paymob hosted-checkout session and returns the iframe URL for the app to
+     * open in a WebView. The card is entered on Paymob's page; the
+     * charge.succeeded webhook (callerReference {@code platform-sub:<userId>})
+     * later flips this PENDING subscription to ACTIVE via
+     * {@link #confirmPendingUpgrade}. The deterministic idempotency key means a
+     * retry replays the same checkout session rather than creating a new charge.
+     */
+    public CheckoutResponse createUpgradeCheckout(UUID userId, PlanUpgradeCheckoutRequest req) {
+        Plan pro = planRepository.findByCode(PlatformPlanCode.PRO)
+                .orElseThrow(() -> new IllegalStateException("PRO plan not seeded"));
+
+        PlatformSubscription claimed = persister.claimPending(userId, null, PaymentMethodType.OTHER);
+
+        String key = stableUpgradeKey(userId, pro.getPriceCents(), claimed.getId());
+        CheckoutResponse resp;
+        try {
+            resp = paymentServiceClient.createCheckout(key,
+                    CheckoutRequest.builder()
+                            .userId(userId)
+                            .amountCents(pro.getPriceCents())
+                            .currency(pro.getCurrency())
+                            .description("Upgrade to PRO")
+                            .callerReference("platform-sub:" + userId)
+                            .email(req.getEmail())
+                            .firstName(req.getFirstName())
+                            .lastName(req.getLastName())
+                            .phone(req.getPhone())
+                            .build());
+        } catch (RuntimeException ex) {
+            persister.releasePending(claimed.getId());
+            throw ex;
+        }
+        if (resp == null || resp.getIframeUrl() == null || resp.getIframeUrl().isBlank()) {
+            persister.releasePending(claimed.getId());
+            throw new BusinessRuleViolationException("Checkout initialization failed");
+        }
+        persister.markPending(claimed.getId(), resp.getProviderRef());
+        return resp;
     }
 
     /**

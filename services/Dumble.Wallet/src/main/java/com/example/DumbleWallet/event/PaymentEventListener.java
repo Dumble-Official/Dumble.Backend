@@ -1,6 +1,8 @@
 package com.example.DumbleWallet.event;
 
+import com.example.DumbleWallet.dto.WalletCreditRequest;
 import com.example.DumbleWallet.repository.WithdrawalRequestRepository;
+import com.example.DumbleWallet.service.WalletService;
 import com.example.DumbleWallet.service.WithdrawalService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,15 +46,18 @@ public class PaymentEventListener {
     private final InboundListenerEventRecorder recorder;
     private final WithdrawalRequestRepository withdrawalRequestRepository;
     private final WithdrawalService withdrawalService;
+    private final WalletService walletService;
 
     public PaymentEventListener(ObjectMapper objectMapper,
                                 InboundListenerEventRecorder recorder,
                                 WithdrawalRequestRepository withdrawalRequestRepository,
-                                @Lazy WithdrawalService withdrawalService) {
+                                @Lazy WithdrawalService withdrawalService,
+                                @Lazy WalletService walletService) {
         this.objectMapper = objectMapper;
         this.recorder = recorder;
         this.withdrawalRequestRepository = withdrawalRequestRepository;
         this.withdrawalService = withdrawalService;
+        this.walletService = walletService;
     }
 
     @RabbitListener(queues = "wallet.inbound")
@@ -65,6 +70,7 @@ public class PaymentEventListener {
             switch (type) {
                 case "payment.withdrawal.completed" -> handleCompleted(node);
                 case "payment.withdrawal.failed"    -> handleFailed(node);
+                case "payment.charge.succeeded"     -> handleChargeSucceeded(node);
                 default -> log.debug("Ignoring inbound event type {}", type);
             }
         } catch (Exception ex) {
@@ -97,6 +103,40 @@ public class PaymentEventListener {
             return;
         }
         withdrawalService.onWithdrawalFailed(localId, providerRef, reason);
+    }
+
+    /**
+     * Wallet top-up: a hosted-checkout charge cleared. Credit the wallet only for
+     * charges whose callerReference is a {@code topup:*} (subscription/bundle
+     * charges ride the same routing key but are owned by Subscription). Dedup on
+     * the unique chargeId — NOT callerReference, which repeats per user across
+     * top-ups — so a redelivery can't double-credit.
+     */
+    private void handleChargeSucceeded(JsonNode node) {
+        String chargeId = node.path("chargeId").asText("");
+        String callerRef = node.path("callerReference").asText("");
+        if (chargeId.isBlank() || !callerRef.startsWith("topup:")) {
+            return; // not a wallet top-up
+        }
+        String summary = node.toString();
+        if (summary.length() > 1900) summary = summary.substring(0, 1900);
+        if (!recorder.tryRecord("payment.charge.succeeded:" + chargeId,
+                "payment.charge.succeeded", summary)) {
+            return; // already processed
+        }
+        UUID userId = parseUuid(node.path("userId").asText(""));
+        long amountCents = node.path("amountCents").asLong(0L);
+        if (userId == null || amountCents <= 0) {
+            log.warn("topup charge.succeeded missing userId/amount — dropping (chargeId={})", chargeId);
+            return;
+        }
+        WalletCreditRequest req = new WalletCreditRequest();
+        req.setUserId(userId);
+        req.setAmountCents(amountCents);
+        req.setSource("TOPUP");
+        req.setExternalRef(chargeId);
+        req.setMemo("Wallet top-up");
+        walletService.credit(req);
     }
 
     /**

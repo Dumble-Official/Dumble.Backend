@@ -66,6 +66,19 @@ public class RabbitMQConfig {
                 .with("payment.withdrawal.*");
     }
 
+    /**
+     * Wallet top-up: Payment emits {@code payment.charge.succeeded} when a
+     * hosted-checkout charge clears. Wallet consumes it and credits the wallet
+     * for charges whose callerReference is a {@code topup:*} (others ignored).
+     */
+    @Bean
+    public Binding paymentChargeSucceededBinding(Queue walletInboundQueue,
+                                                 TopicExchange dumbleEventsExchange) {
+        return BindingBuilder.bind(walletInboundQueue)
+                .to(dumbleEventsExchange)
+                .with("payment.charge.succeeded");
+    }
+
     @Bean
     public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory,
                                          @Lazy OutboxConfirmCoordinator confirmCoordinator) {

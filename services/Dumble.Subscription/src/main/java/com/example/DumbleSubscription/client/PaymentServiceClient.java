@@ -2,6 +2,8 @@ package com.example.DumbleSubscription.client;
 
 import com.example.DumbleSubscription.client.dto.ChargeRequest;
 import com.example.DumbleSubscription.client.dto.ChargeResponse;
+import com.example.DumbleSubscription.client.dto.CheckoutRequest;
+import com.example.DumbleSubscription.client.dto.CheckoutResponse;
 import com.example.DumbleSubscription.client.dto.PayoutRequest;
 import com.example.DumbleSubscription.client.dto.PayoutResponse;
 import com.example.DumbleSubscription.client.dto.TokenizeRequest;
@@ -32,6 +34,18 @@ public class PaymentServiceClient {
                 .bodyValue(body)
                 .retrieve()
                 .bodyToMono(ChargeResponse.class)
+                .block();
+    }
+
+    /** System-context call. Used by the hosted-checkout (iframe) Pro-upgrade flow. */
+    public CheckoutResponse createCheckout(String idempotencyKey, CheckoutRequest body) {
+        return client.post()
+                .uri("/api/payment/checkouts")
+                .header("Authorization", "Bearer " + signer.mint("payment"))
+                .header("Idempotency-Key", idempotencyKey)
+                .bodyValue(body)
+                .retrieve()
+                .bodyToMono(CheckoutResponse.class)
                 .block();
     }
 

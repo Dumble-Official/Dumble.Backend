@@ -1,13 +1,18 @@
 package com.example.DumblePayment.service;
 
 import com.example.DumblePayment.domain.Charge;
+import com.example.DumblePayment.domain.enums.ChargeStatus;
 import com.example.DumblePayment.dto.ChargeRequest;
 import com.example.DumblePayment.dto.ChargeResponse;
+import com.example.DumblePayment.dto.CheckoutRequest;
+import com.example.DumblePayment.dto.CheckoutResponse;
 import com.example.DumblePayment.exception.ProviderException;
 import com.example.DumblePayment.exception.ResourceNotFoundException;
 import com.example.DumblePayment.provider.IPaymentProvider;
 import com.example.DumblePayment.provider.dto.ProviderChargeRequest;
 import com.example.DumblePayment.provider.dto.ProviderChargeResponse;
+import com.example.DumblePayment.provider.dto.ProviderHostedCheckoutRequest;
+import com.example.DumblePayment.provider.dto.ProviderHostedCheckoutResponse;
 import com.example.DumblePayment.repository.ChargeRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,6 +91,47 @@ public class ChargeService {
             default -> {
                 return ChargeResponse.from(persister.markFailed(claimed.getId(), "provider_unknown_outcome", null));
             }
+        }
+    }
+
+    /**
+     * Create an interactive hosted-checkout (iframe) session. Same Phase-1/Phase-2
+     * shape as {@link #charge}: persist a PENDING charge first (so a lost response
+     * is still reconcilable), then ask Paymob for the iframe. The Paymob order is
+     * keyed by merchant_order_id = charge id, which the webhook uses to reconcile
+     * back to this charge; callerReference carries the purpose for downstream
+     * consumers. The charge stays PENDING until the webhook flips it.
+     */
+    public CheckoutResponse createCheckout(CheckoutRequest req, String actor) {
+        ChargeRequest pendingReq = new ChargeRequest();
+        pendingReq.setUserId(req.getUserId());
+        pendingReq.setAmountCents(req.getAmountCents());
+        pendingReq.setCurrency(req.getCurrency() == null ? "EGP" : req.getCurrency());
+        pendingReq.setDescription(req.getDescription());
+        pendingReq.setCallerReference(req.getCallerReference());
+
+        Charge claimed = persister.persistPending(pendingReq, actor);
+
+        try {
+            ProviderHostedCheckoutResponse resp = provider.createHostedCheckout(
+                    new ProviderHostedCheckoutRequest(
+                            claimed.getAmountCents(),
+                            claimed.getCurrency(),
+                            claimed.getId().toString(),
+                            req.getEmail(),
+                            req.getFirstName(),
+                            req.getLastName(),
+                            req.getPhone()));
+            // Store Paymob's order id as the provider ref for traceability; the
+            // webhook still reconciles via merchant_order_id = charge id, and
+            // markSucceeded overwrites this with the transaction id on success.
+            persister.markPendingProviderRef(claimed.getId(), resp.paymobOrderId());
+            return new CheckoutResponse(claimed.getId(), ChargeStatus.PENDING.name(),
+                    resp.iframeUrl(), resp.paymobOrderId());
+        } catch (ProviderException ex) {
+            log.warn("Hosted checkout failed for charge {}: {}", claimed.getId(), ex.getMessage());
+            Charge failed = persister.markFailed(claimed.getId(), "checkout_init_failed", null);
+            return new CheckoutResponse(failed.getId(), failed.getStatus().name(), null, null);
         }
     }
 

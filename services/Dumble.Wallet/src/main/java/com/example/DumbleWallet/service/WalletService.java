@@ -48,7 +48,8 @@ public class WalletService {
             EntrySource.BAN_REFUND,
             EntrySource.CHARGEBACK,
             EntrySource.ADMIN_ADJUSTMENT,
-            EntrySource.WITHDRAWAL_REVERSED
+            EntrySource.WITHDRAWAL_REVERSED,
+            EntrySource.TOPUP
     );
 
     private final WalletRepository walletRepository;

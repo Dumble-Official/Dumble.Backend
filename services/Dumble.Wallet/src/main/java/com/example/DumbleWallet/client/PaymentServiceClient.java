@@ -1,5 +1,8 @@
 package com.example.DumbleWallet.client;
 
+import com.example.DumbleWallet.client.dto.PaymentChargeStatusResponse;
+import com.example.DumbleWallet.client.dto.PaymentCheckoutRequest;
+import com.example.DumbleWallet.client.dto.PaymentCheckoutResponse;
 import com.example.DumbleWallet.client.dto.PaymentWithdrawalLookupResponse;
 import com.example.DumbleWallet.client.dto.PaymentWithdrawalRequest;
 import com.example.DumbleWallet.client.dto.PaymentWithdrawalResponse;
@@ -36,6 +39,28 @@ public class PaymentServiceClient {
                 .bodyValue(body)
                 .retrieve()
                 .bodyToMono(PaymentWithdrawalResponse.class)
+                .block();
+    }
+
+    /** Initiate a Paymob hosted-checkout session (wallet top-up). */
+    public PaymentCheckoutResponse createCheckout(String idempotencyKey, PaymentCheckoutRequest body) {
+        return client.post()
+                .uri("/api/payment/checkouts")
+                .header("Authorization", "Bearer " + signer.mint("payment"))
+                .header("Idempotency-Key", idempotencyKey)
+                .bodyValue(body)
+                .retrieve()
+                .bodyToMono(PaymentCheckoutResponse.class)
+                .block();
+    }
+
+    /** Read a charge's current status — used to poll a top-up's outcome. */
+    public PaymentChargeStatusResponse getChargeStatus(String chargeId) {
+        return client.get()
+                .uri("/api/payment/charges/{id}", chargeId)
+                .header("Authorization", "Bearer " + signer.mint("payment"))
+                .retrieve()
+                .bodyToMono(PaymentChargeStatusResponse.class)
                 .block();
     }
 

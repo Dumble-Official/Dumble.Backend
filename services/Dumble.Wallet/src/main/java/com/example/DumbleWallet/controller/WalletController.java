@@ -1,6 +1,11 @@
 package com.example.DumbleWallet.controller;
 
+import com.example.DumbleWallet.client.PaymentServiceClient;
+import com.example.DumbleWallet.client.dto.PaymentChargeStatusResponse;
+import com.example.DumbleWallet.client.dto.PaymentCheckoutRequest;
+import com.example.DumbleWallet.client.dto.PaymentCheckoutResponse;
 import com.example.DumbleWallet.dto.CurrentUser;
+import com.example.DumbleWallet.dto.TopupRequest;
 import com.example.DumbleWallet.dto.WalletCreditRequest;
 import com.example.DumbleWallet.dto.WalletDebitRequest;
 import com.example.DumbleWallet.dto.WalletEntryResponse;
@@ -33,15 +38,18 @@ public class WalletController {
     private final WalletEntryRepository walletEntryRepository;
     private final IdempotencyService idempotencyService;
     private final SystemTokenVerifier systemTokenVerifier;
+    private final PaymentServiceClient paymentServiceClient;
 
     public WalletController(WalletService walletService,
                             WalletEntryRepository walletEntryRepository,
                             IdempotencyService idempotencyService,
-                            SystemTokenVerifier systemTokenVerifier) {
+                            SystemTokenVerifier systemTokenVerifier,
+                            PaymentServiceClient paymentServiceClient) {
         this.walletService = walletService;
         this.walletEntryRepository = walletEntryRepository;
         this.idempotencyService = idempotencyService;
         this.systemTokenVerifier = systemTokenVerifier;
+        this.paymentServiceClient = paymentServiceClient;
     }
 
     /**
@@ -93,6 +101,39 @@ public class WalletController {
     @GetMapping("/wallet/me/summary")
     public WalletSummaryResponse meSummary(@AuthenticationPrincipal CurrentUser user) {
         return walletService.summary(user.getId());
+    }
+
+    /**
+     * Top-up: starts a Paymob hosted-checkout session for the authenticated user.
+     * Returns the iframe URL the app loads in a WebView; the wallet is credited
+     * asynchronously when Payment's charge.succeeded webhook lands (callerReference
+     * {@code topup:<userId>}). Idempotency-Key dedupes the underlying charge.
+     */
+    @PostMapping("/wallet/me/topups")
+    public ResponseEntity<PaymentCheckoutResponse> initTopup(
+            @AuthenticationPrincipal CurrentUser user,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @Valid @RequestBody TopupRequest req) {
+        PaymentCheckoutResponse resp = paymentServiceClient.createCheckout(
+                idempotencyKey,
+                new PaymentCheckoutRequest(
+                        user.getId(),
+                        req.getAmountCents(),
+                        "EGP",
+                        "Wallet top-up",
+                        "topup:" + user.getId(),
+                        user.getEmail(),
+                        user.getDisplayName(),
+                        null,
+                        null));
+        return ResponseEntity.ok(resp);
+    }
+
+    /** Poll a top-up's charge status (Pending / Succeeded / Failed) after checkout. */
+    @GetMapping("/wallet/me/topups/{chargeId}")
+    public PaymentChargeStatusResponse topupStatus(@AuthenticationPrincipal CurrentUser user,
+                                                   @PathVariable String chargeId) {
+        return paymentServiceClient.getChargeStatus(chargeId);
     }
 
     /**
