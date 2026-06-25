@@ -23,7 +23,7 @@ import httpx
 import json as _json
 
 from ai_engine import respond, fc_loop_stream, init_memory, _build_system_prompt
-from key_manager import key_manager
+from key_manager import key_manager, KeyManager
 from memory_store import get_user_memory
 from vision_engine import analyze_media, analyze_media_stream
 from content_filter import filter_message, get_block_message
@@ -38,6 +38,14 @@ logger = logging.getLogger(__name__)
 
 _raw_keys = os.getenv("GEMINI_API_KEYS", "") or os.getenv("GEMINI_API_KEY", "")
 GEMINI_API_KEYS_LIST = [k.strip() for k in _raw_keys.split(",") if k.strip()]
+
+# Vision (image/video) needs a vision-capable provider (Gemini). The chat/plan
+# engine runs on Cerebras via `key_manager`, and Google would reject that key —
+# so vision gets its own pool from VISION_API_KEYS. Falls back to the shared
+# Gemini keys when VISION_API_KEYS is unset (legacy single-provider setups).
+_raw_vision_keys = os.getenv("VISION_API_KEYS", "") or _raw_keys
+VISION_API_KEYS_LIST = [k.strip() for k in _raw_vision_keys.split(",") if k.strip()]
+vision_key_manager = KeyManager(VISION_API_KEYS_LIST)
 
 # Shared HMAC the gateway signs the X-Internal-Secret header with.
 # Empty value is treated as a misconfiguration, not as "auth disabled" —
@@ -212,6 +220,11 @@ async def lifespan(app: FastAPI):
     _keys = [k.strip() for k in _raw.split(",") if k.strip()]
     key_manager.reload(_keys)
     logger.info("KeyManager: %d key(s) loaded", len(_keys))
+
+    _raw_vis  = _os.getenv("VISION_API_KEYS", "") or _raw
+    _vis_keys = [k.strip() for k in _raw_vis.split(",") if k.strip()]
+    vision_key_manager.reload(_vis_keys)
+    logger.info("Vision KeyManager: %d key(s) loaded", len(_vis_keys))
 
     if INTERNAL_SECRET:
         logger.info("Auth: X-Internal-Secret enabled")
@@ -648,12 +661,13 @@ async def analyze(
             tmp.write(data)
             tmp_path = tmp.name
         reply = await analyze_media(
-            api_key          = key_manager.get(),
+            api_key          = vision_key_manager.get(),
             file_path        = tmp_path,
             user_message     = message.strip(),
             is_first_message = is_first_message,
             profile          = profile_dict,
             history          = history_list,
+            lang             = lang,
         )
     except Exception as exc:
         logger.error("Vision error: %s", exc)
@@ -704,6 +718,7 @@ async def analyze_stream(
 
     # Memory writes use this — gateway-set, not client-supplied.
     user_id = _require_user_id(request)
+    lang    = _detect_lang(history_list, message)
 
     tmp_path = None
     with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
@@ -714,19 +729,20 @@ async def analyze_stream(
         full_reply = ""
         try:
             async for chunk in analyze_media_stream(
-                api_key          = key_manager.get(),
+                api_key          = vision_key_manager.get(),
                 file_path        = tmp_path,
                 user_message     = message.strip(),
                 is_first_message = is_first_message,
                 profile          = profile_dict,
                 history          = history_list,
+                lang             = lang,
             ):
                 full_reply += chunk.replace("\\n", "\n")
                 yield f"data: {chunk.replace(chr(10), chr(92)+'n')}\n\n"
                 await asyncio.sleep(0)
         except Exception as exc:
             logger.error("Stream vision error: %s", exc)
-            yield f"data: {_err('vision', _detect_lang(history_list, message))}\n\n"
+            yield f"data: {_err('vision', lang)}\n\n"
         finally:
             if tmp_path:
                 try: os.unlink(tmp_path)

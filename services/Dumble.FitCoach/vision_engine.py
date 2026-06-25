@@ -22,6 +22,16 @@ def _gemini_url(model: str, stream: bool = False) -> str:
     action = "streamGenerateContent" if stream else "generateContent"
     return f"{_GEMINI_BASE}/{model}:{action}"
 
+# Friendly "try again" message shown when vision generation fails after retries.
+# Language-aware, and deliberately never names the underlying provider.
+_BUSY_MSG = {
+    "en": "Sorry, I couldn't analyze that right now — please try again in a moment.",
+    "ar": "معلش، مش قادر أحلّل دي دلوقتي — جرّب تاني كمان شوية.",
+}
+
+def _busy_message(lang: str) -> str:
+    return _BUSY_MSG.get((lang or "en").lower(), _BUSY_MSG["en"])
+
 MOVE_THRESH = 6.0
 
 MOVE_THRESH_INITIAL = 1.0
@@ -740,7 +750,8 @@ async def _prepare_media(file_path: str, user_message: str, is_first_message: bo
 
 async def analyze_media_stream(api_key: str, file_path: str, user_message: str = "",
                                is_first_message: bool = False,
-                               profile: dict | None = None, history: list | None = None):
+                               profile: dict | None = None, history: list | None = None,
+                               lang: str = "en"):
     """Async generator — yields text chunks for streaming responses."""
     prepared = await _prepare_media(file_path, user_message, is_first_message, profile, history)
     prompt, video_b64, video_mime, key_b64 = (
@@ -771,7 +782,7 @@ async def analyze_media_stream(api_key: str, file_path: str, user_message: str =
         except Exception as exc:
             logger.warning("Stream attempt %d failed: %s", attempt, exc)
 
-    yield "Gemini مشغول دلوقتي، جرب تاني بعد ثواني."
+    yield _busy_message(lang)
 
 def _json_dumps_pose(pose, primary, keep, keep_sym, angles_all, curves_all, series_all, sym_all) -> str:
     return json.dumps({
@@ -791,7 +802,8 @@ def _json_dumps_pose(pose, primary, keep, keep_sym, angles_all, curves_all, seri
 
 async def analyze_media(api_key: str, file_path: str, user_message: str = "",
                         is_first_message: bool = False,
-                        profile: dict | None = None, history: list | None = None) -> str:
+                        profile: dict | None = None, history: list | None = None,
+                        lang: str = "en") -> str:
     """Non-streaming analysis — delegates shared preparation to _prepare_media()."""
     prepared = await _prepare_media(file_path, user_message, is_first_message, profile, history)
     prompt, video_b64, video_mime, key_b64 = (
@@ -817,4 +829,4 @@ async def analyze_media(api_key: str, file_path: str, user_message: str = "",
         if response:
             break
 
-    return response or "Gemini مشغول دلوقتي، جرب تاني بعد ثواني."
+    return response or _busy_message(lang)
