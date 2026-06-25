@@ -405,7 +405,7 @@ def load_image_file(path: str) -> tuple[list, list]:
 
 async def _call_gemini(api_key: str, prompt: str,
                        images=None, video_b64=None,
-                       video_mime="video/mp4", max_tokens=3000):
+                       video_mime="video/mp4", max_tokens=3000, key_mgr=None):
     parts = []
     if video_b64:
         parts.append({"inline_data": {"mime_type": video_mime, "data": video_b64}})
@@ -427,15 +427,17 @@ async def _call_gemini(api_key: str, prompt: str,
                     headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
                     json=payload,
                 )
+            mgr = key_mgr or key_manager
             if r.status_code == 429:
-                key_manager.mark_rate_limited(api_key)
+                mgr.mark_rate_limited(api_key)
                 logger.warning("Gemini 429 on %s — trying next model", model)
                 continue
-            if r.status_code == 401:
-                key_manager.mark_invalid(api_key)
-                logger.error("Gemini 401 invalid vision key ...%s", api_key[-6:])
-                return None
             if r.status_code != 200:
+                if r.status_code in (400, 401) and (
+                        "API_KEY_INVALID" in r.text or "API key not valid" in r.text):
+                    mgr.mark_invalid(api_key)
+                    logger.error("Gemini invalid key ...%s — removed from rotation", api_key[-6:])
+                    return None
                 logger.error("Gemini %s error: %s %s", model, r.status_code, r.text[:150])
                 continue
             cand = r.json().get("candidates", [{}])[0]
@@ -590,7 +592,7 @@ _GEMINI_SYSTEM_PROMPT = "You are FitCoach AI — a warm, specialist fitness coac
 
 async def _call_gemini_stream(api_key: str, prompt: str,
                               images=None, video_b64=None,
-                              video_mime="video/mp4", max_tokens=3000):
+                              video_mime="video/mp4", max_tokens=3000, key_mgr=None):
     """Yields text chunks — tries each model in VISION_MODELS on failure."""
     parts = []
     if video_b64:
@@ -615,17 +617,20 @@ async def _call_gemini_stream(api_key: str, prompt: str,
                     headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
                     json=payload,
                 ) as r:
+                    mgr = key_mgr or key_manager
                     if r.status_code == 429:
-                        key_manager.mark_rate_limited(api_key)
+                        mgr.mark_rate_limited(api_key)
                         logger.warning("Gemini stream 429 on %s — trying next model", model)
                         continue
-                    if r.status_code == 401:
-                        key_manager.mark_invalid(api_key)
-                        logger.error("Gemini stream 401 invalid key ...%s", api_key[-6:])
-                        return
                     if r.status_code != 200:
-                        body = await r.aread()
-                        logger.error("Gemini stream %s error: %s %s", model, r.status_code, body[:150])
+                        body  = await r.aread()
+                        btext = body.decode("utf-8", "ignore")
+                        if r.status_code in (400, 401) and (
+                                "API_KEY_INVALID" in btext or "API key not valid" in btext):
+                            mgr.mark_invalid(api_key)
+                            logger.error("Gemini stream invalid key ...%s — removed", api_key[-6:])
+                            return
+                        logger.error("Gemini stream %s error: %s %s", model, r.status_code, btext[:150])
                         continue
 
                     buffer = ""
@@ -751,7 +756,7 @@ async def _prepare_media(file_path: str, user_message: str, is_first_message: bo
 async def analyze_media_stream(api_key: str, file_path: str, user_message: str = "",
                                is_first_message: bool = False,
                                profile: dict | None = None, history: list | None = None,
-                               lang: str = "en"):
+                               lang: str = "en", key_mgr=None):
     """Async generator — yields text chunks for streaming responses."""
     prepared = await _prepare_media(file_path, user_message, is_first_message, profile, history)
     prompt, video_b64, video_mime, key_b64 = (
@@ -765,16 +770,16 @@ async def analyze_media_stream(api_key: str, file_path: str, user_message: str =
         try:
             got_any = False
             if video_b64:
-                async for chunk in _call_gemini_stream(api_key, prompt, video_b64=video_b64, video_mime=video_mime):
+                async for chunk in _call_gemini_stream(api_key, prompt, video_b64=video_b64, video_mime=video_mime, key_mgr=key_mgr):
                     got_any = True
                     yield chunk
                 if not got_any and key_b64:
                     logger.info("Stream fallback to key frames...")
-                    async for chunk in _call_gemini_stream(api_key, prompt, images=key_b64):
+                    async for chunk in _call_gemini_stream(api_key, prompt, images=key_b64, key_mgr=key_mgr):
                         got_any = True
                         yield chunk
             else:
-                async for chunk in _call_gemini_stream(api_key, prompt, images=key_b64):
+                async for chunk in _call_gemini_stream(api_key, prompt, images=key_b64, key_mgr=key_mgr):
                     got_any = True
                     yield chunk
             if got_any:
@@ -803,7 +808,7 @@ def _json_dumps_pose(pose, primary, keep, keep_sym, angles_all, curves_all, seri
 async def analyze_media(api_key: str, file_path: str, user_message: str = "",
                         is_first_message: bool = False,
                         profile: dict | None = None, history: list | None = None,
-                        lang: str = "en") -> str:
+                        lang: str = "en", key_mgr=None) -> str:
     """Non-streaming analysis — delegates shared preparation to _prepare_media()."""
     prepared = await _prepare_media(file_path, user_message, is_first_message, profile, history)
     prompt, video_b64, video_mime, key_b64 = (
@@ -819,12 +824,12 @@ async def analyze_media(api_key: str, file_path: str, user_message: str = "",
             await asyncio.sleep(wait)
 
         if video_b64:
-            response = await _call_gemini(api_key, prompt, video_b64=video_b64, video_mime=video_mime)
+            response = await _call_gemini(api_key, prompt, video_b64=video_b64, video_mime=video_mime, key_mgr=key_mgr)
             if not response and key_b64:
                 logger.info("Falling back to key frames...")
-                response = await _call_gemini(api_key, prompt, images=key_b64)
+                response = await _call_gemini(api_key, prompt, images=key_b64, key_mgr=key_mgr)
         else:
-            response = await _call_gemini(api_key, prompt, images=key_b64)
+            response = await _call_gemini(api_key, prompt, images=key_b64, key_mgr=key_mgr)
 
         if response:
             break

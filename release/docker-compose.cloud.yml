@@ -322,9 +322,10 @@ services:
     expose:
       - "8000"
     environment:
-      GEMINI_API_KEYS: ${GEMINI_API_KEYS:?set GEMINI_API_KEYS in .env.cloud}
-      # Vision (image/video) runs on Gemini with its own key pool — chat/plan
-      # uses Cerebras via GEMINI_API_KEYS. Comma-separate keys for more quota.
+      # Chat / plan engine runs on Cerebras.
+      CEREBRAS_API_KEYS: ${CEREBRAS_API_KEYS:?set CEREBRAS_API_KEYS in .env.cloud}
+      # Vision (image/video) runs on Gemini with its own key pool.
+      # Comma-separate multiple keys for more quota.
       VISION_API_KEYS: ${VISION_API_KEYS:-}
       INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?set INTERNAL_API_SECRET in .env.cloud}
       # #4 — schedule base URL (context-path /api) for the AI-plan -> schedule sync.

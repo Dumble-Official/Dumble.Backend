@@ -36,14 +36,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-_raw_keys = os.getenv("GEMINI_API_KEYS", "") or os.getenv("GEMINI_API_KEY", "")
-GEMINI_API_KEYS_LIST = [k.strip() for k in _raw_keys.split(",") if k.strip()]
+# Chat / plan engine runs on Cerebras — keys come from CEREBRAS_API_KEYS.
+# (GEMINI_API_KEYS is accepted as a fallback for older .env files.)
+_raw_keys = (os.getenv("CEREBRAS_API_KEYS", "") or os.getenv("CEREBRAS_API_KEY", "")
+             or os.getenv("GEMINI_API_KEYS", ""))
+CEREBRAS_API_KEYS_LIST = [k.strip() for k in _raw_keys.split(",") if k.strip()]
 
-# Vision (image/video) needs a vision-capable provider (Gemini). The chat/plan
-# engine runs on Cerebras via `key_manager`, and Google would reject that key —
-# so vision gets its own pool from VISION_API_KEYS. Falls back to the shared
-# Gemini keys when VISION_API_KEYS is unset (legacy single-provider setups).
-_raw_vision_keys = os.getenv("VISION_API_KEYS", "") or _raw_keys
+# Vision (image/video) needs a vision-capable provider (Gemini) on its own pool
+# from VISION_API_KEYS — never the Cerebras key, which Google would reject.
+_raw_vision_keys = os.getenv("VISION_API_KEYS", "")
 VISION_API_KEYS_LIST = [k.strip() for k in _raw_vision_keys.split(",") if k.strip()]
 vision_key_manager = KeyManager(VISION_API_KEYS_LIST)
 
@@ -205,8 +206,8 @@ def _err_key_from_exc(exc: Exception) -> str:
     return "general"
 
 def _check_keys():
-    if not GEMINI_API_KEYS_LIST:
-        raise HTTPException(500, "GEMINI_API_KEY not set")
+    if not CEREBRAS_API_KEYS_LIST:
+        raise HTTPException(500, "CEREBRAS_API_KEYS not set")
 
                                                                                 
 
@@ -216,12 +217,13 @@ async def lifespan(app: FastAPI):
 \
 \
     import os as _os
-    _raw  = _os.getenv("GEMINI_API_KEYS", "") or _os.getenv("GEMINI_API_KEY", "")
+    _raw  = (_os.getenv("CEREBRAS_API_KEYS", "") or _os.getenv("CEREBRAS_API_KEY", "")
+             or _os.getenv("GEMINI_API_KEYS", ""))
     _keys = [k.strip() for k in _raw.split(",") if k.strip()]
     key_manager.reload(_keys)
-    logger.info("KeyManager: %d key(s) loaded", len(_keys))
+    logger.info("Cerebras KeyManager: %d key(s) loaded", len(_keys))
 
-    _raw_vis  = _os.getenv("VISION_API_KEYS", "") or _raw
+    _raw_vis  = _os.getenv("VISION_API_KEYS", "")
     _vis_keys = [k.strip() for k in _raw_vis.split(",") if k.strip()]
     vision_key_manager.reload(_vis_keys)
     logger.info("Vision KeyManager: %d key(s) loaded", len(_vis_keys))
@@ -668,6 +670,7 @@ async def analyze(
             profile          = profile_dict,
             history          = history_list,
             lang             = lang,
+            key_mgr          = vision_key_manager,
         )
     except Exception as exc:
         logger.error("Vision error: %s", exc)
@@ -736,6 +739,7 @@ async def analyze_stream(
                 profile          = profile_dict,
                 history          = history_list,
                 lang             = lang,
+                key_mgr          = vision_key_manager,
             ):
                 full_reply += chunk.replace("\\n", "\n")
                 yield f"data: {chunk.replace(chr(10), chr(92)+'n')}\n\n"
@@ -765,7 +769,7 @@ async def analyze_stream(
 
 @app.get("/health")
 def health():
-    keys_count = key_manager.count if hasattr(key_manager, "count") else len(GEMINI_API_KEYS_LIST)
+    keys_count = key_manager.count if hasattr(key_manager, "count") else len(CEREBRAS_API_KEYS_LIST)
     return {
         "status":    "ok" if keys_count > 0 else "degraded",
         "keys_loaded": keys_count,
