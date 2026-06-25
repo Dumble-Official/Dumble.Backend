@@ -584,7 +584,9 @@ async def voice(
         loop       = asyncio.get_running_loop()
         transcript = await loop.run_in_executor(
             None,
-            lambda: transcribe(api_key=key_manager.get(), file_path=tmp_path, ext=ext),
+            # Transcription uses the Gemini Files API, so it needs a Gemini key
+            # (vision pool) — not the Cerebras chat key.
+            lambda: transcribe(api_key=vision_key_manager.get(), file_path=tmp_path, ext=ext),
         )
     except Exception as exc:
         logger.error("Transcription error: %s", exc)
