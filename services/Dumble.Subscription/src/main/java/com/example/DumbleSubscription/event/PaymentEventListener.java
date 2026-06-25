@@ -166,6 +166,18 @@ public class PaymentEventListener {
                 return;
             }
         }
+        // Hosted-checkout bundle purchase: the event carries no subscriptionId and
+        // its providerRef (transaction id) won't match the stored order id, so we
+        // resolve the bundle subscription from the callerReference we set when
+        // creating the checkout (bundle-sub:<subscriptionId>).
+        if (callerRef.startsWith("bundle-sub:")) {
+            UUID subId = parseUuid(callerRef.substring("bundle-sub:".length()),
+                    "charge.completed.callerReference.bundleSubId");
+            if (subId != null) {
+                bundleSubscriptionService.confirmPendingCharge(subId, providerRef);
+                return;
+            }
+        }
         // userId fallback is ONLY for platform Pro upgrades. Gate it on the
         // platform-sub: callerReference so an unrelated charge for the same user
         // (e.g. a wallet top-up: callerReference "topup:<userId>") can't wrongly

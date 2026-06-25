@@ -1,5 +1,6 @@
 package com.example.DumbleSubscription.controller;
 
+import com.example.DumbleSubscription.client.dto.CheckoutResponse;
 import com.example.DumbleSubscription.domain.BundleSubscription;
 import com.example.DumbleSubscription.domain.enums.SubscriptionStatus;
 import com.example.DumbleSubscription.dto.BundleCheckoutRequest;
@@ -47,6 +48,18 @@ public class BundleSubscriptionController {
                 BundleSubscriptionResponse.class,
                 () -> service.checkout(user.getId(), req));
         return ResponseEntity.status(cached.replayed() ? HttpStatus.OK : HttpStatus.CREATED).body(cached.value());
+    }
+
+    /**
+     * Hosted-checkout bundle purchase: returns a Paymob iframe URL for the app to
+     * open in a WebView. The subscription is claimed PENDING and activated by the
+     * charge.succeeded webhook once the card payment clears. No Idempotency-Key
+     * header — the underlying charge key is derived from the subscription.
+     */
+    @PostMapping("/bundle-subscriptions/{bundleId}/checkout-session")
+    public ResponseEntity<CheckoutResponse> bundleCheckoutSession(@AuthenticationPrincipal CurrentUser user,
+                                                                  @PathVariable UUID bundleId) {
+        return ResponseEntity.ok(service.createBundleCheckout(user.getId(), bundleId));
     }
 
     @GetMapping("/me/bundle-subscriptions")

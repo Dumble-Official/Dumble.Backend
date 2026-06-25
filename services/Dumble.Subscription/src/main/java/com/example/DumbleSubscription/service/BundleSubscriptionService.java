@@ -7,6 +7,8 @@ import com.example.DumbleSubscription.client.WalletServiceClient;
 import com.example.DumbleSubscription.client.dto.BundleSnapshot;
 import com.example.DumbleSubscription.client.dto.ChargeRequest;
 import com.example.DumbleSubscription.client.dto.ChargeResponse;
+import com.example.DumbleSubscription.client.dto.CheckoutRequest;
+import com.example.DumbleSubscription.client.dto.CheckoutResponse;
 import com.example.DumbleSubscription.client.dto.PromoValidationResponse;
 import com.example.DumbleSubscription.client.dto.WalletDebitRequest;
 import com.example.DumbleSubscription.client.dto.WalletSummaryResponse;
@@ -96,6 +98,64 @@ public class BundleSubscriptionService {
         this.sellerLifecycleService = sellerLifecycleService;
         this.persister = persister;
         this.objectMapper = objectMapper;
+    }
+
+    /**
+     * Hosted-checkout (Paymob iframe) bundle purchase. Same claim-PENDING shape as
+     * {@link #checkout} but instead of debiting the wallet or charging a saved
+     * token, it creates a Paymob hosted-checkout session and returns the iframe
+     * URL for the app's WebView. The card is entered on Paymob's page; the
+     * charge.succeeded webhook (callerReference {@code bundle-sub:<subId>}) then
+     * activates the subscription via {@link #confirmPendingCharge}. The
+     * deterministic idempotency key means a retry replays the same session; an
+     * in-flight PENDING sub is reused rather than duplicated.
+     */
+    public CheckoutResponse createBundleCheckout(UUID participantId, UUID bundleId) {
+        BundleSnapshot bundle = bundleManagementClient.getBundle(bundleId);
+        if (bundle == null || !bundle.isActive()) {
+            throw new ResourceNotFoundException("Bundle not available");
+        }
+        if (!sellerLifecycleService.canAcceptNewSubscriptions(bundle.getSellerId())) {
+            throw new BusinessRuleViolationException("This seller is not currently accepting new subscriptions");
+        }
+
+        Optional<BundleSubscription> existing =
+                bundleSubscriptionRepository.findActiveOrPending(participantId, bundle.getId());
+        if (existing.isPresent() && existing.get().getStatus() == SubscriptionStatus.ACTIVE) {
+            throw new BusinessRuleViolationException("You already have an active subscription to this bundle");
+        }
+
+        long amountToCharge = bundle.getPriceCents();
+        // Reuse an in-flight PENDING (e.g. the user abandoned an earlier attempt)
+        // so we don't trip the unique active/pending index; the deterministic key
+        // then replays the same Paymob session.
+        BundleSubscription claimed = (existing.isPresent()
+                && existing.get().getStatus() == SubscriptionStatus.PENDING)
+                ? existing.get()
+                : persister.claimPending(participantId, bundle, amountToCharge,
+                        PaymentMethodType.CARD, null,
+                        serializeAmenities(bundle.getAmenities()), null, null);
+
+        String key = stableCheckoutKey(participantId, bundle.getId(), amountToCharge, claimed.getId());
+        CheckoutResponse checkout;
+        try {
+            checkout = paymentServiceClient.createCheckout(key, CheckoutRequest.builder()
+                    .userId(participantId)
+                    .amountCents(amountToCharge)
+                    .currency(bundle.getCurrency())
+                    .description("Subscribe to " + bundle.getName())
+                    .callerReference("bundle-sub:" + claimed.getId())
+                    .build());
+        } catch (RuntimeException ex) {
+            persister.releasePending(claimed.getId());
+            throw ex;
+        }
+        if (checkout == null || checkout.getIframeUrl() == null || checkout.getIframeUrl().isBlank()) {
+            persister.releasePending(claimed.getId());
+            throw new BusinessRuleViolationException("Checkout initialization failed");
+        }
+        persister.markPending(claimed.getId(), checkout.getProviderRef());
+        return checkout;
     }
 
     public BundleSubscriptionResponse checkout(UUID participantId, BundleCheckoutRequest req) {
