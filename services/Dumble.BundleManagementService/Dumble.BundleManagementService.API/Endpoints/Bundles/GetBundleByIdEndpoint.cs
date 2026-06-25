@@ -32,6 +32,13 @@ public sealed class GetBundleByIdEndpoint(ISender mediator)
             result.ExpiresOn,
             result.Status,
             result.ViewCount,
-            result.CategoryName);
+            result.CategoryName,
+            result.SellerId,
+            result.SellerType,
+            result.PriceCents,
+            result.Currency,
+            result.DurationDays,
+            result.Active,
+            result.Amenities);
     }
 }

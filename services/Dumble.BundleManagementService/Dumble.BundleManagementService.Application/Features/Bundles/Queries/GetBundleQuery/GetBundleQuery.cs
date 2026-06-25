@@ -13,4 +13,15 @@ public sealed record GetBundleResult(
     DateTime ExpiresOn,
     string Status,
     int ViewCount,
-    string CategoryName);
+    string CategoryName,
+    // Fields the Subscription service needs to snapshot a bundle at checkout
+    // (it deserializes this response into its BundleSnapshot). Without these the
+    // snapshot's seller/price/active fields are null/0/false and checkout fails
+    // with "Bundle not available".
+    Guid SellerId,
+    string SellerType,
+    long PriceCents,
+    string Currency,
+    int DurationDays,
+    bool Active,
+    IReadOnlyList<string> Amenities);

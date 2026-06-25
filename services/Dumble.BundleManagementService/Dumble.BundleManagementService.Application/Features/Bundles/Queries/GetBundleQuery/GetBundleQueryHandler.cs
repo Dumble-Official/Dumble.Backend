@@ -1,6 +1,7 @@
 using Dumble.BundleManagementService.Application.Contracts.Repositories;
 using Dumble.BundleManagementService.Application.Identity;
 using Dumble.BundleManagementService.Domain.BundleAggregate;
+using Dumble.BundleManagementService.Domain.BundleAggregate.Enums;
 using Dumble.BundleManagementService.Domain.BundleAggregate.ValueObjects;
 using Dumble.BundleManagementService.Domain.CategoryAggregate;
 using Dumble.BundleManagementService.Domain.CategoryAggregate.ValueObjects;
@@ -32,6 +33,10 @@ internal sealed class GetBundleQueryHandler(
 
         var category = await categoryRepository.Get(bundle.CategoryId);
 
+        // Duration in days from now until the bundle's expiry (the Subscription
+        // service sets the subscription's endsAt = now + durationDays). At least 1.
+        var durationDays = (int)Math.Max(1, (bundle.ExpiresOn.Date - DateTime.UtcNow.Date).TotalDays);
+
         return new GetBundleResult(
             bundle.Id.Value,
             bundle.Images.Select(i => i.Value).ToList(),
@@ -41,7 +46,14 @@ internal sealed class GetBundleQueryHandler(
             bundle.ExpiresOn,
             bundle.Status.ToString(),
             bundle.Viewers.Count,
-            category?.Name.Value ?? string.Empty
+            category?.Name.Value ?? string.Empty,
+            bundle.OwnerId.Value,
+            bundle.OwnerType.ToString().ToUpperInvariant(),     // TRAINER | GYM
+            (long)Math.Round(bundle.Price.Value * 100m),        // priceCents
+            "EGP",
+            durationDays,
+            bundle.Status == Status.Published,                  // only a Published bundle is purchasable
+            new List<string>()                                  // amenities not modelled in this service
         );
     }
 }
