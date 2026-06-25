@@ -55,7 +55,10 @@ public sealed class CloudinaryFileService : IFileService
             throw new InvalidOperationException($"Cloudinary upload error: {result.Error.Message}");
         }
 
-        return result.PublicId ?? result.SecureUrl?.ToString() ?? publicId;
+        // Return the full https URL so clients can render it directly. Returning
+        // PublicId first stored a bare id like "Screenshot_x" that the app
+        // can't load as an image.
+        return result.SecureUrl?.ToString() ?? result.Url?.ToString() ?? publicId;
     }
 
     public async Task<Stream> DownloadAsync(string filePath)

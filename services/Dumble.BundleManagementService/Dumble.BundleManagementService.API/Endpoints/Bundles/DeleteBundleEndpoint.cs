@@ -1,13 +1,16 @@
 using System.Net;
 using Dumble.BundleManagementService.Application.Features.Bundles.Commands.DeleteBundle;
-using Dumble.BundleManagementService.Contracts.Bundles.DeleteBundle;
 using FastEndpoints;
 using MediatR;
 using Void = FastEndpoints.Void;
 
 namespace Dumble.BundleManagementService.API.Endpoints.Bundles;
 
-public sealed class DeleteBundleEndpoint(ISender mediator) : Endpoint<DeleteBundleRequest>
+// EndpointWithoutRequest: a DELETE carries no body, so binding an
+// Endpoint<DeleteBundleRequest> made FastEndpoints try to JSON-parse the empty
+// body and fail with "The input does not contain any JSON tokens" (400).
+// We read the id straight from the route instead.
+public sealed class DeleteBundleEndpoint(ISender mediator) : EndpointWithoutRequest
 {
     public override void Configure()
     {
@@ -16,9 +19,10 @@ public sealed class DeleteBundleEndpoint(ISender mediator) : Endpoint<DeleteBund
         Options(x => x.WithTags("Bundles"));
     }
 
-    public override async Task<object?> ExecuteAsync(DeleteBundleRequest req, CancellationToken ct)
+    public override async Task HandleAsync(CancellationToken ct)
     {
-        await mediator.Send(new DeleteBundleCommand(req.Id), ct);
-        return await Send.ResponseAsync(new Void(), (int)HttpStatusCode.NoContent, ct);
+        var id = Route<Guid>("id");
+        await mediator.Send(new DeleteBundleCommand(id), ct);
+        await Send.ResponseAsync(new Void(), (int)HttpStatusCode.NoContent, ct);
     }
 }

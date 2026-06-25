@@ -41,7 +41,15 @@ internal sealed class GenericRepository<TEntity,TKey>(BundleManagementDbContext 
 
     public void Update(TEntity entity)
     {
-        _dbSet.Update(entity);
+        // Get() loads & tracks the aggregate together with its owned collections
+        // (Images/Viewers are auto-included). Calling _dbSet.Update on an already
+        // tracked graph re-runs graph tracking over those owned dependents and
+        // throws ("another instance with the same key value is already being
+        // tracked"). When the entity is already tracked the change tracker has
+        // already captured the scalar edits made via Modify(), so SaveChanges
+        // alone persists them — only reattach a genuinely detached entity.
+        if (context.Entry(entity).State == EntityState.Detached)
+            _dbSet.Update(entity);
     }
 
     public void Delete(TEntity entity)
