@@ -38,6 +38,24 @@ public class MessageRepository : IMessageRepository
             .ToListAsync(ct);
     }
 
+    public async Task<long> CountUnreadAsync(string conversationId, string? lastReadMessageId, string requestingUserId, CancellationToken ct = default)
+    {
+        var b = Builders<Message>.Filter;
+        var filter = b.And(
+            b.Eq(m => m.ConversationId, conversationId),
+            b.Eq(m => m.IsDeleted, false),
+            // Your own messages never count as unread.
+            b.Ne(m => m.SenderId, requestingUserId));
+
+        // Message ids are ObjectIds (timestamp-ordered), so "_id greater than the
+        // last id I read" cleanly selects everything that arrived after it without
+        // a second lookup for the read message's timestamp. Null => never read any.
+        if (!string.IsNullOrEmpty(lastReadMessageId))
+            filter = b.And(filter, b.Gt(m => m.Id, lastReadMessageId));
+
+        return await _context.Messages.CountDocumentsAsync(filter, cancellationToken: ct);
+    }
+
     public async Task CreateAsync(Message message, CancellationToken ct = default)
     {
         await _context.Messages.InsertOneAsync(message, cancellationToken: ct);

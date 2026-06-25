@@ -38,8 +38,11 @@ public class ChatHub : Hub
         var userId = Context.UserIdentifier;
         if (userId is not null)
         {
-            await _presenceService.SetOnlineAsync(userId);
-            await Clients.Others.SendAsync("UserOnline", new { userId });
+            // Only announce UserOnline on the offline→online transition, so a
+            // reconnect (or a second device) doesn't spam the event.
+            var becameOnline = await _presenceService.SetOnlineAsync(userId, Context.ConnectionId);
+            if (becameOnline)
+                await Clients.Others.SendAsync("UserOnline", new { userId });
         }
         await base.OnConnectedAsync();
     }
@@ -49,8 +52,11 @@ public class ChatHub : Hub
         var userId = Context.UserIdentifier;
         if (userId is not null)
         {
-            await _presenceService.SetOfflineAsync(userId);
-            await Clients.Others.SendAsync("UserOffline", new { userId });
+            // Only announce UserOffline when the user's LAST connection goes away,
+            // so a transient reconnect (overlapping sockets) doesn't flap presence.
+            var becameOffline = await _presenceService.SetOfflineAsync(userId, Context.ConnectionId);
+            if (becameOffline)
+                await Clients.Others.SendAsync("UserOffline", new { userId });
         }
         await base.OnDisconnectedAsync(exception);
     }
@@ -103,6 +109,6 @@ public class ChatHub : Hub
     {
         var userId = Context.UserIdentifier;
         if (userId is not null)
-            await _presenceService.SetOnlineAsync(userId);
+            await _presenceService.SetOnlineAsync(userId, Context.ConnectionId);
     }
 }

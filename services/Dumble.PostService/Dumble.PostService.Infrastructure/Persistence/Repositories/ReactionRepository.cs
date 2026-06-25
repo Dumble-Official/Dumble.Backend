@@ -31,11 +31,15 @@ public class ReactionRepository : IReactionRepository
 
     public async Task<Dictionary<string, int>> GetCountsByPostIdAsync(Guid postId, CancellationToken ct)
     {
-        var groups = await _context.Reactions
+        // Project the aggregate inside the query — EF can translate GroupBy+Select
+        // to SQL, but materializing the IGrouping itself (GroupBy then ToList) is
+        // not translatable and throws at runtime.
+        var counts = await _context.Reactions
             .Where(r => r.PostId == postId)
             .GroupBy(r => r.Type)
+            .Select(g => new { Type = g.Key, Count = g.Count() })
             .ToListAsync(ct);
-        return groups.ToDictionary(g => g.Key.ToString()!, g => g.Count());
+        return counts.ToDictionary(x => x.Type.ToString()!, x => x.Count);
     }
 
     public async Task<Reaction> CreateAsync(Reaction reaction, CancellationToken ct)

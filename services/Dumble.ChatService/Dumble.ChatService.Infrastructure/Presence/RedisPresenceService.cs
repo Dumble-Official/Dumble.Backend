@@ -14,16 +14,34 @@ public class RedisPresenceService : IPresenceService
         _redis = redis;
     }
 
-    public async Task SetOnlineAsync(string userId, CancellationToken ct = default)
+    // Presence is a Redis SET of the user's live connection ids, so a user with
+    // multiple connections (multi-device, or a reconnect that overlaps the old
+    // socket) stays online until the LAST one goes away. The whole key carries a
+    // 60s TTL refreshed on every connect/heartbeat, so abruptly-dropped
+    // connections self-expire instead of pinning the user online forever.
+    public async Task<bool> SetOnlineAsync(string userId, string connectionId, CancellationToken ct = default)
     {
         var db = _redis.GetDatabase();
-        await db.StringSetAsync($"presence:{userId}", "online", PresenceTtl);
+        var key = (RedisKey)$"presence:{userId}";
+        var added = await db.SetAddAsync(key, connectionId);
+        await db.KeyExpireAsync(key, PresenceTtl);
+        // First live connection => offline→online transition.
+        return added && await db.SetLengthAsync(key) == 1;
     }
 
-    public async Task SetOfflineAsync(string userId, CancellationToken ct = default)
+    public async Task<bool> SetOfflineAsync(string userId, string connectionId, CancellationToken ct = default)
     {
         var db = _redis.GetDatabase();
-        await db.KeyDeleteAsync($"presence:{userId}");
+        var key = (RedisKey)$"presence:{userId}";
+        await db.SetRemoveAsync(key, connectionId);
+        if (await db.SetLengthAsync(key) == 0)
+        {
+            await db.KeyDeleteAsync(key);
+            return true; // last connection gone => online→offline transition
+        }
+        // Other connections remain — keep the user online and refresh the TTL.
+        await db.KeyExpireAsync(key, PresenceTtl);
+        return false;
     }
 
     public async Task<bool> IsOnlineAsync(string userId, CancellationToken ct = default)
@@ -35,11 +53,13 @@ public class RedisPresenceService : IPresenceService
     public async Task<Dictionary<string, bool>> GetBatchOnlineStatusAsync(List<string> userIds, CancellationToken ct = default)
     {
         var db = _redis.GetDatabase();
-        var keys = userIds.Select(id => (RedisKey)$"presence:{id}").ToArray();
-        var values = await db.StringGetAsync(keys);
-
-        return userIds.Select((id, i) => new { id, online = !values[i].IsNullOrEmpty })
-            .ToDictionary(x => x.id, x => x.online);
+        // Key existence == has at least one live connection. (StringGet can't be
+        // used here anymore: the value is a SET, which would WRONGTYPE.)
+        var checks = userIds
+            .Select(id => (id, task: db.KeyExistsAsync($"presence:{id}")))
+            .ToList();
+        await Task.WhenAll(checks.Select(c => c.task));
+        return checks.ToDictionary(c => c.id, c => c.task.Result);
     }
 
     public async Task SetTypingAsync(string conversationId, string userId, CancellationToken ct = default)

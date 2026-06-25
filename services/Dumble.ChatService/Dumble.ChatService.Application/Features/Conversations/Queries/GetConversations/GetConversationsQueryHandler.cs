@@ -39,12 +39,27 @@ public class GetConversationsQueryHandler(
                 await conversationRepository.UpdateAsync(conversation, cancellationToken);
         }
 
-        var items = conversations.Select(MapToResponse).ToList();
+        // Compute each conversation's unread count for the requesting user in
+        // parallel (one indexed count per conversation, page-bounded).
+        var counts = await Task.WhenAll(conversations.Select(async c =>
+        {
+            var me = c.Participants.FirstOrDefault(p => p.UserId == request.UserId);
+            var count = await messageRepository.CountUnreadAsync(
+                c.Id, me?.LastReadMessageId, request.UserId, cancellationToken);
+            return (c.Id, count);
+        }));
+        var unreadByConversation = counts.ToDictionary(x => x.Id, x => x.count);
+
+        var items = conversations
+            .Select(c => MapToResponse(
+                c,
+                unreadByConversation.TryGetValue(c.Id, out var u) ? (int)u : 0))
+            .ToList();
 
         return new CursorPagedResponse<ConversationResponse>(items, nextCursor, hasMore);
     }
 
-    private static ConversationResponse MapToResponse(Conversation conversation)
+    private static ConversationResponse MapToResponse(Conversation conversation, int unreadCount)
     {
         return new ConversationResponse(
             conversation.Id,
@@ -63,7 +78,8 @@ public class GetConversationsQueryHandler(
                     conversation.LastMessage.SentAt)
                 : null,
             conversation.CreatedAt,
-            conversation.UpdatedAt
+            conversation.UpdatedAt,
+            unreadCount
         );
     }
 }
