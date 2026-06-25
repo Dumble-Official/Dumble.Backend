@@ -1,8 +1,12 @@
 import hashlib
 import json
 import logging
+import os
 import re as _re
+from datetime import datetime
 from typing import Callable
+
+import httpx
 
 PostPlanFn = Callable[[list[dict]], str]
 
@@ -92,9 +96,27 @@ TOOL_SCHEMAS: list[dict] = [
         "function": {
             "name": "get_workout_plan",
             "description": (
-                "Generate a personalized 7-day workout plan based on the user's profile. "
-                "IMPORTANT: Only call this when you know AT LEAST the user's goal AND workout location (home/gym). "
-                "If either is missing, ask the user first — do NOT call this tool yet."
+                "Generate a NEW personalized 7-day workout plan and REPLACE the user's "
+                "entire saved schedule with it. Only call this to create a fresh plan or "
+                "when the user explicitly asks to rebuild/regenerate — NEVER to view or "
+                "check what they already have (use get_schedule for that). "
+                "Also only call when you know AT LEAST the user's goal AND workout "
+                "location (home/gym); if either is missing, ask first."
+            ),
+            "parameters": {"type":"object","properties":{},"required":[]}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_schedule",
+            "description": (
+                "Read the user's CURRENT saved schedule — their actual workout and meal "
+                "items per weekday, exactly as stored. This is READ-ONLY and changes "
+                "nothing. Call it to answer any question about what they already have "
+                "planned, e.g. 'what do I have today', 'show my schedule', "
+                "'what's my leg day'. Do NOT use get_workout_plan for viewing — that "
+                "REPLACES the whole plan."
             ),
             "parameters": {"type":"object","properties":{},"required":[]}
         }
@@ -472,3 +494,44 @@ def exec_get_recommendations(profile: dict, post_plan_fn: PostPlanFn) -> str:
             {"name": "Lunges",      "why": "تقوية الفخذين والتوازن","sets": 3, "reps": "10 each"},
             {"name": "Glute Bridge","why": "تقوية المؤخرة والظهر", "sets": 3, "reps": "15"},
         ], ensure_ascii=False)
+
+_WEEKDAY_ORDER = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
+
+def exec_get_schedule(user_id: str) -> str:
+    """Read the user's current saved schedule from the Schedule service (read-only),
+    so the coach can answer 'what do I have today' without regenerating anything."""
+    base   = os.getenv("SCHEDULE_SERVICE_URL", "").rstrip("/")
+    secret = os.getenv("INTERNAL_API_SECRET", "")
+    if not user_id or not base or not secret:
+        return json.dumps({"error": "schedule_unavailable"})
+
+    url = f"{base}/internal/clients/{user_id}/chatbot/items"
+    try:
+        resp = httpx.get(url, headers={"X-Internal-Secret": secret}, timeout=5.0)
+        if resp.status_code != 200:
+            logger.warning("get_schedule HTTP %s", resp.status_code)
+            return json.dumps({"error": f"schedule_http_{resp.status_code}"})
+        data = resp.json()
+    except Exception as e:
+        logger.warning("get_schedule fetch error: %s", e)
+        return json.dumps({"error": "schedule_fetch_failed"})
+
+    def _items_for(days, weekday):
+        for d in days or []:
+            if d.get("weekday") == weekday:
+                return [(it.get("content") or "").strip()
+                        for it in (d.get("items") or []) if it.get("content")]
+        return []
+
+    week = {}
+    for wd in _WEEKDAY_ORDER:
+        exercises = _items_for(data.get("exercises"), wd)
+        meals     = _items_for(data.get("meals"), wd)
+        if exercises or meals:
+            week[wd] = {"exercises": exercises, "meals": meals}
+
+    today = datetime.now().strftime("%a").upper()  # MON..SUN
+    if not week:
+        return json.dumps({"today": today, "empty": True,
+                           "message": "No schedule items are saved yet."})
+    return json.dumps({"today": today, "week": week}, ensure_ascii=False)

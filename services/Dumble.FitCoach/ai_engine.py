@@ -20,6 +20,7 @@ from tools import (
     exec_log_weight,
     exec_get_recommendations,
     exec_update_workout_day,
+    exec_get_schedule,
 )
 from schedule_contract import (
     build_full_replace,
@@ -450,6 +451,9 @@ def _execute_tool(name: str, args: dict, state: dict, api_key: str) -> tuple[str
         )
         state = {**state, "plan_cache": plan_cache}
         return raw, state
+
+    if name == "get_schedule":
+        return exec_get_schedule(state.get("user_id", "")), state
 
     if name == "get_progress":
         return exec_get_progress(progress_logs), state

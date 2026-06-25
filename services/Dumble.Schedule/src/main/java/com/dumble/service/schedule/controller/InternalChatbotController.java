@@ -2,6 +2,7 @@ package com.dumble.service.schedule.controller;
 
 import com.dumble.service.schedule.dto.ChatbotApplyRequest;
 import com.dumble.service.schedule.dto.ItemResponse;
+import com.dumble.service.schedule.dto.ScheduleResponse;
 import com.dumble.service.schedule.security.InternalSecret;
 import com.dumble.service.schedule.service.ScheduleService;
 import jakarta.validation.Valid;
@@ -34,5 +35,14 @@ public class InternalChatbotController {
                                     @Valid @RequestBody ChatbotApplyRequest req) {
         internalSecret.require(secret);
         return scheduleService.applyChatbotItems(clientId, req.replace(), req.items());
+    }
+
+    /** Read-only: lets the FitCoach read a client's current schedule (e.g. to answer
+     *  "what do I have today") without regenerating it. */
+    @GetMapping("/items")
+    public ScheduleResponse read(@RequestHeader(value = "X-Internal-Secret", required = false) String secret,
+                                 @PathVariable UUID clientId) {
+        internalSecret.require(secret);
+        return scheduleService.getMySchedule(clientId, null, null);
     }
 }
