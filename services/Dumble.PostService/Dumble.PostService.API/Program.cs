@@ -118,6 +118,45 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<PostDbContext>();
     db.Database.EnsureCreated();
+
+    // EnsureCreated() only provisions schema when the database does NOT already
+    // exist; it will not add tables introduced after the first run. The
+    // reactions / comment_reactions tables were added later, so on existing
+    // deployments they are missing and every reaction call 500s. Create them
+    // idempotently here — a no-op on fresh databases (EnsureCreated already made
+    // them) and on subsequent restarts. Column/table names match the EF model so
+    // the context reads and writes them without a mismatch.
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS reactions (
+            "Id" uuid NOT NULL,
+            "PostId" uuid NOT NULL,
+            "UserId" character varying(100) NOT NULL,
+            "DisplayName" character varying(200) NOT NULL,
+            "ProfileImage" character varying(500) NULL,
+            "Type" character varying(50) NOT NULL,
+            "CreatedAt" timestamp with time zone NOT NULL,
+            CONSTRAINT "PK_reactions" PRIMARY KEY ("Id"),
+            CONSTRAINT "FK_reactions_posts_PostId" FOREIGN KEY ("PostId")
+                REFERENCES posts ("Id") ON DELETE CASCADE
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS ix_reactions_post_id_user_id
+            ON reactions ("PostId", "UserId");
+
+        CREATE TABLE IF NOT EXISTS comment_reactions (
+            "Id" uuid NOT NULL,
+            "CommentId" uuid NOT NULL,
+            "UserId" character varying(100) NOT NULL,
+            "DisplayName" character varying(200) NOT NULL,
+            "ProfileImage" character varying(500) NULL,
+            "Type" character varying(50) NOT NULL,
+            "CreatedAt" timestamp with time zone NOT NULL,
+            CONSTRAINT "PK_comment_reactions" PRIMARY KEY ("Id"),
+            CONSTRAINT "FK_comment_reactions_comments_CommentId" FOREIGN KEY ("CommentId")
+                REFERENCES comments ("Id") ON DELETE CASCADE
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS ix_comment_reactions_comment_id_user_id
+            ON comment_reactions ("CommentId", "UserId");
+        """);
 }
 
 app.UseForwardedHeaders();
