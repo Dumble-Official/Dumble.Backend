@@ -1,8 +1,6 @@
-using System.Net;
 using Dumble.BundleManagementService.Application.Features.Bundles.Commands.DeleteBundle;
 using FastEndpoints;
 using MediatR;
-using Void = FastEndpoints.Void;
 
 namespace Dumble.BundleManagementService.API.Endpoints.Bundles;
 
@@ -23,6 +21,9 @@ public sealed class DeleteBundleEndpoint(ISender mediator) : EndpointWithoutRequ
     {
         var id = Route<Guid>("id");
         await mediator.Send(new DeleteBundleCommand(id), ct);
-        await Send.ResponseAsync(new Void(), (int)HttpStatusCode.NoContent, ct);
+
+        // Return 200 with a small body rather than 204 No Content — an empty
+        // downstream response trips the API gateway into a generic 500.
+        await Send.ResponseAsync(new { success = true }, 200, ct);
     }
 }
