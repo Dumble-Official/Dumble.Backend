@@ -120,12 +120,14 @@ using (var scope = app.Services.CreateScope())
     db.Database.EnsureCreated();
 
     // EnsureCreated() only provisions schema when the database does NOT already
-    // exist; it will not add tables introduced after the first run. The
-    // reactions / comment_reactions tables were added later, so on existing
-    // deployments they are missing and every reaction call 500s. Create them
-    // idempotently here — a no-op on fresh databases (EnsureCreated already made
-    // them) and on subsequent restarts. Column/table names match the EF model so
-    // the context reads and writes them without a mismatch.
+    // exist: on an existing deployment it neither creates tables added later NOR
+    // adds columns added later. Both happened to the reaction tables (they exist
+    // but are missing the denormalized "DisplayName"/"ProfileImage" columns added
+    // to the entity afterwards), so every reaction call 500s with
+    // "column r.DisplayName does not exist". Reconcile the schema idempotently:
+    // CREATE the tables if absent, then ADD any missing columns. All names/types
+    // match the EF model, and every statement is a no-op once satisfied (safe on
+    // fresh databases and on every restart).
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS reactions (
             "Id" uuid NOT NULL,
@@ -139,6 +141,15 @@ using (var scope = app.Services.CreateScope())
             CONSTRAINT "FK_reactions_posts_PostId" FOREIGN KEY ("PostId")
                 REFERENCES posts ("Id") ON DELETE CASCADE
         );
+        ALTER TABLE reactions ADD COLUMN IF NOT EXISTS "UserId" character varying(100) NOT NULL DEFAULT '';
+        ALTER TABLE reactions ALTER COLUMN "UserId" DROP DEFAULT;
+        ALTER TABLE reactions ADD COLUMN IF NOT EXISTS "DisplayName" character varying(200) NOT NULL DEFAULT '';
+        ALTER TABLE reactions ALTER COLUMN "DisplayName" DROP DEFAULT;
+        ALTER TABLE reactions ADD COLUMN IF NOT EXISTS "ProfileImage" character varying(500);
+        ALTER TABLE reactions ADD COLUMN IF NOT EXISTS "Type" character varying(50) NOT NULL DEFAULT 'Like';
+        ALTER TABLE reactions ALTER COLUMN "Type" DROP DEFAULT;
+        ALTER TABLE reactions ADD COLUMN IF NOT EXISTS "CreatedAt" timestamp with time zone NOT NULL DEFAULT now();
+        ALTER TABLE reactions ALTER COLUMN "CreatedAt" DROP DEFAULT;
         CREATE UNIQUE INDEX IF NOT EXISTS ix_reactions_post_id_user_id
             ON reactions ("PostId", "UserId");
 
@@ -154,6 +165,15 @@ using (var scope = app.Services.CreateScope())
             CONSTRAINT "FK_comment_reactions_comments_CommentId" FOREIGN KEY ("CommentId")
                 REFERENCES comments ("Id") ON DELETE CASCADE
         );
+        ALTER TABLE comment_reactions ADD COLUMN IF NOT EXISTS "UserId" character varying(100) NOT NULL DEFAULT '';
+        ALTER TABLE comment_reactions ALTER COLUMN "UserId" DROP DEFAULT;
+        ALTER TABLE comment_reactions ADD COLUMN IF NOT EXISTS "DisplayName" character varying(200) NOT NULL DEFAULT '';
+        ALTER TABLE comment_reactions ALTER COLUMN "DisplayName" DROP DEFAULT;
+        ALTER TABLE comment_reactions ADD COLUMN IF NOT EXISTS "ProfileImage" character varying(500);
+        ALTER TABLE comment_reactions ADD COLUMN IF NOT EXISTS "Type" character varying(50) NOT NULL DEFAULT 'Like';
+        ALTER TABLE comment_reactions ALTER COLUMN "Type" DROP DEFAULT;
+        ALTER TABLE comment_reactions ADD COLUMN IF NOT EXISTS "CreatedAt" timestamp with time zone NOT NULL DEFAULT now();
+        ALTER TABLE comment_reactions ALTER COLUMN "CreatedAt" DROP DEFAULT;
         CREATE UNIQUE INDEX IF NOT EXISTS ix_comment_reactions_comment_id_user_id
             ON comment_reactions ("CommentId", "UserId");
         """);
