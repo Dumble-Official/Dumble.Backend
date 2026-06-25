@@ -13,6 +13,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Net;
 
+// The bundle's expiry date arrives from the client without a timezone kind
+// (Unspecified). Npgsql rejects writing Unspecified DateTimes to 'timestamptz'
+// columns, which 500'd bundle creation. This switch treats Unspecified as UTC,
+// matching every other service's UTC-everywhere convention.
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.WebHost.ConfigureKestrel(opt => opt.AddServerHeader = false);
