@@ -664,12 +664,24 @@ def _build_system_prompt(user_id: str, message: str, profile: dict, mem_ctx: str
     def _has_arabic(text: str) -> bool:
         return any("\u0600" <= c <= "\u06ff" for c in (text or ""))
 
-    is_arabic = _has_arabic(message)
-    if not is_arabic and history:
-        for m in reversed(history[-4:]):
-            if _has_arabic(m.get("content") or ""):
-                is_arabic = True
-                break
+    def _has_latin(text: str) -> bool:
+        return any("a" <= c.lower() <= "z" for c in (text or ""))
+
+    # The current message decides the reply language. Only when it carries no
+    # clear script (empty / emoji / media with no caption) do we fall back to
+    # recent history \u2014 previously an English message with Arabic anywhere in the
+    # last 4 turns was answered in Arabic (or a mix).
+    if _has_arabic(message):
+        is_arabic = True
+    elif _has_latin(message):
+        is_arabic = False
+    else:
+        is_arabic = False
+        if history:
+            for m in reversed(history[-4:]):
+                if _has_arabic(m.get("content") or ""):
+                    is_arabic = True
+                    break
 
     lang_hint = (
         "مهم جداً: الرد بالعربية فقط بدون استثناء."

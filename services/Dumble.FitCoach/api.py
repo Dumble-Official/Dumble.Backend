@@ -169,15 +169,25 @@ def _detect_lang(history: list, message: str) -> str:
     def _is_arabic(text: str) -> bool:
         return any("\u0600" <= c <= "\u06ff" for c in text)
 
+    def _is_latin(text: str) -> bool:
+        return any("a" <= c.lower() <= "z" for c in text)
+
     text = message.strip() if message else ""
+    # The CURRENT message wins: reply in the language the user just used, even
+    # when the conversation history is in another language. (Previously an
+    # English message with Arabic history was answered in Arabic.)
     if _is_arabic(text):
         return "ar"
-                                                                         
+    if _is_latin(text):
+        return "en"
+
+    # No clear script in the message (empty / emoji / media with no caption)
+    # \u2192 fall back to the most recent history entry that has one.
     for entry in reversed(history):
         content = entry.get("content", "") if isinstance(entry, dict) else ""
         if _is_arabic(content):
             return "ar"
-        if content.strip():
+        if _is_latin(content):
             return "en"
     return "en"
 
