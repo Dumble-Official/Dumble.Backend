@@ -236,11 +236,17 @@ public class BundleSubscriptionService {
         try {
             if (useWallet) {
                 WalletSummaryResponse summary = walletServiceClient.summary(participantId);
-                if (summary != null && summary.getAvailableCents() >= amountToCharge) {
-                    walletServiceClient.debit(checkoutIntentId,
-                            new WalletDebitRequest(participantId, amountToCharge, "InAppSpend", checkoutIntentId));
-                    paidFromWallet = true;
+                long available = summary != null ? summary.getAvailableCents() : 0L;
+                if (available < amountToCharge) {
+                    // The wallet path carries no card token, so there's nothing to
+                    // fall through to — fail cleanly instead of attempting a
+                    // token-less charge (which previously 500'd).
+                    persister.releasePending(claimed.getId());
+                    throw new BusinessRuleViolationException("Insufficient wallet balance");
                 }
+                walletServiceClient.debit(checkoutIntentId,
+                        new WalletDebitRequest(participantId, amountToCharge, "InAppSpend", checkoutIntentId));
+                paidFromWallet = true;
             }
             if (!paidFromWallet) {
                 ChargeResponse charge = paymentServiceClient.charge(checkoutIntentId, ChargeRequest.builder()

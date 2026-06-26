@@ -10,6 +10,7 @@ import com.example.DumbleSubscription.security.UserTokenForwarder;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.util.UUID;
 
@@ -57,17 +58,22 @@ public class WalletServiceClient {
                 .block();
     }
 
-    /** User-context: read summary (balance) — used for checkout gating + dashboard. */
+    /**
+     * Read a user's wallet summary for checkout gating. GET /wallet/{userId}/summary
+     * is the SYSTEM endpoint (Class B), so it must be called with a system token —
+     * forwarding the user's JWT here returned 401 and surfaced as a 500 during
+     * bundle checkout. A user with no wallet yet (404) is treated as zero balance.
+     */
     public WalletSummaryResponse summary(UUID userId) {
-        String auth = userTokenForwarder.currentBearer();
-        if (auth == null) {
-            auth = "Bearer " + signer.mint("wallet");
+        try {
+            return client.get()
+                    .uri("/api/wallet/{userId}/summary", userId)
+                    .header("Authorization", "Bearer " + signer.mint("wallet"))
+                    .retrieve()
+                    .bodyToMono(WalletSummaryResponse.class)
+                    .block();
+        } catch (WebClientResponseException.NotFound nf) {
+            return null;
         }
-        return client.get()
-                .uri("/api/wallet/{userId}/summary", userId)
-                .header("Authorization", auth)
-                .retrieve()
-                .bodyToMono(WalletSummaryResponse.class)
-                .block();
     }
 }
