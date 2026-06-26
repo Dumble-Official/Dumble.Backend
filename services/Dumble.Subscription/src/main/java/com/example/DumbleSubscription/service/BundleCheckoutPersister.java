@@ -74,7 +74,13 @@ public class BundleCheckoutPersister {
         Instant now = Instant.now();
         BundleSubscription sub = new BundleSubscription();
         sub.setParticipantId(participantId);
-        sub.setSellerId(bundle.getSellerId());
+        // Key the subscription (and its escrow rows) on the seller's real auth
+        // user id so the trainer's earnings/clients/insights and payouts find it.
+        // Fall back to the legacy account-guid only for bundles minted before the
+        // catalog carried sellerUserId.
+        sub.setSellerId(bundle.getSellerUserId() != null
+                ? bundle.getSellerUserId()
+                : bundle.getSellerId());
         sub.setSellerType(SellerType.valueOf(bundle.getSellerType()));
         sub.setBundleId(bundle.getId());
         sub.setBundleName(bundle.getName());

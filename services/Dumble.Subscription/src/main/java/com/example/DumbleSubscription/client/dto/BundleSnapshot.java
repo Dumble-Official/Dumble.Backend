@@ -13,7 +13,15 @@ import java.util.UUID;
 @Data
 public class BundleSnapshot {
     private UUID id;
-    private UUID sellerId;
+    private UUID sellerId;               // account-guid hash of the owner — NOT addressable
+    /**
+     * The seller's real auth user id (what wallets, earnings, clients and the
+     * lifecycle table are all keyed on). sellerId above is a one-way account
+     * hash, so persisting it made every trainer-facing read (earnings, clients,
+     * insights) and payouts miss. Null only for bundles created before the
+     * catalog exposed this field.
+     */
+    private UUID sellerUserId;
     private String sellerType;          // GYM | TRAINER
     private String name;
     private long priceCents;
