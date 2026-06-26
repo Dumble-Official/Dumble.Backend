@@ -78,6 +78,12 @@ wallet:
   currency: EGP
   withdrawal:
     minimum-cents: 5000               # 50 EGP minimum (Decision 4.5)
+    # Dev/test payout sandbox. Paymob's disbursement (money-out) product isn't
+    # provisioned for this merchant, so a real bank payout can't run. When ON,
+    # withdrawals complete locally right after the wallet is debited — the
+    # money-out equivalent of the Accept card-charge sandbox. Set
+    # WALLET_WITHDRAWAL_SANDBOX=false once a real /disburse/ integration exists.
+    sandbox: ${WALLET_WITHDRAWAL_SANDBOX:true}
     # Stuck-row reaper for crashes / lost webhooks. Reaper queries Payment by
     # callerReference for any PENDING/SUBMITTING/SENT row older than the grace
     # window and either advances or reverses based on Payment's authoritative

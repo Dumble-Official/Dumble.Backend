@@ -55,17 +55,20 @@ public class WithdrawalService {
     private final PaymentServiceClient paymentServiceClient;
     private final ObjectMapper objectMapper;
     private final long minimumCents;
+    private final boolean sandbox;
 
     public WithdrawalService(WithdrawalPersister persister,
                              WithdrawalRequestRepository withdrawalRequestRepository,
                              PaymentServiceClient paymentServiceClient,
                              ObjectMapper objectMapper,
-                             @Value("${wallet.withdrawal.minimum-cents:5000}") long minimumCents) {
+                             @Value("${wallet.withdrawal.minimum-cents:5000}") long minimumCents,
+                             @Value("${wallet.withdrawal.sandbox:false}") boolean sandbox) {
         this.persister = persister;
         this.withdrawalRequestRepository = withdrawalRequestRepository;
         this.paymentServiceClient = paymentServiceClient;
         this.objectMapper = objectMapper;
         this.minimumCents = minimumCents;
+        this.sandbox = sandbox;
     }
 
     public WithdrawalResponse requestWithdrawal(UUID userId, WithdrawalRequestBody body, String idempotencyKey) {
@@ -87,6 +90,17 @@ public class WithdrawalService {
             log.info("Withdrawal {} cancelled before Payment dispatch", claimed.getId());
             return WithdrawalResponse.from(
                     withdrawalRequestRepository.findById(claimed.getId()).orElseThrow());
+        }
+
+        // Sandbox: Paymob disbursement isn't provisioned, so complete the
+        // withdrawal locally right after debiting — the money-out equivalent of
+        // the Accept charge sandbox. No external payout, no Paymob webhook.
+        if (sandbox) {
+            log.info("Sandbox payout: completing withdrawal {} without an external disbursement",
+                    claimed.getId());
+            persister.completeFromWebhook(claimed.getId(), "sandbox-" + claimed.getId(),
+                    reload(claimed.getId()));
+            return WithdrawalResponse.from(reload(claimed.getId()));
         }
 
         // Phase 2 — HTTP to Payment outside any tx.
