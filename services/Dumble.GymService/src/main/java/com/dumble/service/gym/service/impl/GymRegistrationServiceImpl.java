@@ -104,8 +104,15 @@ public class GymRegistrationServiceImpl implements GymRegistrationService {
     @Transactional(readOnly = true)
     public List<GymRegistrationResponse> listMine(String token) {
         UUID userId = tokenExtractor.extractUser(token).getId();
+        // The managed gym (if any) lives under the same owner id as the applicant; resolve it
+        // once and stamp it onto approved registrations so the owner's app can open the gym.
+        UUID managedGymId = gymRepository.findFirstByOwnerIdOrderByCreatedAtAsc(userId)
+                .map(Gym::getId)
+                .orElse(null);
         return registrationRepository.findByApplicantIdOrderByCreatedAtDesc(userId).stream()
-                .map(GymRegistrationResponse::from)
+                .map(reg -> reg.getStatus() == RegistrationStatus.APPROVED
+                        ? GymRegistrationResponse.from(reg, managedGymId)
+                        : GymRegistrationResponse.from(reg))
                 .toList();
     }
 
@@ -189,6 +196,7 @@ public class GymRegistrationServiceImpl implements GymRegistrationService {
     private GymRegistrationResponse finalizeApproval(UserResponse admin, UUID registrationId) {
         GymRegistration reg = claim(registrationId, RegistrationStatus.APPROVED);
 
+        UUID primaryGymId = null;
         for (RegistrationBranch br : reg.getBranches()) {
             Gym gym = new Gym();
             gym.setOwnerId(reg.getApplicantId());
@@ -207,6 +215,7 @@ public class GymRegistrationServiceImpl implements GymRegistrationService {
             gym.setStatus(GymStatus.ACTIVE);
             gym.setIsVerified(true);
             Gym saved = gymRepository.save(gym);
+            if (primaryGymId == null) primaryGymId = saved.getId();
 
             GymStaff ownerStaff = new GymStaff();
             ownerStaff.setGym(saved);
@@ -217,7 +226,7 @@ public class GymRegistrationServiceImpl implements GymRegistrationService {
 
         reg.setAdminMessage(null);
         reg.setReviewedBy(admin.getId());
-        return GymRegistrationResponse.from(registrationRepository.save(reg));
+        return GymRegistrationResponse.from(registrationRepository.save(reg), primaryGymId);
     }
 
     @Override

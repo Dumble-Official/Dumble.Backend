@@ -8,10 +8,14 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.Optional;
 import java.util.UUID;
 
 
 public interface GymRepository extends JpaRepository<Gym, UUID>, JpaSpecificationExecutor<Gym> {
+
+    /** The owner's primary (oldest) gym, used to resolve the managed gym from an approved registration. */
+    Optional<Gym> findFirstByOwnerIdOrderByCreatedAtAsc(UUID ownerId);
 
     @Query(value = "SELECT * FROM gyms g WHERE " +
             "g.is_verified = true AND g.status = 'ACTIVE' AND " +

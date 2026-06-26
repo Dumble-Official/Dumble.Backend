@@ -19,6 +19,8 @@ public class GymRegistrationResponse {
 
     private UUID id;
     private UUID applicantId;
+    /** Set on APPROVED registrations: the id of the managed gym the approval created. */
+    private UUID gymId;
     private String pageName;
     private RegistrationStatus status;
     private String nationalIdUrl;
@@ -52,9 +54,14 @@ public class GymRegistrationResponse {
     }
 
     public static GymRegistrationResponse from(GymRegistration r) {
+        return from(r, null);
+    }
+
+    public static GymRegistrationResponse from(GymRegistration r, UUID gymId) {
         return GymRegistrationResponse.builder()
                 .id(r.getId())
                 .applicantId(r.getApplicantId())
+                .gymId(gymId)
                 .pageName(r.getPageName())
                 .status(r.getStatus())
                 .nationalIdUrl(r.getNationalIdUrl())
