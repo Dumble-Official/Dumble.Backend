@@ -12,4 +12,6 @@ public sealed record BundleListItemResponse(
     decimal Price,
     DateTime ExpiresOn,
     string Status,
-    int ViewCount);
+    int ViewCount,
+    Guid SellerId,
+    string SellerType);

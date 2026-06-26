@@ -44,6 +44,15 @@ public class WebhookController {
         if (sig == null || sig.isBlank()) {
             sig = req.getHeader("hmac");
         }
+        // Paymob's transaction-processed callback delivers the HMAC as a
+        // QUERY-STRING parameter (?hmac=...), not a header — read that as the
+        // primary source. Without this the signature is null and every callback
+        // is rejected as unsigned, so nothing ever fulfils.
+        if (sig == null || sig.isBlank()) {
+            sig = req.getParameter("hmac");
+        }
+        log.info("Paymob webhook received: bodyLen={} hmacPresent={}",
+                rawBody == null ? 0 : rawBody.length(), sig != null && !sig.isBlank());
         webhookService.receive(rawBody, sig);
         // Decision 4.3 — fast 200 ACK. Phase-2 work runs async.
         return ResponseEntity.status(HttpStatus.OK).build();
