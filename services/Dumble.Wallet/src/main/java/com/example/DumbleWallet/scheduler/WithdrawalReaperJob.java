@@ -58,17 +58,20 @@ public class WithdrawalReaperJob {
     private final WithdrawalService withdrawalService;
     private final PaymentServiceClient paymentServiceClient;
     private final long graceSeconds;
+    private final boolean sandbox;
 
     public WithdrawalReaperJob(WithdrawalRequestRepository withdrawalRequestRepository,
                                WithdrawalPersister persister,
                                WithdrawalService withdrawalService,
                                PaymentServiceClient paymentServiceClient,
-                               @Value("${wallet.withdrawal.reaper.grace-seconds:600}") long graceSeconds) {
+                               @Value("${wallet.withdrawal.reaper.grace-seconds:600}") long graceSeconds,
+                               @Value("${wallet.withdrawal.sandbox:false}") boolean sandbox) {
         this.withdrawalRequestRepository = withdrawalRequestRepository;
         this.persister = persister;
         this.withdrawalService = withdrawalService;
         this.paymentServiceClient = paymentServiceClient;
         this.graceSeconds = graceSeconds;
+        this.sandbox = sandbox;
     }
 
     @Scheduled(fixedDelayString = "${wallet.withdrawal.reaper.delay-ms:60000}")
@@ -89,6 +92,14 @@ public class WithdrawalReaperJob {
     }
 
     private void reapOne(WithdrawalRequest w) {
+        // Sandbox: there's no real payout to reconcile against Payment, so just
+        // finish any stuck row (e.g. one created before the sandbox was enabled).
+        if (sandbox) {
+            log.info("WithdrawalReaper (sandbox): completing stuck withdrawal {}", w.getId());
+            withdrawalService.onWithdrawalCompleted(w.getId(), "sandbox-reaped-" + w.getId());
+            return;
+        }
+
         PaymentWithdrawalLookupResponse lookup;
         try {
             lookup = paymentServiceClient.lookupByCallerReference(w.getId().toString());
