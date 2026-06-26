@@ -62,6 +62,8 @@ public class PaymobProvider implements IPaymentProvider {
     private final String baseUrl;
     private final long integrationId;
     private final long iframeId;
+    private final String secretKey;
+    private final String publicKey;
 
     public PaymobProvider(@Qualifier("paymobClient") WebClient client,
                           ObjectMapper objectMapper,
@@ -70,7 +72,9 @@ public class PaymobProvider implements IPaymentProvider {
                           @Value("${paymob.hmac-secret}") String hmacSecret,
                           @Value("${paymob.base-url:https://accept.paymob.com/api}") String baseUrl,
                           @Value("${paymob.integration-id:0}") long integrationId,
-                          @Value("${paymob.iframe-id:0}") long iframeId) {
+                          @Value("${paymob.iframe-id:0}") long iframeId,
+                          @Value("${paymob.secret-key:}") String secretKey,
+                          @Value("${paymob.public-key:}") String publicKey) {
         this.client = client;
         this.objectMapper = objectMapper;
         this.enabled = enabled;
@@ -79,6 +83,8 @@ public class PaymobProvider implements IPaymentProvider {
         this.baseUrl = baseUrl;
         this.integrationId = integrationId;
         this.iframeId = iframeId;
+        this.secretKey = secretKey;
+        this.publicKey = publicKey;
     }
 
     @Override
@@ -126,50 +132,56 @@ public class PaymobProvider implements IPaymentProvider {
                     iframeUrl(token), token, orderId);
         }
         try {
-            // 1) Auth token
-            String authToken = postForJson("/auth/tokens",
-                    Map.of("api_key", apiKey)).path("token").asText(null);
-            if (authToken == null || authToken.isBlank()) {
-                throw new ProviderException("Paymob auth returned no token");
-            }
-
-            // 2) Order (merchant_order_id must be unique per attempt)
-            JsonNode order = postForJson("/ecommerce/orders", Map.of(
-                    "auth_token", authToken,
-                    "delivery_needed", false,
-                    "amount_cents", req.amountCents(),
-                    "currency", req.currency(),
-                    "merchant_order_id", req.merchantOrderId(),
-                    "items", java.util.List.of()));
-            String orderId = order.path("id").asText(null);
-            if (orderId == null || orderId.isBlank()) {
-                throw new ProviderException("Paymob order creation returned no id");
-            }
-
-            // 3) Payment key (billing_data fields are mandatory; fill placeholders)
+            // Paymob "Unified Intention" API (the account uses sk_/pk_ keys, not
+            // the legacy api_key + /auth/tokens flow). Create an intention with
+            // the secret key, then build the Unified Checkout URL from the public
+            // key + returned client_secret. billing_data fields are mandatory.
             Map<String, Object> billing = new java.util.HashMap<>();
             billing.put("email", orBlank(req.email(), "na@dumble.app"));
             billing.put("first_name", orBlank(req.firstName(), "Dumble"));
             billing.put("last_name", orBlank(req.lastName(), "User"));
-            billing.put("phone_number", orBlank(req.phone(), "+200000000000"));
+            billing.put("phone_number", orBlank(req.phone(), "+201000000000"));
             for (String f : new String[]{"apartment", "floor", "street", "building",
                     "shipping_method", "postal_code", "city", "country", "state"}) {
                 billing.put(f, "NA");
             }
-            JsonNode key = postForJson("/acceptance/payment_keys", Map.of(
-                    "auth_token", authToken,
-                    "amount_cents", req.amountCents(),
-                    "expiration", 3600,
-                    "order_id", orderId,
-                    "billing_data", billing,
-                    "currency", req.currency(),
-                    "integration_id", integrationId));
-            String paymentToken = key.path("token").asText(null);
-            if (paymentToken == null || paymentToken.isBlank()) {
-                throw new ProviderException("Paymob payment_keys returned no token");
-            }
 
-            return new ProviderHostedCheckoutResponse(iframeUrl(paymentToken), paymentToken, orderId);
+            Map<String, Object> body = new java.util.HashMap<>();
+            body.put("amount", req.amountCents());
+            body.put("currency", req.currency());
+            body.put("payment_methods", java.util.List.of(integrationId));
+            body.put("billing_data", billing);
+            // items.amount must sum to the intention amount.
+            body.put("items", java.util.List.of(Map.of(
+                    "name", "Dumble",
+                    "amount", req.amountCents(),
+                    "quantity", 1)));
+            // merchant order reference — surfaces as obj.order.merchant_order_id on
+            // the webhook, which is how we reconcile the charge.
+            body.put("special_reference", req.merchantOrderId());
+
+            JsonNode intention = client.post()
+                    .uri("https://accept.paymob.com/v1/intention/")
+                    .header("Authorization", "Token " + secretKey)
+                    .header("Content-Type", "application/json")
+                    .bodyValue(body)
+                    .retrieve()
+                    .bodyToMono(JsonNode.class)
+                    .block();
+
+            String clientSecret = intention == null ? null : intention.path("client_secret").asText(null);
+            if (clientSecret == null || clientSecret.isBlank()) {
+                throw new ProviderException("Paymob intention returned no client_secret");
+            }
+            // Paymob's order id for this intention (traceability); the webhook
+            // still reconciles via special_reference = merchant_order_id.
+            String orderId = intention.path("intention_order_id").asText(
+                    intention.path("id").asText(""));
+            String checkoutUrl = "https://accept.paymob.com/unifiedcheckout/?publicKey="
+                    + publicKey + "&clientSecret=" + clientSecret;
+
+            return new ProviderHostedCheckoutResponse(
+                    checkoutUrl, clientSecret, orderId.isBlank() ? null : orderId);
         } catch (ProviderException ex) {
             throw ex;
         } catch (Exception ex) {
@@ -180,15 +192,6 @@ public class PaymobProvider implements IPaymentProvider {
     /** Build the WebView iframe URL Paymob serves the card form from. */
     private String iframeUrl(String paymentToken) {
         return baseUrl + "/acceptance/iframes/" + iframeId + "?payment_token=" + paymentToken;
-    }
-
-    private JsonNode postForJson(String uri, Object body) {
-        return client.post()
-                .uri(uri)
-                .bodyValue(body)
-                .retrieve()
-                .bodyToMono(JsonNode.class)
-                .block();
     }
 
     private static String orBlank(String value, String fallback) {

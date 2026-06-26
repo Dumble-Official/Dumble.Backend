@@ -79,6 +79,11 @@ paymob:
   # build the iframe URL the app loads in a WebView.
   integration-id: ${PAYMOB_INTEGRATION_ID:0}
   iframe-id: ${PAYMOB_IFRAME_ID:0}
+  # Unified Intention API (accounts provisioned with sk_/pk_ keys). The secret
+  # key authenticates POST /v1/intention/; the public key + returned
+  # client_secret build the Unified Checkout URL the app opens in a WebView.
+  secret-key: ${PAYMOB_SECRET_KEY:}
+  public-key: ${PAYMOB_PUBLIC_KEY:}
   # Boot-time guard refuses to start when a key starts with the production
   # prefix and the active profile isn't "prod" (Decision 10.3).
   prod-key-prefix: ${PAYMOB_PROD_KEY_PREFIX:live_}

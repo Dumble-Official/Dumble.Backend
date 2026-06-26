@@ -238,6 +238,9 @@ services:
       # iframes/0 URL and can't mint a real payment key.
       PAYMOB_INTEGRATION_ID: ${PAYMOB_INTEGRATION_ID:-0}
       PAYMOB_IFRAME_ID: ${PAYMOB_IFRAME_ID:-0}
+      # Unified Intention API keys (accounts on the new sk_/pk_ scheme).
+      PAYMOB_SECRET_KEY: ${PAYMOB_SECRET_KEY:-}
+      PAYMOB_PUBLIC_KEY: ${PAYMOB_PUBLIC_KEY:-}
     depends_on:
       rabbitmq:
         condition: service_healthy
