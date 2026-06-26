@@ -241,6 +241,9 @@ services:
       # Unified Intention API keys (accounts on the new sk_/pk_ scheme).
       PAYMOB_SECRET_KEY: ${PAYMOB_SECRET_KEY:-}
       PAYMOB_PUBLIC_KEY: ${PAYMOB_PUBLIC_KEY:-}
+      # Webhook URL Paymob calls to confirm the transaction (server-side fulfilment).
+      PAYMOB_NOTIFICATION_URL: ${PAYMOB_NOTIFICATION_URL:-}
+      PAYMOB_REDIRECTION_URL: ${PAYMOB_REDIRECTION_URL:-}
     depends_on:
       rabbitmq:
         condition: service_healthy

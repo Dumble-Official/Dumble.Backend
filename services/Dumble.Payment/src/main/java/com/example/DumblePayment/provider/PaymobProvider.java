@@ -64,6 +64,8 @@ public class PaymobProvider implements IPaymentProvider {
     private final long iframeId;
     private final String secretKey;
     private final String publicKey;
+    private final String notificationUrl;
+    private final String redirectionUrl;
 
     public PaymobProvider(@Qualifier("paymobClient") WebClient client,
                           ObjectMapper objectMapper,
@@ -74,7 +76,9 @@ public class PaymobProvider implements IPaymentProvider {
                           @Value("${paymob.integration-id:0}") long integrationId,
                           @Value("${paymob.iframe-id:0}") long iframeId,
                           @Value("${paymob.secret-key:}") String secretKey,
-                          @Value("${paymob.public-key:}") String publicKey) {
+                          @Value("${paymob.public-key:}") String publicKey,
+                          @Value("${paymob.notification-url:}") String notificationUrl,
+                          @Value("${paymob.redirection-url:}") String redirectionUrl) {
         this.client = client;
         this.objectMapper = objectMapper;
         this.enabled = enabled;
@@ -84,6 +88,8 @@ public class PaymobProvider implements IPaymentProvider {
         this.integrationId = integrationId;
         this.iframeId = iframeId;
         this.secretKey = secretKey;
+        this.notificationUrl = notificationUrl;
+        this.redirectionUrl = redirectionUrl;
         this.publicKey = publicKey;
     }
 
@@ -159,6 +165,15 @@ public class PaymobProvider implements IPaymentProvider {
             // merchant order reference — surfaces as obj.order.merchant_order_id on
             // the webhook, which is how we reconcile the charge.
             body.put("special_reference", req.merchantOrderId());
+            // Drive the server-side transaction webhook to OUR endpoint (so we
+            // fulfil without relying on dashboard callback config), and where to
+            // send the browser after payment.
+            if (notificationUrl != null && !notificationUrl.isBlank()) {
+                body.put("notification_url", notificationUrl);
+            }
+            if (redirectionUrl != null && !redirectionUrl.isBlank()) {
+                body.put("redirection_url", redirectionUrl);
+            }
 
             JsonNode intention = client.post()
                     .uri("https://accept.paymob.com/v1/intention/")

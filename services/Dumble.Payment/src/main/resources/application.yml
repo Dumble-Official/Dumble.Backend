@@ -84,6 +84,11 @@ paymob:
   # client_secret build the Unified Checkout URL the app opens in a WebView.
   secret-key: ${PAYMOB_SECRET_KEY:}
   public-key: ${PAYMOB_PUBLIC_KEY:}
+  # Where Paymob POSTs the transaction webhook (server-side fulfilment) and where
+  # it redirects the browser after payment. Set notification-url to this service's
+  # public webhook so fulfilment doesn't depend on dashboard callback config.
+  notification-url: ${PAYMOB_NOTIFICATION_URL:}
+  redirection-url: ${PAYMOB_REDIRECTION_URL:}
   # Boot-time guard refuses to start when a key starts with the production
   # prefix and the active profile isn't "prod" (Decision 10.3).
   prod-key-prefix: ${PAYMOB_PROD_KEY_PREFIX:live_}

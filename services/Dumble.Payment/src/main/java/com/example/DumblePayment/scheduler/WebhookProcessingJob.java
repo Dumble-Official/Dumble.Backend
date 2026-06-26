@@ -142,24 +142,34 @@ public class WebhookProcessingJob {
         // Standard fields under the "obj" wrapper or top level.
         JsonNode root = body.has("obj") ? body.path("obj") : body;
         boolean success = root.path("success").asBoolean(false);
-        String providerRef = stringOrNull(root.path("id"));
+        // obj.id is the TRANSACTION id; obj.order.id is the Paymob ORDER id, which
+        // is what hosted checkout stored as the charge's providerRef. The
+        // special_reference / merchant_order_id is our charge id.
+        String txnRef = stringOrNull(root.path("id"));
+        String orderRef = stringOrNull(root.path("order").path("id"));
         String callerRef = firstNonBlank(
                 root.path("payment_key_claims").path("extra").path("caller_reference").asText(null),
+                root.path("special_reference").asText(null),
+                root.path("order").path("special_reference").asText(null),
                 root.path("merchant_order_id").asText(null),
                 root.path("order").path("merchant_order_id").asText(null));
 
-        Charge c = locateCharge(providerRef, callerRef);
+        Charge c = locateCharge(txnRef, callerRef);
+        if (c == null && orderRef != null) {
+            // Hosted-checkout (intention) charges hold the order id as providerRef.
+            c = chargeRepository.findByProviderRef(orderRef).orElse(null);
+        }
         if (c == null) {
-            log.warn("Webhook transaction matched no Charge (providerRef={}, callerRef={})",
-                    providerRef, callerRef);
+            log.warn("Webhook transaction matched no Charge (txnRef={}, orderRef={}, callerRef={})",
+                    txnRef, orderRef, callerRef);
             return;
         }
         if (success) {
-            chargePersister.markSucceeded(c.getId(), providerRef);
+            chargePersister.markSucceeded(c.getId(), txnRef);
         } else {
             String reason = root.path("data").path("message").asText(
                     root.path("error_occured").asText("provider_failed"));
-            chargePersister.markFailed(c.getId(), reason, providerRef);
+            chargePersister.markFailed(c.getId(), reason, txnRef);
         }
     }
 
