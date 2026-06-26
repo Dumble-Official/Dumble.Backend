@@ -11,7 +11,6 @@ import com.example.DumbleSubscription.client.dto.CheckoutRequest;
 import com.example.DumbleSubscription.client.dto.CheckoutResponse;
 import com.example.DumbleSubscription.client.dto.PromoValidationResponse;
 import com.example.DumbleSubscription.client.dto.WalletDebitRequest;
-import com.example.DumbleSubscription.client.dto.WalletSummaryResponse;
 import com.example.DumbleSubscription.domain.BundleSubscription;
 import com.example.DumbleSubscription.domain.EscrowEntry;
 import com.example.DumbleSubscription.domain.enums.EscrowStatus;
@@ -30,6 +29,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -235,17 +235,18 @@ public class BundleSubscriptionService {
         String pendingProviderRef = null;
         try {
             if (useWallet) {
-                WalletSummaryResponse summary = walletServiceClient.summary(participantId);
-                long available = summary != null ? summary.getAvailableCents() : 0L;
-                if (available < amountToCharge) {
-                    // The wallet path carries no card token, so there's nothing to
-                    // fall through to — fail cleanly instead of attempting a
-                    // token-less charge (which previously 500'd).
+                // Debit directly — the Wallet service holds a row lock and is the
+                // authoritative balance check, returning 400 when it can't cover
+                // the charge (or the wallet is missing). Don't gate on a separate
+                // summary() read: that used a system token and, if it returned
+                // null/0 or errored, wrongly blocked a funded wallet (regression).
+                try {
+                    walletServiceClient.debit(checkoutIntentId,
+                            new WalletDebitRequest(participantId, amountToCharge, "InAppSpend", checkoutIntentId));
+                } catch (WebClientResponseException.BadRequest insufficient) {
                     persister.releasePending(claimed.getId());
                     throw new BusinessRuleViolationException("Insufficient wallet balance");
                 }
-                walletServiceClient.debit(checkoutIntentId,
-                        new WalletDebitRequest(participantId, amountToCharge, "InAppSpend", checkoutIntentId));
                 paidFromWallet = true;
             }
             if (!paidFromWallet) {
