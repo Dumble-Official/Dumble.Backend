@@ -249,6 +249,10 @@ services:
       # WebView detects the success=true/false params Paymob appends here and then
       # reconciles the final state from the backend.
       PAYMOB_REDIRECTION_URL: ${PAYMOB_REDIRECTION_URL:-https://dumble.app/payment/return}
+      # TEST-ENV stopgap: accept webhooks whose HMAC can't be verified (Paymob
+      # account HMAC is mismatched). Fulfilment still requires a matching PENDING
+      # charge. Set false once the HMAC is resolved / for production.
+      PAYMOB_WEBHOOK_TRUST_UNVERIFIED: ${PAYMOB_WEBHOOK_TRUST_UNVERIFIED:-false}
     depends_on:
       rabbitmq:
         condition: service_healthy

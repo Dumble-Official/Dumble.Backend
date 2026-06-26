@@ -95,6 +95,12 @@ paymob:
   # Boot-time guard refuses to start when a key starts with the production
   # prefix and the active profile isn't "prod" (Decision 10.3).
   prod-key-prefix: ${PAYMOB_PROD_KEY_PREFIX:live_}
+  webhook:
+    # TEST-ENV STOPGAP. When true, a webhook whose HMAC can't be verified is
+    # still accepted — fulfilment downstream still requires it to map to a real
+    # PENDING charge we created. Use only while the Paymob account HMAC is
+    # mismatched; set false for production.
+    trust-unverified: ${PAYMOB_WEBHOOK_TRUST_UNVERIFIED:false}
 
 payment:
   currency: EGP

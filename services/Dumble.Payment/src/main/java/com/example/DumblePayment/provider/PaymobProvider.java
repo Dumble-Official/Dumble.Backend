@@ -66,6 +66,11 @@ public class PaymobProvider implements IPaymentProvider {
     private final String publicKey;
     private final String notificationUrl;
     private final String redirectionUrl;
+    // Test-env stopgap: when true, a webhook whose HMAC can't be verified is
+    // still accepted (downstream still requires it to map to a real PENDING
+    // charge before fulfilling). Off by default; only set while Paymob's
+    // account HMAC is mismatched.
+    private final boolean trustUnverified;
 
     public PaymobProvider(@Qualifier("paymobClient") WebClient client,
                           ObjectMapper objectMapper,
@@ -78,7 +83,9 @@ public class PaymobProvider implements IPaymentProvider {
                           @Value("${paymob.secret-key:}") String secretKey,
                           @Value("${paymob.public-key:}") String publicKey,
                           @Value("${paymob.notification-url:}") String notificationUrl,
-                          @Value("${paymob.redirection-url:}") String redirectionUrl) {
+                          @Value("${paymob.redirection-url:}") String redirectionUrl,
+                          @Value("${paymob.webhook.trust-unverified:false}") boolean trustUnverified) {
+        this.trustUnverified = trustUnverified;
         this.client = client;
         this.objectMapper = objectMapper;
         this.enabled = enabled;
@@ -293,8 +300,18 @@ public class PaymobProvider implements IPaymentProvider {
             // of canonical recipes and log the one (if any) that reproduces Paymob's
             // signature — pinpoints the exact field-set/format without guessing.
             solveCanonical(obj, received, hmacSecret);
+            // Hypothesis: some gateways sign the raw JSON body rather than the
+            // field concatenation — which would explain why no field recipe matches.
+            log.warn("Paymob hypothesis rawBodyHmacMatch={} objRawHmacMatch={}",
+                    hmacSha512Hex(rawBody, hmacSecret).equalsIgnoreCase(received),
+                    hmacSha512Hex(obj.toString(), hmacSecret).equalsIgnoreCase(received));
             log.warn("Paymob HMAC mismatch full body: {}",
                     rawBody.length() > 8000 ? rawBody.substring(0, 8000) : rawBody);
+            if (trustUnverified) {
+                log.warn("Paymob webhook ACCEPTED UNVERIFIED (paymob.webhook.trust-unverified=true) — "
+                        + "fulfilment still requires a matching PENDING charge");
+                return parseEvent(rawBody, true, null);
+            }
             return ProviderWebhookVerification.builder()
                     .valid(false).reason("signature_mismatch").build();
         }
