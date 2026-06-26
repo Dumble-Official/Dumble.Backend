@@ -77,6 +77,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/users/search").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/users/*/summary").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/users/*/profile").authenticated()
+                        // Service-to-service enrichment (Subscription's subscriber list). Called
+                        // with a Class-B system token Authentication can't validate, so permit it:
+                        // the payload is non-PII (display name + avatar) and matches /summary.
+                        .requestMatchers(HttpMethod.GET, "/api/users/*/public-profile").permitAll()
                         // Admin/Moderator user search + lookup (declared AFTER /me so self stays open).
                         .requestMatchers(HttpMethod.GET, "/api/users", "/api/users/*")
                         .hasAnyRole("ADMIN", "MODERATOR")
