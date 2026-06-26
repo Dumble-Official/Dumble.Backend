@@ -60,9 +60,14 @@ public class GymRegistrationServiceImpl implements GymRegistrationService {
                     "Only participants can register as a gym owner; your account is already "
                             + user.getUserType());
         }
-        if (registrationRepository.existsByApplicantIdAndStatusIn(user.getId(), OPEN_STATES)) {
-            throw new BadRequestException(
-                    "You already have a gym registration in progress; edit it instead of opening a new one");
+        // Idempotent: if an open registration already exists, return it instead
+        // of erroring. This is the common case when the gateway timed out on a
+        // slow multi-file upload but the server actually persisted the row — the
+        // client's retry then resolves cleanly to the pending registration.
+        var open = registrationRepository
+                .findFirstByApplicantIdAndStatusInOrderByCreatedAtDesc(user.getId(), OPEN_STATES);
+        if (open.isPresent()) {
+            return GymRegistrationResponse.from(open.get());
         }
 
         GymRegistration registration = new GymRegistration();
@@ -85,8 +90,13 @@ public class GymRegistrationServiceImpl implements GymRegistrationService {
         try {
             return GymRegistrationResponse.from(registrationRepository.saveAndFlush(registration));
         } catch (DataIntegrityViolationException dup) {
-            throw new BadRequestException(
-                    "You already have a gym registration in progress; edit it instead of opening a new one");
+            // Concurrent submit won the open-state unique key. Return that row so
+            // the loser is idempotent too, not a confusing 400.
+            return registrationRepository
+                    .findFirstByApplicantIdAndStatusInOrderByCreatedAtDesc(user.getId(), OPEN_STATES)
+                    .map(GymRegistrationResponse::from)
+                    .orElseThrow(() -> new BadRequestException(
+                            "You already have a gym registration in progress; edit it instead of opening a new one"));
         }
     }
 

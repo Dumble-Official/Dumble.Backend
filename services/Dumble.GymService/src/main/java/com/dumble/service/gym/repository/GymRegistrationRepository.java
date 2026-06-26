@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface GymRegistrationRepository extends JpaRepository<GymRegistration, UUID> {
@@ -18,6 +19,10 @@ public interface GymRegistrationRepository extends JpaRepository<GymRegistration
     List<GymRegistration> findByApplicantIdOrderByCreatedAtDesc(UUID applicantId);
 
     boolean existsByApplicantIdAndStatusIn(UUID applicantId, Collection<RegistrationStatus> statuses);
+
+    /** The applicant's current open (PENDING / CHANGES_REQUESTED) registration, if any. */
+    Optional<GymRegistration> findFirstByApplicantIdAndStatusInOrderByCreatedAtDesc(
+            UUID applicantId, Collection<RegistrationStatus> statuses);
 
     Page<GymRegistration> findByStatus(RegistrationStatus status, Pageable pageable);
 
