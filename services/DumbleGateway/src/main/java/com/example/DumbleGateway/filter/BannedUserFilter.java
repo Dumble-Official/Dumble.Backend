@@ -43,6 +43,8 @@ public class BannedUserFilter extends OncePerRequestFilter {
             "/api/auth/login",
             "/api/auth/refresh",
             "/api/auth/google",
+            // Paymob webhook — no authenticated user; nothing to ban-check.
+            "/api/payment/webhooks/paymob",
             "/actuator/health",
             "/actuator/health/liveness",
             "/actuator/health/readiness"

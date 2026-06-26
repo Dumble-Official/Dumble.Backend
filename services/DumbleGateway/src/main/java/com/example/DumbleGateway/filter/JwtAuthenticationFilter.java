@@ -44,6 +44,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             "/api/auth/login",
             "/api/auth/refresh",
             "/api/auth/google",
+            // Paymob posts its transaction webhook here with no JWT — auth is the
+            // HMAC-SHA512 signature verified inside the Payment WebhookController.
+            "/api/payment/webhooks/paymob",
             "/actuator/health",
             "/actuator/health/liveness",
             "/actuator/health/readiness"
