@@ -281,7 +281,16 @@ public class PaymobProvider implements IPaymentProvider {
 
         String canonical = buildPaymobCanonical(obj);
         String expected = hmacSha512Hex(canonical, hmacSecret);
-        if (!constantTimeEquals(expected, signatureHeader)) {
+        // Paymob hex is lowercase, but normalize both sides so a casing
+        // difference never causes a false mismatch.
+        String received = signatureHeader.trim().toLowerCase();
+        if (!constantTimeEquals(expected.toLowerCase(), received)) {
+            // Diagnostic (test env): show exactly what we built vs what Paymob
+            // sent so a canonical/secret mismatch is pinpointable from the log.
+            log.warn("Paymob HMAC mismatch: computed={} received={} secretLen={} canonical=[{}]",
+                    expected, received, hmacSecret == null ? 0 : hmacSecret.length(), canonical);
+            log.warn("Paymob HMAC mismatch raw obj (truncated): {}",
+                    rawBody.length() > 4000 ? rawBody.substring(0, 4000) : rawBody);
             return ProviderWebhookVerification.builder()
                     .valid(false).reason("signature_mismatch").build();
         }
