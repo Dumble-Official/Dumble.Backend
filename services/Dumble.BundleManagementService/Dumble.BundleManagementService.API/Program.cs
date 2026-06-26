@@ -101,6 +101,13 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<BundleManagementDbContext>();
     db.Database.EnsureCreated();
+
+    // EnsureCreated is a no-op once the table exists, so additive columns added
+    // after the first deploy never appear. Apply them idempotently here so the
+    // store/profile can show the seller. Safe on a fresh DB too (column already
+    // present → IF NOT EXISTS is a no-op).
+    db.Database.ExecuteSqlRaw(
+        "ALTER TABLE \"Bundles\" ADD COLUMN IF NOT EXISTS \"OwnerUserId\" text;");
 }
 
 app.UseForwardedHeaders();

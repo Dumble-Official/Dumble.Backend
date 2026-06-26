@@ -23,4 +23,5 @@ public sealed record BundleListItem(
     string Status,
     int ViewCount,
     Guid SellerId,
-    string SellerType);
+    string SellerType,
+    string? SellerUserId);

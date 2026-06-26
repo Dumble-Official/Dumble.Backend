@@ -49,7 +49,8 @@ internal sealed class CreateBundleCommandHandler(
             CategoryId.Create(request.CategoryId),
             accountId,
             request.ExpiresOn,
-            imageUrls
+            imageUrls,
+            ownerUserId: currentUser.Id
         );
 
         await bundlesRepository.Create(bundle);

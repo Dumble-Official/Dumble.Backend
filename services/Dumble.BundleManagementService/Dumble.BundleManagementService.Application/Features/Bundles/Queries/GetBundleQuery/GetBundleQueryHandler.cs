@@ -53,7 +53,8 @@ internal sealed class GetBundleQueryHandler(
             "EGP",
             durationDays,
             bundle.Status == Status.Published,                  // only a Published bundle is purchasable
-            new List<string>()                                  // amenities not modelled in this service
+            new List<string>(),                                 // amenities not modelled in this service
+            bundle.OwnerUserId
         );
     }
 }

@@ -18,5 +18,6 @@ public sealed record GetBundleResponse(
     string Currency,
     int DurationDays,
     bool Active,
-    IReadOnlyList<string> Amenities
+    IReadOnlyList<string> Amenities,
+    string? SellerUserId
 );

@@ -24,4 +24,7 @@ public sealed record GetBundleResult(
     string Currency,
     int DurationDays,
     bool Active,
-    IReadOnlyList<string> Amenities);
+    IReadOnlyList<string> Amenities,
+    // External auth user id of the seller — lets the app show the seller and
+    // open their profile (SellerId is a non-addressable account hash).
+    string? SellerUserId);

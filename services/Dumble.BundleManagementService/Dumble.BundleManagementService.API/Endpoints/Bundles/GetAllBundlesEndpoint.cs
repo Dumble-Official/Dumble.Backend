@@ -37,7 +37,7 @@ public sealed class GetAllBundlesEndpoint(ISender mediator)
         var items = result.Items
             .Select(i => new BundleListItemResponse(
                 i.Id, i.Images, i.Name, i.Description, i.Price, i.ExpiresOn, i.Status, i.ViewCount,
-                i.SellerId, i.SellerType))
+                i.SellerId, i.SellerType, i.SellerUserId))
             .ToList();
 
         return new GetAllBundlesResponse(items, result.TotalCount);

@@ -39,6 +39,7 @@ public sealed class GetBundleByIdEndpoint(ISender mediator)
             result.Currency,
             result.DurationDays,
             result.Active,
-            result.Amenities);
+            result.Amenities,
+            result.SellerUserId);
     }
 }

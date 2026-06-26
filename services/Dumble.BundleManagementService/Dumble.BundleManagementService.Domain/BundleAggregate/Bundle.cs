@@ -21,6 +21,12 @@ public sealed class Bundle : AggregateRoot<BundleId>
     public AccountId LastModifiedBy { get; private set; }
     public CategoryId CategoryId { get; private set; }
 
+    /// External auth user id of the owner (what the auth/social/profile services
+    /// key on). OwnerId is a one-way account hash that can't address a profile,
+    /// so we keep the real user id to let clients show the seller and open their
+    /// profile. Nullable: bundles created before this field existed have none.
+    public string? OwnerUserId { get; private set; }
+
     private readonly List<BundleImage> _images = new();
     private readonly List<AccountId> _viewers = new();
 
@@ -41,10 +47,12 @@ public sealed class Bundle : AggregateRoot<BundleId>
                    AccountId createdBy,
                    AccountId lastModifiedBy,
                    CategoryId categoryId,
+                   string? ownerUserId = null,
                    IEnumerable<BundleImage>? images = null,
                    IEnumerable<AccountId>? viewers = null) : base(id)
     {
         OwnerId = ownerId ?? throw new ArgumentNullException(nameof(ownerId));
+        OwnerUserId = ownerUserId;
         OwnerType = ownerType;
         Name = name ?? throw new ArgumentNullException(nameof(name));
         Description = description ?? throw new ArgumentNullException(nameof(description));
@@ -75,7 +83,8 @@ public sealed class Bundle : AggregateRoot<BundleId>
         AccountId createdBy,
         DateTime? expiresOn = null,
         IEnumerable<BundleImage>? images = null,
-        BundleId? bundleId = null)
+        BundleId? bundleId = null,
+        string? ownerUserId = null)
     {
         var now = DateTime.UtcNow;
         var id = bundleId ?? BundleId.CreateUnique();
@@ -95,6 +104,7 @@ public sealed class Bundle : AggregateRoot<BundleId>
             createdBy: createdBy,
             lastModifiedBy: createdBy,
             categoryId: categoryId,
+            ownerUserId: ownerUserId,
             images: images,
             viewers: null
         );

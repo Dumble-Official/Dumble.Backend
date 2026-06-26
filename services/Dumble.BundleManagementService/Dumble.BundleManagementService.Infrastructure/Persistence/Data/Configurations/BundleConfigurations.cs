@@ -103,6 +103,10 @@ internal sealed class BundleConfigurations : IEntityTypeConfiguration<Bundle>
                 modifiedBy => modifiedBy.Value,
                 value => AccountId.Create(value))
             .IsRequired();
+
+        // External auth user id of the owner — nullable so rows created before
+        // this column existed still load.
+        builder.Property(b => b.OwnerUserId);
         
         
         builder.Metadata.FindNavigation(nameof(Bundle.Viewers))!

@@ -41,7 +41,8 @@ internal sealed class GetAllBundlesQueryHandler(
             b.Status.ToString(),
             b.Viewers.Count,
             b.OwnerId.Value,
-            b.OwnerType.ToString().ToUpperInvariant()   // TRAINER | GYM
+            b.OwnerType.ToString().ToUpperInvariant(),   // TRAINER | GYM
+            b.OwnerUserId
         )).ToList();
 
         return new GetAllBundlesResult(items, total);
