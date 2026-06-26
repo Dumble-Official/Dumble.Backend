@@ -242,8 +242,13 @@ services:
       PAYMOB_SECRET_KEY: ${PAYMOB_SECRET_KEY:-}
       PAYMOB_PUBLIC_KEY: ${PAYMOB_PUBLIC_KEY:-}
       # Webhook URL Paymob calls to confirm the transaction (server-side fulfilment).
-      PAYMOB_NOTIFICATION_URL: ${PAYMOB_NOTIFICATION_URL:-}
-      PAYMOB_REDIRECTION_URL: ${PAYMOB_REDIRECTION_URL:-}
+      # Must be the PUBLIC gateway address — Paymob reaches it from the internet.
+      # The gateway whitelists this path (no JWT); HMAC auth happens in Payment.
+      PAYMOB_NOTIFICATION_URL: ${PAYMOB_NOTIFICATION_URL:-http://167.172.180.189:8080/api/payment/webhooks/paymob}
+      # Where Paymob redirects the browser after payment. The app's checkout
+      # WebView detects the success=true/false params Paymob appends here and then
+      # reconciles the final state from the backend.
+      PAYMOB_REDIRECTION_URL: ${PAYMOB_REDIRECTION_URL:-https://dumble.app/payment/return}
     depends_on:
       rabbitmq:
         condition: service_healthy
