@@ -289,8 +289,12 @@ public class PaymobProvider implements IPaymentProvider {
             // sent so a canonical/secret mismatch is pinpointable from the log.
             log.warn("Paymob HMAC mismatch: computed={} received={} secretLen={} canonical=[{}]",
                     expected, received, hmacSecret == null ? 0 : hmacSecret.length(), canonical);
-            log.warn("Paymob HMAC mismatch raw obj (truncated): {}",
-                    rawBody.length() > 4000 ? rawBody.substring(0, 4000) : rawBody);
+            // Server-side solver: with the real secret + full payload, try a matrix
+            // of canonical recipes and log the one (if any) that reproduces Paymob's
+            // signature — pinpoints the exact field-set/format without guessing.
+            solveCanonical(obj, received, hmacSecret);
+            log.warn("Paymob HMAC mismatch full body: {}",
+                    rawBody.length() > 8000 ? rawBody.substring(0, 8000) : rawBody);
             return ProviderWebhookVerification.builder()
                     .valid(false).reason("signature_mismatch").build();
         }
@@ -345,6 +349,56 @@ public class PaymobProvider implements IPaymentProvider {
         if (node == null || node.isMissingNode() || node.isNull()) return "";
         if (node.isBoolean()) return node.asBoolean() ? "true" : "false";
         return node.asText("");
+    }
+
+    /**
+     * Diagnostic (test env): brute-force the canonical recipe against Paymob's
+     * real signature using the configured secret and the full payload. Tries
+     * boolean casing, owner present/empty, source_data.pan vs masked_pan, and
+     * obj vs order created_at. Logs the recipe that reproduces the signature so
+     * the exact Paymob format can be encoded; logs a no-match note otherwise.
+     */
+    private void solveCanonical(JsonNode obj, String received, String secret) {
+        JsonNode order = obj.path("order");
+        JsonNode source = obj.path("source_data");
+        String amount = asPaymobText(obj.path("amount_cents"));
+        String currency = asPaymobText(obj.path("currency"));
+        String id = asPaymobText(obj.path("id"));
+        String iid = asPaymobText(obj.path("integration_id"));
+        String orderId = asPaymobText(order.path("id"));
+
+        String[] createdAts = { asPaymobText(obj.path("created_at")), asPaymobText(order.path("created_at")) };
+        String[] owners = { asPaymobText(obj.path("owner")), "" };
+        String[] pans = { asPaymobText(source.path("pan")), asPaymobText(source.path("masked_pan")) };
+        String subType = asPaymobText(source.path("sub_type"));
+        String type = asPaymobText(source.path("type"));
+        String[] boolFields = {"error_occured", "has_parent_transaction", "is_3d_secure", "is_auth",
+                "is_capture", "is_refunded", "is_standalone_payment", "is_voided", "success"};
+
+        for (boolean cap : new boolean[]{false, true}) {
+            java.util.Map<String, String> b = new java.util.HashMap<>();
+            for (String f : boolFields) {
+                String v = asPaymobText(obj.path(f));
+                if (cap && !v.isEmpty()) v = Character.toUpperCase(v.charAt(0)) + v.substring(1);
+                b.put(f, v);
+            }
+            for (String ca : createdAts) {
+                for (String ow : owners) {
+                    for (String pan : pans) {
+                        String c = amount + ca + currency + b.get("error_occured") + b.get("has_parent_transaction")
+                                + id + iid + b.get("is_3d_secure") + b.get("is_auth") + b.get("is_capture")
+                                + b.get("is_refunded") + b.get("is_standalone_payment") + b.get("is_voided")
+                                + orderId + ow + pan + subType + type + b.get("success");
+                        if (hmacSha512Hex(c, secret).equalsIgnoreCase(received)) {
+                            log.warn("Paymob CANONICAL SOLVED: caps={} createdAt='{}' ownerEmpty={} pan='{}' canonical=[{}]",
+                                    cap, ca, ow.isEmpty(), pan, c);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+        log.warn("Paymob canonical solver: no recipe matched — field set/order or secret differs");
     }
 
     private ProviderWebhookVerification parseEvent(String rawBody, boolean valid, String reason) {
