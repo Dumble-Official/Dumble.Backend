@@ -4,6 +4,7 @@ import com.example.DumbleAuthentication.domain.User;
 import com.example.DumbleAuthentication.dto.request.OnboardingRequest;
 import com.example.DumbleAuthentication.dto.request.UpdateProfileRequest;
 import com.example.DumbleAuthentication.dto.response.PublicProfileResponse;
+import com.example.DumbleAuthentication.dto.response.PublicUserView;
 import com.example.DumbleAuthentication.dto.response.UserResponse;
 import com.example.DumbleAuthentication.dto.response.UserSummaryResponse;
 import com.example.DumbleAuthentication.repository.UserRepository;
@@ -91,6 +92,22 @@ public class UserController {
     public ResponseEntity<PublicProfileResponse> publicProfile(@PathVariable UUID id) {
         return userRepository.findById(id)
                 .map(u -> ResponseEntity.ok(PublicProfileResponse.from(u)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Minimal non-PII identity for service-to-service enrichment (Subscription's
+     * subscriber list, etc.). This endpoint was being called but never existed,
+     * so subscriber/client names came back null ("Subscriber" placeholder).
+     */
+    @GetMapping("/{id}/public-profile")
+    public ResponseEntity<PublicUserView> publicUserView(@PathVariable UUID id) {
+        return userRepository.findById(id)
+                .map(u -> ResponseEntity.ok(new PublicUserView(
+                        u.getId(),
+                        u.getEffectiveDisplayName(),
+                        u.getPfp(),
+                        !u.isActive())))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
