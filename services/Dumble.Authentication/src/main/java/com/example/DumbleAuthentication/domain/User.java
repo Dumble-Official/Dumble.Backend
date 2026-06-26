@@ -136,6 +136,20 @@ public class User {
         this.lastName = lastName;
     }
 
+    /**
+     * Name to show in the UI: the user's chosen displayName, or — when they
+     * never set one — their first + last name (the same source the generated
+     * avatar uses). Avoids clients falling back to "User 1a2b3c".
+     */
+    public String getEffectiveDisplayName() {
+        if (displayName != null && !displayName.isBlank()) {
+            return displayName;
+        }
+        String full = ((firstName == null ? "" : firstName) + " "
+                + (lastName == null ? "" : lastName)).trim();
+        return full.isEmpty() ? null : full;
+    }
+
     public String getEmail() {
         return email;
     }

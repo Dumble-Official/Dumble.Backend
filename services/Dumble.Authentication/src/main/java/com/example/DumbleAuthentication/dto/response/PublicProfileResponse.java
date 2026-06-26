@@ -48,7 +48,7 @@ public class PublicProfileResponse {
         PublicProfileResponse r = new PublicProfileResponse();
         // Always public.
         r.id = user.getId();
-        r.displayName = user.getDisplayName();
+        r.displayName = user.getEffectiveDisplayName();
         r.userName = user.getUserName();
         r.pfp = user.getPfp();
         r.userType = user.getUserType();

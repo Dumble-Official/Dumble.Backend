@@ -43,7 +43,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
      */
     @Query("""
         SELECT new com.example.DumbleAuthentication.dto.response.UserSummaryResponse(
-            u.id, u.displayName, u.userName, u.pfp, u.userType, u.bio)
+            u.id,
+            COALESCE(NULLIF(TRIM(u.displayName), ''), TRIM(CONCAT(u.firstName, ' ', u.lastName))),
+            u.userName, u.pfp, u.userType, u.bio)
         FROM User u
         WHERE u.isActive = true
           AND (LOWER(u.displayName) LIKE CONCAT('%', :q, '%')

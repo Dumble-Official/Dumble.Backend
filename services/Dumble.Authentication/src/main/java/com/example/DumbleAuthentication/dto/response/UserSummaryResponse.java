@@ -34,7 +34,7 @@ public class UserSummaryResponse {
 
     public static UserSummaryResponse from(User user) {
         return new UserSummaryResponse(
-                user.getId(), user.getDisplayName(), user.getUserName(),
+                user.getId(), user.getEffectiveDisplayName(), user.getUserName(),
                 user.getPfp(), user.getUserType(), user.getBio());
     }
 
