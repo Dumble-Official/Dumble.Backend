@@ -57,6 +57,10 @@ public class ChargeController {
                                                      @Valid @RequestBody CheckoutRequest req,
                                                      Authentication auth) {
         String actor = auth == null ? "unknown" : String.valueOf(auth.getPrincipal());
+        // releaseOnFailure=true: a checkout-init that fails to create the provider
+        // session dispatched no charge, so the claim is released and a retry can
+        // re-attempt under the same (often stable) key instead of replaying a
+        // cached failure forever. (bug: stable upgrade key + cached null-iframe.)
         var cached = idempotencyService.executeOrchestrated(
                 idempotencyKey,
                 "POST /payment/checkouts",
@@ -64,7 +68,8 @@ public class ChargeController {
                 201,
                 req,
                 CheckoutResponse.class,
-                () -> chargeService.createCheckout(req, actor));
+                () -> chargeService.createCheckout(req, actor),
+                true);
         return ResponseEntity.status(cached.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
                 .body(cached.value());
     }

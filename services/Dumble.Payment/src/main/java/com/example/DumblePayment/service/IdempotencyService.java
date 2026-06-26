@@ -79,6 +79,24 @@ public class IdempotencyService {
         return run(key, endpoint, userId, httpStatus, requestBody, resultType, action, false);
     }
 
+    /**
+     * Variant that releases the dedup claim when the action throws, so a failed
+     * attempt can be retried under the same key instead of replaying the failure
+     * forever. Use for operations where a failure means "nothing happened"
+     * (e.g. checkout-session init that never dispatched a charge) — NOT for
+     * charge dispatch, where a lost response must stay claimed for reconciliation.
+     */
+    public <T> CachedResult<T> executeOrchestrated(String key,
+                                                   String endpoint,
+                                                   UUID userId,
+                                                   int httpStatus,
+                                                   Object requestBody,
+                                                   Class<T> resultType,
+                                                   Supplier<T> action,
+                                                   boolean releaseOnFailure) {
+        return run(key, endpoint, userId, httpStatus, requestBody, resultType, action, releaseOnFailure);
+    }
+
     private <T> CachedResult<T> run(String key,
                                     String endpoint,
                                     UUID userId,

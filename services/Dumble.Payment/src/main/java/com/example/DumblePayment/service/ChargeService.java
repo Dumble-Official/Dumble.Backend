@@ -130,8 +130,12 @@ public class ChargeService {
                     resp.iframeUrl(), resp.paymobOrderId());
         } catch (ProviderException ex) {
             log.warn("Hosted checkout failed for charge {}: {}", claimed.getId(), ex.getMessage());
-            Charge failed = persister.markFailed(claimed.getId(), "checkout_init_failed", null);
-            return new CheckoutResponse(failed.getId(), failed.getStatus().name(), null, null);
+            // Mark the abandoned charge FAILED, then rethrow so the idempotency
+            // layer RELEASES the claim (releaseOnFailure) — otherwise a stable
+            // idempotency key would cache this failure and every retry would
+            // replay it instead of re-attempting the (now working) provider call.
+            persister.markFailed(claimed.getId(), "checkout_init_failed", null);
+            throw ex;
         }
     }
 
