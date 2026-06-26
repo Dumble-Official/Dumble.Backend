@@ -233,6 +233,11 @@ services:
       PAYMOB_ENABLED: ${PAYMOB_ENABLED:-false}
       PAYMOB_API_KEY: ${PAYMOB_API_KEY:-dev-only-paymob-api-key}
       PAYMOB_HMAC_SECRET: ${PAYMOB_HMAC_SECRET:-dev-only-paymob-hmac-secret}
+      # Hosted-checkout (iframe) integration — the card integration id and iframe
+      # id from the Paymob dashboard. Without these the provider builds an
+      # iframes/0 URL and can't mint a real payment key.
+      PAYMOB_INTEGRATION_ID: ${PAYMOB_INTEGRATION_ID:-0}
+      PAYMOB_IFRAME_ID: ${PAYMOB_IFRAME_ID:-0}
     depends_on:
       rabbitmq:
         condition: service_healthy
