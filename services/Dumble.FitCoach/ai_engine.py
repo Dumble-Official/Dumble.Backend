@@ -21,6 +21,10 @@ from tools import (
     exec_get_recommendations,
     exec_update_workout_day,
     exec_get_schedule,
+    exec_add_exercises,
+    exec_add_meals,
+    exec_set_nutrition_goals,
+    exec_attach_video,
 )
 from schedule_contract import (
     build_full_replace,
@@ -243,6 +247,10 @@ _TOOL_PROGRESS: dict[str, dict[str, str]] = {
     "get_calories":       {"ar": "⏳ جاري حساب السعرات...",      "en": "⏳ Calculating your calories..."},
     "get_bmi":            {"ar": "⏳ جاري حساب الـ BMI...",       "en": "⏳ Calculating your BMI..."},
     "update_workout_day": {"ar": "⏳ جاري تعديل الخطة...",        "en": "⏳ Updating your plan..."},
+    "add_exercises":      {"ar": "⏳ جاري إضافة التمارين للجدول...", "en": "⏳ Adding exercises to your schedule..."},
+    "add_meals":          {"ar": "⏳ جاري إضافة الوجبات للجدول...",  "en": "⏳ Adding meals to your schedule..."},
+    "set_nutrition_goals":{"ar": "⏳ جاري ضبط أهداف التغذية...",     "en": "⏳ Setting your nutrition goals..."},
+    "attach_video":       {"ar": "⏳ جاري البحث عن فيديو وإرفاقه...", "en": "⏳ Finding a video to attach..."},
 }
 
 def _tool_progress_msg(tool_name: str, lang: str) -> str:
@@ -495,6 +503,35 @@ def _execute_tool(name: str, args: dict, state: dict, api_key: str) -> tuple[str
         sched = build_update_days(changed_normalised, plan_hash, state.get("user_id", ""))
         state = {**state, "plan_cache": plan_cache, "schedule_changes": sched}
         return result, state
+
+    # ── Direct schedule writes (meals, nutrition goals, video attach) ──────
+    # These persist synchronously to the schedule service inside the tool, so
+    # they don't ride the post-stream `schedule_changes` sync. We flag
+    # `coach_did_write` so the frontend still gets its "plan updated" nudge.
+    if name == "add_exercises":
+        result = exec_add_exercises(state.get("user_id", ""), args.get("day", ""),
+                                    args.get("exercises", []))
+        return result, {**state, "coach_did_write": True}
+
+    if name == "add_meals":
+        result = exec_add_meals(state.get("user_id", ""), args.get("day", ""),
+                                args.get("meals", []))
+        return result, {**state, "coach_did_write": True}
+
+    if name == "set_nutrition_goals":
+        result = exec_set_nutrition_goals(
+            state.get("user_id", ""), args.get("day", ""),
+            calories=args.get("calories"), protein_g=args.get("protein_g"),
+            carbs_g=args.get("carbs_g"), fat_g=args.get("fat_g"),
+        )
+        return result, {**state, "coach_did_write": True}
+
+    if name == "attach_video":
+        result = exec_attach_video(
+            state.get("user_id", ""), args.get("day", ""), args.get("item_name", ""),
+            search_query=args.get("search_query", ""), table=args.get("table"),
+        )
+        return result, {**state, "coach_did_write": True}
 
     return json.dumps({"error": f"Unknown tool: {name}"}), state
 

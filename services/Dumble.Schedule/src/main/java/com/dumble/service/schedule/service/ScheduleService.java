@@ -190,6 +190,52 @@ public class ScheduleService {
         return created;
     }
 
+    /**
+     * The chatbot sets a pro client's per-day nutrition target (kcal + macros).
+     * Coalescing: only the fields the chatbot provided are updated — omitted
+     * (null) fields keep their current value, so 'set my calories to 2000' does
+     * not wipe an existing protein/carb/fat goal.
+     */
+    @Transactional
+    public MealTargetView setChatbotMealTarget(UUID clientId, Weekday weekday, MealTargetRequest req) {
+        UUID scheduleId = getOrCreate(clientId).getId();
+        MealDayTarget target = targetRepository.findByScheduleIdAndWeekday(scheduleId, weekday)
+                .orElseGet(() -> {
+                    MealDayTarget t = new MealDayTarget();
+                    t.setScheduleId(scheduleId);
+                    t.setWeekday(weekday);
+                    return t;
+                });
+        if (req.calories() != null) target.setCalories(req.calories());
+        if (req.proteinG() != null) target.setProteinG(req.proteinG());
+        if (req.carbsG() != null)   target.setCarbsG(req.carbsG());
+        if (req.fatG() != null)     target.setFatG(req.fatG());
+        return MealTargetView.from(targetRepository.save(target));
+    }
+
+    /**
+     * Attach a YouTube video to an existing CHATBOT item. The chatbot has no item
+     * ids, so the target is located by weekday + a case-insensitive content
+     * substring; when several match, the most recently positioned one wins.
+     * tableType may be null to search both lists. Returns null when nothing
+     * matches, so the caller can answer 404 and the chatbot can offer to add it.
+     */
+    @Transactional
+    public ItemResponse attachChatbotVideo(UUID clientId, AttachVideoRequest req) {
+        Schedule schedule = getOrCreate(clientId);
+        String needle = req.contentQuery().toLowerCase();
+        ScheduleItem match = items(schedule.getId()).stream()
+                .filter(i -> i.getAuthorType() == AuthorType.CHATBOT)
+                .filter(i -> i.getWeekday() == req.weekday())
+                .filter(i -> req.tableType() == null || i.getTableType() == req.tableType())
+                .filter(i -> i.getContent() != null && i.getContent().toLowerCase().contains(needle))
+                .reduce((a, b) -> b) // items() is position-ordered; take the last (newest) match
+                .orElse(null);
+        if (match == null) return null;
+        match.setYoutubeVideoId(YouTubeLinks.toVideoId(req.youtubeLink()));
+        return ItemResponse.from(itemRepository.save(match));
+    }
+
     // ── Internal: trainer↔client link read-model ───────────────────────────
 
     @Transactional

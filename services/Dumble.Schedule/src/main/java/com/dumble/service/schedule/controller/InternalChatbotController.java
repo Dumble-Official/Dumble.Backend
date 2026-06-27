@@ -1,11 +1,16 @@
 package com.dumble.service.schedule.controller;
 
+import com.dumble.service.schedule.domain.Weekday;
+import com.dumble.service.schedule.dto.AttachVideoRequest;
 import com.dumble.service.schedule.dto.ChatbotApplyRequest;
 import com.dumble.service.schedule.dto.ItemResponse;
+import com.dumble.service.schedule.dto.MealTargetRequest;
+import com.dumble.service.schedule.dto.MealTargetView;
 import com.dumble.service.schedule.dto.ScheduleResponse;
 import com.dumble.service.schedule.security.InternalSecret;
 import com.dumble.service.schedule.service.ScheduleService;
 import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -44,5 +49,26 @@ public class InternalChatbotController {
                                  @PathVariable UUID clientId) {
         internalSecret.require(secret);
         return scheduleService.getMySchedule(clientId, null, null);
+    }
+
+    /** The chatbot sets a client's per-day nutrition target (kcal + protein/carbs/fat). */
+    @PutMapping("/meal-targets/{weekday}")
+    public MealTargetView setMealTarget(@RequestHeader(value = "X-Internal-Secret", required = false) String secret,
+                                        @PathVariable UUID clientId,
+                                        @PathVariable Weekday weekday,
+                                        @Valid @RequestBody MealTargetRequest req) {
+        internalSecret.require(secret);
+        return scheduleService.setChatbotMealTarget(clientId, weekday, req);
+    }
+
+    /** The chatbot attaches a found YouTube video to an existing chatbot item it added.
+     *  404 when no item on that day matches the content query. */
+    @PutMapping("/items/video")
+    public ResponseEntity<ItemResponse> attachVideo(@RequestHeader(value = "X-Internal-Secret", required = false) String secret,
+                                                     @PathVariable UUID clientId,
+                                                     @Valid @RequestBody AttachVideoRequest req) {
+        internalSecret.require(secret);
+        ItemResponse res = scheduleService.attachChatbotVideo(clientId, req);
+        return (res == null) ? ResponseEntity.notFound().build() : ResponseEntity.ok(res);
     }
 }

@@ -8,6 +8,8 @@ from typing import Callable
 
 import httpx
 
+from youtube_search import search_youtube_id, to_watch_url
+
 PostPlanFn = Callable[[list[dict]], str]
 
 logger = logging.getLogger(__name__)
@@ -202,6 +204,123 @@ TOOL_SCHEMAS: list[dict] = [
                     }
                 },
                 "required": ["changes"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_exercises",
+            "description": (
+                "APPEND one or more exercises to a specific day in the user's schedule "
+                "(does NOT replace the day or the whole plan). Use this when the user asks "
+                "to ADD specific exercise(s) to a day — e.g. 'add 3 sets of squats to "
+                "Saturday', 'put bicycle crunches on my Monday'. For a brand-new full "
+                "weekly plan use get_workout_plan; to rebuild one whole day use update_workout_day."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "day": {"type": "string", "description": "Weekday to add to, e.g. Saturday / Sat / السبت"},
+                    "exercises": {
+                        "type": "array",
+                        "description": "Exercises to append to that day",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name":  {"type": "string"},
+                                "sets":  {"type": "integer"},
+                                "reps":  {"type": "string"},
+                                "video_query": {"type": "string",
+                                    "description": "If set, search YouTube for this and attach a demo video to the exercise"}
+                            },
+                            "required": ["name"]
+                        }
+                    }
+                },
+                "required": ["day", "exercises"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_meals",
+            "description": (
+                "Add one or more meals to a specific day's Meals section in the user's "
+                "schedule. Use this whenever the user asks to ADD meals / a meal plan to "
+                "their schedule — e.g. 'add my breakfast and lunch to Sunday', 'put this "
+                "meal plan on the schedule'. This is for MEALS, never exercises."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "day": {"type": "string", "description": "Weekday to add to, e.g. Sunday / Sun / الأحد"},
+                    "meals": {
+                        "type": "array",
+                        "description": "Meals to append to that day",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "content": {"type": "string",
+                                    "description": "The meal text, e.g. 'Breakfast — 3 eggs, oats, banana'"},
+                                "video_query": {"type": "string",
+                                    "description": "Optional: search YouTube for a recipe video to attach"}
+                            },
+                            "required": ["content"]
+                        }
+                    }
+                },
+                "required": ["day", "meals"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_nutrition_goals",
+            "description": (
+                "Set the user's daily nutrition targets for a weekday: the calorie (kcal) "
+                "target and/or protein, carbs, and fat in grams. Use this when the user asks "
+                "to set or adjust their nutrition goals / macros / calorie target — e.g. "
+                "'set my Monday goal to 2000 kcal and 150g protein'. Only include the fields "
+                "the user wants to set; omit the rest (omitted fields are left unchanged)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "day":       {"type": "string",  "description": "Weekday, e.g. Monday / Mon / الاثنين"},
+                    "calories":  {"type": "integer", "description": "Daily kcal target"},
+                    "protein_g": {"type": "integer", "description": "Protein target in grams"},
+                    "carbs_g":   {"type": "integer", "description": "Carbs target in grams"},
+                    "fat_g":     {"type": "integer", "description": "Fat target in grams"}
+                },
+                "required": ["day"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "attach_video",
+            "description": (
+                "Find a YouTube video and attach it to an EXISTING item the coach already "
+                "added on a given day, matched by name. Use this when the user asks you to "
+                "find/attach a demonstration or form video for something already on their "
+                "schedule — e.g. 'add a video for my squats on Saturday'. To add a NEW "
+                "exercise WITH a video in one step, use add_exercises with video_query instead."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "day":          {"type": "string", "description": "Weekday the item is on"},
+                    "item_name":    {"type": "string", "description": "Name/text of the item to attach to, e.g. 'squat'"},
+                    "search_query": {"type": "string",
+                        "description": "What to search on YouTube; defaults to the item name + 'tutorial'"},
+                    "table":        {"type": "string", "enum": ["EXERCISE", "MEAL"],
+                        "description": "Which list the item is in (optional)"}
+                },
+                "required": ["day", "item_name"]
             }
         }
     },
@@ -535,3 +654,205 @@ def exec_get_schedule(user_id: str) -> str:
         return json.dumps({"today": today, "empty": True,
                            "message": "No schedule items are saved yet."})
     return json.dumps({"today": today, "week": week}, ensure_ascii=False)
+
+
+# ── Schedule-writing tools (meals, nutrition goals, video attach) ─────────────
+# These call the Schedule service's internal chatbot endpoints directly (like
+# exec_get_schedule reads it), so the write lands and is confirmed synchronously
+# in the tool result — the model then confirms it to the user. Items are stamped
+# CHATBOT by the schedule service. Same env as exec_get_schedule.
+
+# Schedule Weekday enum is SUN..SAT. Map day names (EN/AR, full + short) to it.
+_WEEKDAY_ENUM: dict[str, str] = {
+    "monday": "MON", "tuesday": "TUE", "wednesday": "WED", "thursday": "THU",
+    "friday": "FRI", "saturday": "SAT", "sunday": "SUN",
+    "mon": "MON", "tue": "TUE", "tues": "TUE", "wed": "WED", "weds": "WED",
+    "thu": "THU", "thur": "THU", "thurs": "THU", "fri": "FRI", "sat": "SAT", "sun": "SUN",
+    "الاثنين": "MON", "الإثنين": "MON", "اثنين": "MON",
+    "الثلاثاء": "TUE", "ثلاثاء": "TUE",
+    "الأربعاء": "WED", "الاربعاء": "WED", "أربعاء": "WED", "اربعاء": "WED",
+    "الخميس": "THU", "خميس": "THU",
+    "الجمعة": "FRI", "جمعة": "FRI",
+    "السبت": "SAT", "سبت": "SAT",
+    "الأحد": "SUN", "الاحد": "SUN", "أحد": "SUN", "احد": "SUN",
+}
+
+
+def _to_weekday(day: str) -> str | None:
+    return _WEEKDAY_ENUM.get((day or "").strip().lower())
+
+
+def _schedule_endpoint() -> tuple[str, str] | None:
+    base   = os.getenv("SCHEDULE_SERVICE_URL", "").rstrip("/")
+    secret = os.getenv("INTERNAL_API_SECRET", "")
+    if not base or not secret:
+        return None
+    return base, secret
+
+
+def _resolve_video(item: dict) -> str | None:
+    """A pre-supplied youtube_url wins; otherwise search YouTube for video_query."""
+    url = (item.get("youtube_url") or "").strip()
+    if url:
+        return url
+    query = (item.get("video_query") or "").strip()
+    if not query:
+        return None
+    vid = search_youtube_id(query)
+    return to_watch_url(vid) if vid else None
+
+
+def _add_chatbot_items(user_id: str, req_items: list[dict]) -> tuple[bool, str]:
+    """Append-only POST of chatbot items (replace=False, so existing items stay)."""
+    ep = _schedule_endpoint()
+    if not user_id or ep is None:
+        return False, "schedule_unavailable"
+    if not req_items:
+        return False, "no_items"
+    base, secret = ep
+    url = f"{base}/internal/clients/{user_id}/chatbot/items"
+    try:
+        resp = httpx.post(url, headers={"X-Internal-Secret": secret},
+                          json={"replace": False, "items": req_items}, timeout=6.0)
+    except Exception as e:
+        logger.warning("add chatbot items error: %s", e)
+        return False, "schedule_fetch_failed"
+    if resp.status_code >= 300:
+        logger.warning("add chatbot items HTTP %s: %s", resp.status_code, resp.text[:200])
+        return False, f"schedule_http_{resp.status_code}"
+    return True, "ok"
+
+
+def exec_add_exercises(user_id: str, day: str, exercises: list) -> str:
+    wd = _to_weekday(day)
+    if not wd:
+        return json.dumps({"error": "unknown_day", "day": day})
+    req_items, added = [], []
+    for ex in exercises or []:
+        if isinstance(ex, str):
+            ex = {"name": ex}
+        if not isinstance(ex, dict):
+            continue
+        name = (ex.get("name") or ex.get("content") or "").strip()
+        if not name:
+            continue
+        sets, reps = ex.get("sets"), ex.get("reps")
+        if sets and reps:
+            content = f"{name} — {sets}x{reps}"
+        elif reps:
+            content = f"{name} — {reps}"
+        else:
+            content = name
+        yt = _resolve_video(ex)
+        item = {"tableType": "EXERCISE", "weekday": wd, "content": content}
+        if yt:
+            item["youtubeLink"] = yt
+        req_items.append(item)
+        added.append({"content": content, "video": bool(yt)})
+    if not req_items:
+        return json.dumps({"error": "no_exercises"})
+    ok, detail = _add_chatbot_items(user_id, req_items)
+    if not ok:
+        return json.dumps({"error": detail})
+    return json.dumps({"status": "added", "table": "EXERCISE", "weekday": wd,
+                       "count": len(added), "items": added}, ensure_ascii=False)
+
+
+def exec_add_meals(user_id: str, day: str, meals: list) -> str:
+    wd = _to_weekday(day)
+    if not wd:
+        return json.dumps({"error": "unknown_day", "day": day})
+    req_items, added = [], []
+    for m in meals or []:
+        if isinstance(m, str):
+            m = {"content": m}
+        if not isinstance(m, dict):
+            continue
+        content = (m.get("content") or m.get("name") or m.get("meal") or "").strip()
+        if not content:
+            continue
+        yt = _resolve_video(m)
+        item = {"tableType": "MEAL", "weekday": wd, "content": content}
+        if yt:
+            item["youtubeLink"] = yt
+        req_items.append(item)
+        added.append({"content": content, "video": bool(yt)})
+    if not req_items:
+        return json.dumps({"error": "no_meals"})
+    ok, detail = _add_chatbot_items(user_id, req_items)
+    if not ok:
+        return json.dumps({"error": detail})
+    return json.dumps({"status": "added", "table": "MEAL", "weekday": wd,
+                       "count": len(added), "items": added}, ensure_ascii=False)
+
+
+def exec_set_nutrition_goals(user_id: str, day: str, calories=None,
+                             protein_g=None, carbs_g=None, fat_g=None) -> str:
+    wd = _to_weekday(day)
+    if not wd:
+        return json.dumps({"error": "unknown_day", "day": day})
+    ep = _schedule_endpoint()
+    if not user_id or ep is None:
+        return json.dumps({"error": "schedule_unavailable"})
+    base, secret = ep
+    body: dict[str, int] = {}
+    for key, val in (("calories", calories), ("proteinG", protein_g),
+                     ("carbsG", carbs_g), ("fatG", fat_g)):
+        if val is None:
+            continue
+        try:
+            iv = int(round(float(val)))
+        except (TypeError, ValueError):
+            continue
+        if iv < 0:
+            continue
+        body[key] = iv
+    if not body:
+        return json.dumps({"error": "no_targets"})
+    url = f"{base}/internal/clients/{user_id}/chatbot/meal-targets/{wd}"
+    try:
+        resp = httpx.put(url, headers={"X-Internal-Secret": secret}, json=body, timeout=6.0)
+    except Exception as e:
+        logger.warning("set nutrition goals error: %s", e)
+        return json.dumps({"error": "schedule_fetch_failed"})
+    if resp.status_code >= 300:
+        logger.warning("set nutrition goals HTTP %s: %s", resp.status_code, resp.text[:200])
+        return json.dumps({"error": f"schedule_http_{resp.status_code}"})
+    return json.dumps({"status": "set", "weekday": wd, "targets": body}, ensure_ascii=False)
+
+
+def exec_attach_video(user_id: str, day: str, item_name: str,
+                      search_query: str = "", table: str | None = None) -> str:
+    wd = _to_weekday(day)
+    if not wd:
+        return json.dumps({"error": "unknown_day", "day": day})
+    name = (item_name or "").strip()
+    if not name:
+        return json.dumps({"error": "missing_item_name"})
+    ep = _schedule_endpoint()
+    if not user_id or ep is None:
+        return json.dumps({"error": "schedule_unavailable"})
+    base, secret = ep
+    query = (search_query or "").strip() or f"{name} tutorial"
+    vid = search_youtube_id(query)
+    if not vid:
+        return json.dumps({"error": "no_video_found", "query": query})
+    watch_url = to_watch_url(vid)
+    body = {"weekday": wd, "contentQuery": name, "youtubeLink": watch_url}
+    if table in ("EXERCISE", "MEAL"):
+        body["tableType"] = table
+    url = f"{base}/internal/clients/{user_id}/chatbot/items/video"
+    try:
+        resp = httpx.put(url, headers={"X-Internal-Secret": secret}, json=body, timeout=6.0)
+    except Exception as e:
+        logger.warning("attach video error: %s", e)
+        return json.dumps({"error": "schedule_fetch_failed"})
+    if resp.status_code == 404:
+        # No matching item — tell the model so it can offer to add it instead.
+        return json.dumps({"attached": False, "reason": "item_not_found",
+                           "item": name, "weekday": wd, "video_url": watch_url})
+    if resp.status_code >= 300:
+        logger.warning("attach video HTTP %s: %s", resp.status_code, resp.text[:200])
+        return json.dumps({"error": f"schedule_http_{resp.status_code}"})
+    return json.dumps({"attached": True, "item": name, "weekday": wd,
+                       "video_url": watch_url}, ensure_ascii=False)

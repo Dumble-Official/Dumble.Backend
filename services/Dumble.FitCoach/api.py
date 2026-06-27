@@ -489,13 +489,21 @@ async def chat_stream(req: ChatRequest, request: Request):
 
         sync_holder["user_id"] = req.user_id
         sync_holder["sched"]   = final_state.get("schedule_changes")
+        # The app shows a "plan updated — check the Plan tab" nudge when META's
+        # schedule_changes is a non-empty map. Direct writes (meals, nutrition
+        # goals, video attach) have already persisted to the schedule service, so
+        # surface a lightweight marker for them too — with no `days` payload, the
+        # post-stream sync stays a no-op and won't double-write.
+        meta_sched = final_state.get("schedule_changes")
+        if not meta_sched and final_state.get("coach_did_write"):
+            meta_sched = {"action": "direct"}
         meta = _json.dumps({
             "tools_used":         tools_used,
             "profile":            final_state.get("profile", req.profile),
             "plan_cache":         final_state.get("plan_cache", req.plan_cache),
             "progress_logs":      final_state.get("progress_logs", req.progress_logs),
             "assistant_entry_id": entry_id,
-            "schedule_changes":   final_state.get("schedule_changes"),
+            "schedule_changes":   meta_sched,
         }, ensure_ascii=False)
         yield f"data: [META]{meta}\n\n"
         yield "data: [DONE]\n\n"
