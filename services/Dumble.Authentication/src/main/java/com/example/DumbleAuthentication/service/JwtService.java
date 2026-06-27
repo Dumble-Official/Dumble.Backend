@@ -78,7 +78,11 @@ public class JwtService {
         claims.put("userId", user.getId());
         // Identity claims so downstream services don't need an extra /api/users/me round-trip
         // every request. Stale display names on cached tokens are acceptable until next refresh.
-        if (user.getDisplayName() != null) claims.put("displayName", user.getDisplayName());
+        // Use the EFFECTIVE display name (falls back to first+last name) — otherwise users who
+        // never set an explicit displayName mint tokens with no name claim, and every post /
+        // reaction / comment they create gets denormalised as a blank author → "Dumble User".
+        String displayName = user.getEffectiveDisplayName();
+        if (displayName != null && !displayName.isBlank()) claims.put("displayName", displayName);
         if (user.getPfp() != null) claims.put("profileImage", user.getPfp());
         if (user.getUserType() != null) claims.put("userType", user.getUserType().name());
         return claims;
