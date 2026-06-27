@@ -36,9 +36,15 @@ public class GymStaffController {
 
     @GetMapping("/me/gym/{gymId}/entries")
     public List<EntryLog> recentEntries(@PathVariable UUID gymId,
+                                        @AuthenticationPrincipal CurrentUser user,
                                         @RequestParam(value = "period", defaultValue = "30d") String period) {
         Instant cutoff = parseCutoff(period);
-        return entryLogRepository.findByGymIdAndScannedAtAfter(gymId, cutoff);
+        // Entry logs are keyed on the gym OWNER's auth user id — entry tokens carry
+        // the subscription's seller id (the owner), not the gym *account* id. The
+        // path {gymId} the app sends is the account id and never matches a stored
+        // gym_id, which is why check-ins showed "No recent entries". The caller IS
+        // the owner, so filter by their authenticated id.
+        return entryLogRepository.findByGymIdAndScannedAtAfter(user.getId(), cutoff);
     }
 
     @GetMapping("/me/gym/{gymId}/participants/{participantId}/notes")

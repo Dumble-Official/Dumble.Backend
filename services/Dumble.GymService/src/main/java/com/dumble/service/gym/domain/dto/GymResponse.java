@@ -15,6 +15,10 @@ import java.util.UUID;
 public class GymResponse {
 
         private UUID id;
+        // The gym owner's auth user id. Bundles/subscriptions are keyed on the
+        // owner's user id (not the gym account id), so clients need this to load
+        // the gym's published programs and the gym to see its subscribers.
+        private UUID ownerId;
         private String name;
         private String bio;
         private String address;
