@@ -48,10 +48,11 @@ services:
     expose:
       - "8081"
     environment:
-      # Postgres (Neon). app.properties hardcodes username=postgres, which matches
-      # the Neon role created for this deploy — so only URL + password are wired here.
+      # Postgres (Neon). app.properties defaults username=postgres; override it
+      # from NEON_USER so the role matches whatever Neon project is wired in.
       SPRING_DATASOURCE_URL: ${AUTH_DB_URL:?set AUTH_DB_URL in .env.cloud}
       DATABASEPASS: ${NEON_PASSWORD:?set NEON_PASSWORD in .env.cloud}
+      SPRING_DATASOURCE_USERNAME: ${NEON_USER:-neondb_owner}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.cloud}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?set GOOGLE_CLIENT_ID in .env.cloud}
