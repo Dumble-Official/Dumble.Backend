@@ -45,8 +45,13 @@ PLAN_MODELS: list[str] = ["gpt-oss-120b", "zai-glm-4.7"]
 
 MAX_TOKENS_CHAT = 2000
 MAX_TOKENS_PLAN = 2500
-MAX_FC_ROUNDS   = 4
-TEMPERATURE     = 0.4 
+# A whole-week schedule fill needs ~7 days x (exercises + meals + goals) tool
+# calls. The streaming model emits roughly one tool call per round, so a low cap
+# made it run out before finishing the week ("exhausted N rounds without a final
+# answer") and only half the schedule got written. Give it enough rounds to
+# complete a full week even when it does not batch.
+MAX_FC_ROUNDS   = 12
+TEMPERATURE     = 0.4
 
 def _post(api_key: str, models: list[str], messages: list, max_tokens: int,
           temperature: float, tools: Optional[list] = None) -> dict:
