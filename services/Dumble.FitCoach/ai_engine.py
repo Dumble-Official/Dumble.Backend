@@ -48,9 +48,12 @@ MAX_TOKENS_PLAN = 2500
 # A whole-week schedule fill needs ~7 days x (exercises + meals + goals) tool
 # calls. The streaming model emits roughly one tool call per round, so a low cap
 # made it run out before finishing the week ("exhausted N rounds without a final
-# answer") and only half the schedule got written. Give it enough rounds to
-# complete a full week even when it does not batch.
-MAX_FC_ROUNDS   = 12
+# answer") and only half the schedule got written. The prompt now tells the model
+# to batch all days in one response (which the loop already supports — it executes
+# every accumulated call per round), so it should finish in 1-2 rounds. This high
+# cap is the safety net for when the streaming model still does one call per round:
+# a full week of exercises + meals (~14) plus goals (~21) then completes anyway.
+MAX_FC_ROUNDS   = 20
 TEMPERATURE     = 0.4
 
 def _post(api_key: str, models: list[str], messages: list, max_tokens: int,
